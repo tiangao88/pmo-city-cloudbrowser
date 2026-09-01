@@ -67,7 +67,7 @@ services:
       CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
       CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9230/browser/health', timeout=3)"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9230/browser/health', timeout=3)"]
       interval: 10s
       timeout: 5s
       retries: 3
