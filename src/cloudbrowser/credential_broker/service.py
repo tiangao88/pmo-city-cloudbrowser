@@ -1,7 +1,17 @@
 from dataclasses import dataclass
-from typing import Callable, Mapping
+from typing import Callable, Mapping, Protocol, TypeVar
 
 from .contracts import BrokerResult, LoginIntent, SiteDeclaration
+
+
+AdapterDeclaration = TypeVar("AdapterDeclaration")
+AdapterMaterial = TypeVar("AdapterMaterial")
+
+
+class LoginAdapter(Protocol[AdapterDeclaration, AdapterMaterial]):
+    """Internal adapter contract used by the broker service."""
+
+    def __call__(self, declaration: AdapterDeclaration, material: AdapterMaterial) -> "AdapterResult": ...
 
 
 @dataclass(frozen=True)
@@ -66,7 +76,7 @@ class BrokerService:
         *,
         current_url: str,
         fetch_credentials: Callable[[str], object],
-        run_adapter: Callable[[SiteDeclaration, object], AdapterResult],
+        run_adapter: LoginAdapter[object, object],
     ) -> BrokerResult:
         """Run bounded orchestration with credential material kept internal."""
         declaration_or_result = self.validate_intent(intent)
