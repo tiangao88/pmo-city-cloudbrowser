@@ -1,0 +1,5 @@
+services: {}
+
+# This bootstrap bundle is intentionally empty/non-installable. The canonical
+# service definitions will be added only after contracts and security tests are
+# approved. See deploy/coolify/README.md and the legacy reference compose file.

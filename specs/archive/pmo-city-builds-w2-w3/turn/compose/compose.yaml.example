@@ -1,0 +1,81 @@
+# TURN Coolify Compose template
+#
+# Design-only. Review the image digest, host-network support, certificate
+# injection method and credential issuer before production use. This service
+# deliberately has no Coolify HTTP domain or Traefik labels: TURN needs direct
+# UDP/TCP sockets, not an HTTP proxy.
+#
+# Coolify Compose is the source of truth. Keep the HMAC secret in Coolify's
+# encrypted environment/file boundary or the approved Vaultwarden hand-off.
+# Never commit the HMAC secret, certificate or private key.
+
+services:
+  turn:
+    image: '${TURN_IMAGE:-coturn/coturn:4.17.2-r0}'
+    restart: unless-stopped
+    network_mode: host
+    stop_grace_period: 30s
+    mem_limit: 1g
+    cpus: '1.0'
+    pids_limit: 256
+    ulimits:
+      nofile: 65535
+    environment:
+      - 'TURN_PUBLIC_IP=${TURN_PUBLIC_IP:?set-public-ip-before-deploy}'
+      - 'TURN_REALM=${TURN_REALM:?set-turn-fqdn-before-deploy}'
+      - 'TURN_MIN_PORT=${TURN_MIN_PORT:-49160}'
+      - 'TURN_MAX_PORT=${TURN_MAX_PORT:-49259}'
+      - 'TURN_LISTENING_PORT=${TURN_LISTENING_PORT:-3478}'
+      - 'TURN_TLS_PORT=${TURN_TLS_PORT:-443}'
+      - 'TURN_LISTENING_IP=${TURN_LISTENING_IP:-}'
+      - 'TURN_RELAY_IP=${TURN_RELAY_IP:-}'
+      - 'TURN_CERT_PATH=${TURN_CERT_PATH:-/etc/coturn/tls/fullchain.pem}'
+      - 'TURN_KEY_PATH=${TURN_KEY_PATH:-/etc/coturn/tls/privkey.pem}'
+      - 'TURN_AUTH_SECRET=${TURN_AUTH_SECRET:?set-from-approved-secret-boundary}'
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        umask 077
+        conf=/tmp/turnserver.conf
+        {
+          printf '%s\n' \
+            'log-file=stdout' \
+            'fingerprint' \
+            'use-auth-secret' \
+            'no-multicast-peers' \
+            'no-cli' \
+            'no-tlsv1_2'
+          printf 'static-auth-secret=%s\n' "$$TURN_AUTH_SECRET"
+          printf 'realm=%s\n' "$$TURN_REALM"
+          printf 'listening-ip=%s\n' "$$TURN_LISTENING_IP"
+          printf 'relay-ip=%s\n' "$$TURN_RELAY_IP"
+          printf 'external-ip=%s\n' "$$TURN_PUBLIC_IP"
+          printf 'listening-port=%s\n' "$$TURN_LISTENING_PORT"
+          printf 'tls-listening-port=%s\n' "$$TURN_TLS_PORT"
+          printf 'min-port=%s\n' "$$TURN_MIN_PORT"
+          printf 'max-port=%s\n' "$$TURN_MAX_PORT"
+          printf 'cert=%s\n' "$$TURN_CERT_PATH"
+          printf 'pkey=%s\n' "$$TURN_KEY_PATH"
+        } > "$$conf"
+        if [ -z "$$TURN_LISTENING_IP" ]; then sed -i '/^listening-ip=/d' "$$conf"; fi
+        if [ -z "$$TURN_RELAY_IP" ]; then sed -i '/^relay-ip=/d' "$$conf"; fi
+        exec turnserver -c "$$conf"
+    volumes:
+      # Supply these as Coolify-managed files or an approved mounted directory.
+      # Do not replace with a Git-tracked certificate/private-key path.
+      - type: bind
+        source: ${TURN_TLS_SOURCE_DIR:?mount-approved-tls-directory}
+        target: /etc/coturn/tls
+        read_only: true
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'grep -aq turnserver /proc/1/cmdline'
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+# No named volume is required: coturn relay state is ephemeral. Do not add a
+# database, Docker socket, host root mount, Coolify domain or proxy labels.

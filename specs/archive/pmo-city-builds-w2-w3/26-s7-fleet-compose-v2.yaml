@@ -1,0 +1,317 @@
+services:
+  router:
+    image: '${ROUTER_IMAGE:-python:3.12-slim}'
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'python -c "import urllib.request;urllib.request.urlopen(\"http://127.0.0.1:8081/health\",timeout=3)" || exit 1'
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    command:
+      - python
+      - /app/router.py
+    volumes:
+      - 'scripts:/app:ro'
+      - 'router-state:/data/state'
+      # Spec 47 GrantHub (GH.1): the grant store lives on the shared
+      # `sessions` volume — per-user folders /data/sessions/<email>/grant/
+      # (wrapped key + K_user, 0600). Mounted so the router can wrap/store
+      # and the slot broker can unwrap the same files.
+      - 'sessions:/data/sessions'
+    environment:
+      - 'AUTO_CREATE_SESSIONS=${AUTO_CREATE_SESSIONS:-true}'
+      - 'N_SLOTS=${N_SLOTS:-2}'
+      - ROUTER_PORT=8081
+      - ROUTER_STATE=/data/state/router-state.json
+      - 'SLOT_PORT=${SLOT_PORT:-8081}'
+      # Spec 31 (queue + session limits) — qualified env surface, read once
+      # at router boot and logged. Slots are numbered 1..CB_HUMAN_SLOTS
+      # (human, neko UI) then CB_HUMAN_SLOTS+1..+CB_AGENT_SLOTS (agent).
+      - 'CB_HUMAN_SLOTS=${CB_HUMAN_SLOTS:-1}'
+      # Spec 31 §10 test plan: human path first (CB_AGENT_SLOTS=0 or 1).
+      # slot-2 becomes an agent slot when CB_AGENT_SLOTS=1.
+      - 'CB_AGENT_SLOTS=${CB_AGENT_SLOTS:-0}'
+      - 'CB_HUMAN_MAX_SESSION_MIN=${CB_HUMAN_MAX_SESSION_MIN:-5}'
+      - 'CB_AGENT_MAX_SESSION_MIN=${CB_AGENT_MAX_SESSION_MIN:-240}'
+      - 'CB_AGENT_QUEUE_TIMEOUT_S=${CB_AGENT_QUEUE_TIMEOUT_S:-120}'
+      - 'CB_QUEUE_POLL_INTERVAL_S=${CB_QUEUE_POLL_INTERVAL_S:-5}'
+      - 'CB_ADMIN_EMAILS=${CB_ADMIN_EMAILS:-}'
+      - 'CB_QUEUE_SHOW_EMAILS=${CB_QUEUE_SHOW_EMAILS:-true}'
+      - 'CB_AGENT_TOKEN=${SERVICE_PASSWORD_64_AGENTTOKEN}'
+      # Needed to build the ?pwd= auto-login URL on the landing page
+      # (neko v2.9.0 client auto-logins from URL params; SSO is the gate).
+      - 'NEKO_PASSWORD=${NEKO_PASSWORD:-neko}'
+      # Spec 39: wedged-neko auto-rescue — watchdog stuck-poll threshold and
+      # min seconds between neko-app restarts (client + server side).
+      - 'CB_RESET_AFTER=${CB_RESET_AFTER:-10}'
+      - 'CB_STREAM_AFTER=${CB_STREAM_AFTER:-10}'
+      - 'CB_RESET_COOLDOWN_S=${CB_RESET_COOLDOWN_S:-60}'
+      # Spec 37: unified top bar — GrantHub "Shared" pill. GRANTHUB_URL is
+      # where the pill navigates; GRANTHUB_STATUS_URL optional JSON endpoint
+      # {"shared": bool} keyed by Remote-Email (unset → "Not Shared").
+      - 'GRANTHUB_URL=${GRANTHUB_URL:-/connect}'
+      - 'GRANTHUB_STATUS_URL=${GRANTHUB_STATUS_URL:-}'
+      # Audit B3/B4: per-slot broker credentials. Router maps each bearer
+      # to a slot and derives the current owner server-side. No shared broker
+      # token is exposed to slots.
+      - 'CB_SLOT_1_TOKEN=${SERVICE_PASSWORD_64_SLOT1BROKER}'
+      - 'CB_SLOT_2_TOKEN=${SERVICE_PASSWORD_64_SLOT2BROKER}'
+      - 'CB_GRANTHUB_ADMIN_TOKEN=${SERVICE_PASSWORD_64_GHADMIN}'
+      # Spec 73 (D2): OTP code-exchange — the AGENT token lets the agent
+      # submit the employee's one-time code to /otp/submit (chat-ask leg;
+      # the broker fetches it once). Fail closed when unset.
+      - 'CB_OTP_AGENT_TOKEN=${SERVICE_PASSWORD_64_OTPAGENT}'
+      - 'CB_OTP_TTL_S=${CB_OTP_TTL_S:-180}'
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - com.centurylinklabs.watchtower.scope=monitor-notify
+      - traefik.http.middlewares.tinyauth-pmo@file
+      - tinyauth.apps.cloudbrowser.oauth.groups=PMOC_Users
+      - tinyauth.apps.cloudbrowser.config.domain=cloudbrowser.dev01.pmo.city
+      - tinyauth.apps.cloudfiles.oauth.groups=PMOC_Users
+      - tinyauth.apps.cloudfiles.config.domain=cloudfiles.dev01.pmo.city
+  slot-1:
+    image: '${NEKO_IMAGE:-ghcr.io/m1k1o/neko/google-chrome:2.9.0}'
+    restart: unless-stopped
+    healthcheck:
+      # restart-api /health exposes the slot readiness contract consumed by
+      # the router: Chrome, title-proxy and CDP must be healthy.
+      test:
+        - CMD-SHELL
+        - 'python3 -c "import urllib.request;urllib.request.urlopen(\"http://127.0.0.1:9230/health\",timeout=3)" || exit 1'
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    shm_size: 2gb
+    mem_limit: 2g
+    cpus: '${CPU_LIMIT:-0.5}'
+    cap_add:
+      - SYS_ADMIN
+    ulimits:
+      nofile:
+        soft: 524288
+        hard: 524288
+    ports:
+      - '52101-52200:52101-52200/udp'
+      # Agent path (D6, spec 26): CDP relay 9223 + restart-api 9230 published
+      # on 0.0.0.0 (no hardcoded IP — survives docker network recreation).
+      # Access restricted at the host firewall (DOCKER-USER) to 10.0.0.0/8,
+      # see 26-s7-fleet-reproduction.md §1 (agent path).
+      - '9223:9223/tcp'
+      - '9230:9230/tcp'
+    volumes:
+      - 'slot-1-profile:/home/neko/.config'
+      - 'slot-1-downloads:/home/neko/Downloads'
+      - 'scripts:/etc/neko/supervisord:ro'
+      # Spec 77 owner-bound recovery: restart-api.py and sso-broker.py in
+      # each slot read the per-user archive/credential tree from this shared,
+      # durable volume. This is NOT browser state exposed to another slot:
+      # browser profiles remain in slot-N-profile, and all reads are scoped to
+      # the owner in .slot-user.json. Keeping the archive mount is required
+      # across a cb-fleet-v2 recreate; without it the boot hint is always null.
+      - 'sessions:/data/sessions'
+      # Audit B3 (spec 66 isolation): GrantHub material is still fetched from
+      # the router's slot-authenticated endpoint; this mount is needed for
+      # owner recovery archives and per-owner broker credentials only.
+    environment:
+      - 'NEKO_SCREEN=${NEKO_SCREEN:-1280x720@30}'
+      - 'NEKO_VIDEO_CODEC=${NEKO_VIDEO_CODEC:-h264}'
+      - 'NEKO_VIDEO_BITRATE=${NEKO_VIDEO_BITRATE:-2048}'
+      - 'NEKO_NAT1TO1=${NEKO_NAT1TO1:-145.223.34.130}'
+      - 'NEKO_PASSWORD=${NEKO_PASSWORD:-neko}'
+      # Spec 39: wedged-neko auto-rescue — min seconds between neko-app
+      # restarts (restart-api server-side rate limit).
+      - 'CB_RESET_COOLDOWN_S=${CB_RESET_COOLDOWN_S:-60}'
+      # Spec 40: stream-dead backstop — occupied-slot neko log silence
+      # threshold before auto-restart (blank-page wedge).
+      - 'CB_STREAM_GUARD_S=${CB_STREAM_GUARD_S:-90}'
+      # Spec 37: unified top bar — GrantHub "Shared" pill. GRANTHUB_URL is
+      # where the pill navigates; GRANTHUB_STATUS_URL optional JSON endpoint
+      # {"shared": bool} keyed by Remote-Email (unset → "Not Shared").
+      - 'GRANTHUB_URL=${GRANTHUB_URL:-/connect}'
+      - 'GRANTHUB_STATUS_URL=${GRANTHUB_STATUS_URL:-/connect/status}'
+      # Audit B3/B4 (spec 66 isolation): PER-SLOT broker credential —
+      # this slot's OWN bearer (Coolify magic var SERVICE_PASSWORD_64_SLOT1BROKER)
+      # and its slot number. The router derives the slot from the bearer
+      # and binds every grant/OTP operation to this slot's current owner.
+      - 'CB_SLOT_N=1'
+      - 'CB_SLOT_1_TOKEN=${SERVICE_PASSWORD_64_SLOT1BROKER}'
+      # Audit B3: grant material is fetched from the router, never from a
+      # mounted store. OTP_PENDING_URL carries the ?challenge= id (B10).
+      - 'GRANT_MATERIAL_URL=${GRANT_MATERIAL_URL:-http://router:8081/connect/grant/material}'
+      - 'GRANT_POST_URL=${GRANT_POST_URL:-http://router:8081/connect/grant}'
+      - 'OTP_PENDING_URL=${OTP_PENDING_URL:-http://router:8081/otp/pending}'
+      # D2 fail-closed exact vault selection. Duplicate/zero matches remain
+      # security failures; each owner's own grant supplies the item fields.
+      - 'SSO_VAULT_ITEM=Authentik Spike User'
+      # D15 B/C: exact TinyAuth-cookie health and proactive refresh. The cookie
+      # name is deterministic for auth.pmo.city in TinyAuth v5 (UUIDv5 prefix).
+      # Probe origins are an explicit allowlist — never all *.pmo.city hosts.
+      - 'SSO_SESSION_COOKIE_NAME=${SSO_SESSION_COOKIE_NAME:-tinyauth-session-39fcd0f6}'
+      - 'SSO_SESSION_PROBE_ORIGINS=${SSO_SESSION_PROBE_ORIGINS:-https://pmo.city,https://cloudbrowser.dev01.pmo.city,https://cloudfiles.dev01.pmo.city}'
+      # The controller checks every 5 minutes and starts a fresh SSO round-trip
+      # 15 minutes before expiry; repeated refresh attempts are rate-limited.
+      - 'SSO_SESSION_CHECK_S=${SSO_SESSION_CHECK_S:-300}'
+      - 'SSO_SESSION_RELOGIN_BEFORE_S=${SSO_SESSION_RELOGIN_BEFORE_S:-900}'
+      - 'SSO_SESSION_RELOGIN_COOLDOWN_S=${SSO_SESSION_RELOGIN_COOLDOWN_S:-120}'
+      - 'NEKO_PASSWORD_ADMIN=${NEKO_PASSWORD_ADMIN:-admin}'
+      - NEKO_EPR=52101-52200
+      - 'NEKO_ICELITE=${NEKO_ICELITE:-false}'
+      - 'BROWSER_URL=${BROWSER_URL:-https://cloudbrowser.dev01.pmo.city/}'
+      - 'FILES_URL=${FILES_URL:-https://cloudfiles.dev01.pmo.city/}'
+      - 'SECRETS_URL=${SECRETS_URL:-https://secrets.pmo.city/}'
+      - 'HOME_URL=${HOME_URL:-https://pmo.city}'
+      - 'TAB_LIMIT=${TAB_LIMIT:-3}'
+      - PROFILE_DIR=/home/neko/.config/google-chrome
+      - 'IDLE_TIMEOUT_MIN=${IDLE_TIMEOUT_MIN:-2}'
+      - 'IDLE_GRACE_MIN=${IDLE_GRACE_MIN:-1}'
+      - 'IDLE_CHECK_INTERVAL=${IDLE_CHECK_INTERVAL:-10}'
+      - 'IDLE_ACTIVITY_SOURCES=${IDLE_ACTIVITY_SOURCES:-xinput,media,tabs,cdp}'
+      - 'IDLE_ACTION=${IDLE_ACTION:-suspend}'
+  slot-2:
+    image: '${NEKO_IMAGE:-ghcr.io/m1k1o/neko/google-chrome:2.9.0}'
+    restart: unless-stopped
+    healthcheck:
+      # Same internal readiness contract as slot-1; host publishing uses
+      # 9231 but the container process remains on 9230.
+      test:
+        - CMD-SHELL
+        - 'python3 -c "import urllib.request;urllib.request.urlopen(\"http://127.0.0.1:9230/health\",timeout=3)" || exit 1'
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    shm_size: 2gb
+    mem_limit: 2g
+    cpus: '${CPU_LIMIT:-0.5}'
+    cap_add:
+      - SYS_ADMIN
+    ulimits:
+      nofile:
+        soft: 524288
+        hard: 524288
+    ports:
+      - '52201-52300:52201-52300/udp'
+      # Agent path (D6, spec 26): CDP relay + restart-api, slot-2 offset
+      # (9224/9231 host ports). 0.0.0.0 + host firewall (see slot-1).
+      - '9224:9223/tcp'
+      - '9231:9230/tcp'
+    volumes:
+      - 'slot-2-profile:/home/neko/.config'
+      - 'slot-2-downloads:/home/neko/Downloads'
+      - 'scripts:/etc/neko/supervisord:ro'
+      # Spec 77 owner-bound recovery: restart-api.py and sso-broker.py in
+      # each slot read the per-user archive/credential tree from this shared,
+      # durable volume. This is NOT browser state exposed to another slot:
+      # browser profiles remain in slot-N-profile, and all reads are scoped to
+      # the owner in .slot-user.json. Keeping the archive mount is required
+      # across a cb-fleet-v2 recreate; without it the boot hint is always null.
+      - 'sessions:/data/sessions'
+      # Audit B3 (spec 66 isolation): GrantHub material is still fetched from
+      # the router's slot-authenticated endpoint; this mount is needed for
+      # owner recovery archives and per-owner broker credentials only.
+    environment:
+      - 'NEKO_SCREEN=${NEKO_SCREEN:-1280x720@30}'
+      - 'NEKO_VIDEO_CODEC=${NEKO_VIDEO_CODEC:-h264}'
+      - 'NEKO_VIDEO_BITRATE=${NEKO_VIDEO_BITRATE:-2048}'
+      - 'NEKO_NAT1TO1=${NEKO_NAT1TO1:-145.223.34.130}'
+      - 'NEKO_PASSWORD=${NEKO_PASSWORD:-neko}'
+      # Spec 39: wedged-neko auto-rescue — min seconds between neko-app
+      # restarts (restart-api server-side rate limit).
+      - 'CB_RESET_COOLDOWN_S=${CB_RESET_COOLDOWN_S:-60}'
+      # Spec 40: stream-dead backstop — occupied-slot neko log silence
+      # threshold before auto-restart (blank-page wedge).
+      - 'CB_STREAM_GUARD_S=${CB_STREAM_GUARD_S:-90}'
+      # Spec 37: unified top bar — GrantHub "Shared" pill. GRANTHUB_URL is
+      # where the pill navigates; GRANTHUB_STATUS_URL optional JSON endpoint
+      # {"shared": bool} keyed by Remote-Email (unset → "Not Shared").
+      - 'GRANTHUB_URL=${GRANTHUB_URL:-/connect}'
+      - 'GRANTHUB_STATUS_URL=${GRANTHUB_STATUS_URL:-/connect/status}'
+      # Audit B3/B4 (spec 66 isolation): PER-SLOT broker credential —
+      # this slot's OWN bearer (Coolify magic var SERVICE_PASSWORD_64_SLOT2BROKER)
+      # and its slot number. The router derives the slot from the bearer
+      # and binds every grant/OTP operation to this slot's current owner.
+      - 'CB_SLOT_N=2'
+      - 'CB_SLOT_2_TOKEN=${SERVICE_PASSWORD_64_SLOT2BROKER}'
+      # Audit B3: grant material is fetched from the router, never from a
+      # mounted store. OTP_PENDING_URL carries the ?challenge= id (B10).
+      - 'GRANT_MATERIAL_URL=${GRANT_MATERIAL_URL:-http://router:8081/connect/grant/material}'
+      - 'GRANT_POST_URL=${GRANT_POST_URL:-http://router:8081/connect/grant}'
+      - 'OTP_PENDING_URL=${OTP_PENDING_URL:-http://router:8081/otp/pending}'
+      # D2 fail-closed exact vault selection. Duplicate/zero matches remain
+      # security failures; each owner's own grant supplies the item fields.
+      - 'SSO_VAULT_ITEM=Authentik Spike User'
+      # D15 B/C: exact TinyAuth-cookie health and proactive refresh. The cookie
+      # name is deterministic for auth.pmo.city in TinyAuth v5 (UUIDv5 prefix).
+      # Probe origins are an explicit allowlist — never all *.pmo.city hosts.
+      - 'SSO_SESSION_COOKIE_NAME=${SSO_SESSION_COOKIE_NAME:-tinyauth-session-39fcd0f6}'
+      - 'SSO_SESSION_PROBE_ORIGINS=${SSO_SESSION_PROBE_ORIGINS:-https://pmo.city,https://cloudbrowser.dev01.pmo.city,https://cloudfiles.dev01.pmo.city}'
+      # The controller checks every 5 minutes and starts a fresh SSO round-trip
+      # 15 minutes before expiry; repeated refresh attempts are rate-limited.
+      - 'SSO_SESSION_CHECK_S=${SSO_SESSION_CHECK_S:-300}'
+      - 'SSO_SESSION_RELOGIN_BEFORE_S=${SSO_SESSION_RELOGIN_BEFORE_S:-900}'
+      - 'SSO_SESSION_RELOGIN_COOLDOWN_S=${SSO_SESSION_RELOGIN_COOLDOWN_S:-120}'
+      - 'NEKO_PASSWORD_ADMIN=${NEKO_PASSWORD_ADMIN:-admin}'
+      - NEKO_EPR=52201-52300
+      - 'NEKO_ICELITE=${NEKO_ICELITE:-false}'
+      - 'BROWSER_URL=${BROWSER_URL:-https://cloudbrowser.dev01.pmo.city/}'
+      - 'FILES_URL=${FILES_URL:-https://cloudfiles.dev01.pmo.city/}'
+      - 'SECRETS_URL=${SECRETS_URL:-https://secrets.pmo.city/}'
+      - 'HOME_URL=${HOME_URL:-https://pmo.city}'
+      - 'TAB_LIMIT=${TAB_LIMIT:-3}'
+      - PROFILE_DIR=/home/neko/.config/google-chrome
+      - 'IDLE_TIMEOUT_MIN=${IDLE_TIMEOUT_MIN:-2}'
+      - 'IDLE_GRACE_MIN=${IDLE_GRACE_MIN:-1}'
+      - 'IDLE_CHECK_INTERVAL=${IDLE_CHECK_INTERVAL:-10}'
+      - 'IDLE_ACTIVITY_SOURCES=${IDLE_ACTIVITY_SOURCES:-xinput,media,tabs,cdp}'
+      - 'IDLE_ACTION=${IDLE_ACTION:-suspend}'
+  clamav:
+    image: '${CLAMAV_IMAGE:-clamav/clamav:stable}'
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - /usr/local/bin/clamdcheck.sh
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    volumes:
+      - 'clamav-db:/var/lib/clamav'
+  janitor:
+    image: '${JANITOR_IMAGE:-python:3.12-slim}'
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'grep -q janitor-loop /proc/1/cmdline || exit 1'
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    command:
+      - python
+      - /data/scripts/janitor-loop.py
+    volumes:
+      - 'slot-1-downloads:/data/downloads/slot-1'
+      - 'slot-2-downloads:/data/downloads/slot-2'
+      - 'scripts:/data/scripts:ro'
+    environment:
+      - 'DOWNLOADS=/data/downloads/slot-1,/data/downloads/slot-2'
+      - 'CLAMAV_HOST=${CLAMAV_HOST:-clamav}'
+      - 'CLAMAV_PORT=${CLAMAV_PORT:-3310}'
+      - 'QUOTA_BYTES=${QUOTA_BYTES:-5368709120}'
+      - 'RETENTION_DAYS=${RETENTION_DAYS:-90}'
+volumes:
+  router-state: null
+  slot-1-profile: null
+  slot-1-downloads: null
+  slot-2-profile: null
+  slot-2-downloads: null
+  clamav-db: null
+  scripts: null
+  sessions: null

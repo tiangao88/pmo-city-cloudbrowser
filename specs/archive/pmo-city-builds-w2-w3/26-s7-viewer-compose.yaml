@@ -1,0 +1,109 @@
+services:
+  browser:
+    image: '${BROWSER_IMAGE:-zenika/alpine-chrome:latest}'
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 524288
+        hard: 524288
+    command:
+      - '--no-sandbox'
+      - '--disable-dev-shm-usage'
+      - '--disable-gpu'
+      - '--remote-debugging-address=0.0.0.0'
+      - '--remote-debugging-port=${CDP_PORT:-9222}'
+      - '--remote-allow-origins=*'
+      - '--user-data-dir=/data/profiles'
+      - '--download-default-directory=/data/downloads'
+      - 'about:blank'
+    volumes:
+      - 'browser-profiles:/data/profiles'
+      - 'downloads:/data/downloads'
+    environment:
+      - 'CDP_PORT=${CDP_PORT:-9222}'
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - com.centurylinklabs.watchtower.scope=monitor-notify
+  clamav:
+    image: '${CLAMAV_IMAGE:-clamav/clamav:stable}'
+    restart: unless-stopped
+    volumes:
+      - 'clamav-db:/var/lib/clamav'
+  janitor:
+    image: '${JANITOR_IMAGE:-python:3.12-slim}'
+    restart: unless-stopped
+    command:
+      - python
+      - /data/scripts/janitor-loop.py
+    volumes:
+      - 'downloads:/data/downloads'
+      - 'scripts:/data/scripts:ro'
+    environment:
+      - 'CLAMAV_HOST=${CLAMAV_HOST:-clamav}'
+      - 'CLAMAV_PORT=${CLAMAV_PORT:-3310}'
+      - 'QUOTA_BYTES=${QUOTA_BYTES:-5368709120}'
+      - 'RETENTION_DAYS=${RETENTION_DAYS:-90}'
+  fake-login:
+    image: '${FAKELOGIN_IMAGE:-python:3.12-slim}'
+    restart: unless-stopped
+    command:
+      - python
+      - /data/fake-login/server.py
+    environment:
+      - 'FAKE_LOGIN_USER=${FAKE_LOGIN_USER:-spike-user}'
+      - 'FAKE_LOGIN_PASS=${FAKE_LOGIN_PASS:-}'
+    volumes:
+      - 'scripts:/data/fake-login:ro'
+  viewer:
+    image: '${NEKO_IMAGE:-ghcr.io/m1k1o/neko/google-chrome:2.9.0}'
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 524288
+        hard: 524288
+    shm_size: 2gb
+    mem_limit: 2g
+    cpus: ${CPU_LIMIT:-1.0}
+    cap_add:
+      - SYS_ADMIN
+    ports:
+      - '52000-52100:52000-52100/udp'
+    volumes:
+      - 'viewer-profiles:/home/neko/.config/google-chrome-w1'
+      - 'downloads:/data/downloads'
+      - 'scripts:/etc/neko/supervisord:ro'
+    environment:
+      - 'NEKO_SCREEN=${NEKO_SCREEN:-1920x1080@30}'
+      - 'NEKO_PASSWORD=${NEKO_PASSWORD:-neko}'
+      - 'NEKO_PASSWORD_ADMIN=${NEKO_PASSWORD_ADMIN:-admin}'
+      - 'NEKO_EPR=${NEKO_EPR:-52000-52100}'
+      - NEKO_ICELITE=1
+      - 'MAX_RUNNING_BROWSERS=${MAX_RUNNING_BROWSERS:-2}'
+      - SERVICE_URL_CLOUDBROWSER_8081
+      - 'BROKER_VAULT_TOKEN=${BROKER_VAULT_TOKEN:-}'
+      - 'BROKER_VAULT_URL=${BROKER_VAULT_URL:-}'
+      - 'BROWSER_URL=${BROWSER_URL:-https://cloudbrowser-w1.dev01.pmo.city/}'
+      - 'CLOUDBROWSER_DOMAIN=${CLOUDBROWSER_DOMAIN:-cloudbrowser-w1.dev01.pmo.city}'
+      - 'CLOUDBROWSER_SERVICE_UUID=${CLOUDBROWSER_SERVICE_UUID:-4guplgcrvug7l7h64m2cxkm1}'
+      - 'FILES_URL=${FILES_URL:-https://cloudfiles-w1.dev01.pmo.city/}'
+      - 'SECRETS_URL=${SECRETS_URL:-https://secrets.pmo.city/}'
+      - 'HOME_URL=${HOME_URL:-https://pmo.city}'
+      - 'TAB_LIMIT=${TAB_LIMIT:-3}'
+      - 'TINYAUTH_GROUP=${TINYAUTH_GROUP:-PMOC_Users}'
+      # Spec 29: the W1 reference viewer never suspends (it hosts the
+      # MAX_RUNNING_BROWSERS gate; the fleet slots own the reapers).
+      - IDLE_ACTION=none
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - com.centurylinklabs.watchtower.scope=monitor-notify
+      - traefik.http.middlewares.tinyauth-pmo@file
+      - tinyauth.apps.4guplgcrvug7l7h64m2cxkm1-cloudfiles-w1.oauth.groups=PMOC_Users
+      - tinyauth.apps.4guplgcrvug7l7h64m2cxkm1-cloudfiles-w1.config.domain=cloudfiles.dev01.pmo.city
+      - tinyauth.apps.4guplgcrvug7l7h64m2cxkm1-cloudbrowser-w1.oauth.groups=PMOC_Users
+      - tinyauth.apps.4guplgcrvug7l7h64m2cxkm1-cloudbrowser-w1.config.domain=cloudbrowser.dev01.pmo.city
+volumes:
+  browser-profiles: null
+  viewer-profiles: null
+  downloads: null
+  clamav-db: null
+  scripts: null

@@ -1,0 +1,6 @@
+openapi: 3.0.3
+info:
+  title: CloudBrowser Control API
+  version: v1
+  description: Lifecycle and owner-bound control contract placeholder for v1.
+paths: {}

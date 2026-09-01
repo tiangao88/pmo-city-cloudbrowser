@@ -1,0 +1,29 @@
+apiVersion: cloudbrowser.pmo.city/v1
+kind: CloudBrowserRelease
+metadata:
+  name: cloudbrowser-dev-v01
+spec:
+  productVersion: 0.1.0
+  specificationBaseline: 0.1.0
+  contracts:
+    controlApi: v1
+    agentControl: v1
+    credentialBroker: v1
+    events: v1
+  components:
+    router: 0.1.0
+    slotSupervisor: 0.1.0
+    viewer: 0.1.0
+    credentialBroker: 0.1.0
+  imageDigests:
+    router: sha256:REPLACE_BEFORE_DEPLOY
+    slotSupervisor: sha256:REPLACE_BEFORE_DEPLOY
+    viewer: sha256:REPLACE_BEFORE_DEPLOY
+    credentialBroker: sha256:REPLACE_BEFORE_DEPLOY
+  instance:
+    id: cloudbrowser-dev-v01
+    network: cloudbrowser-dev-v01
+    volumePrefix: cloudbrowser-dev-v01
+  migration:
+    strategy: backup-then-switch
+    rollbackSupported: true

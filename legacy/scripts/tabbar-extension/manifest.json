@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Cloudbrowser Tab Bar",
+  "version": "1.13.1",
+  "description": "Kiosk tab bar for the Cloudbrowser viewer: switch/close tabs, pinned bookmarks (Vaultwarden, Cloud files), relaunch Chrome, session Exit fallback on external pages. Error pages get a bundled replacement page with the full bar (O6).",
+  "permissions": ["tabs", "storage", "scripting", "webNavigation"],
+  "host_permissions": [
+    "http://127.0.0.1:9230/*",
+    "http://localhost:9230/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

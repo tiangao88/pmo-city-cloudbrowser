@@ -1,0 +1,11 @@
+[Unit]
+Description=Run cb-normalize-volume.sh every minute (self-heal volume permissions)
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=5s
+Unit=cb-normalize.service
+
+[Install]
+WantedBy=timers.target

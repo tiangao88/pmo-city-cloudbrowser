@@ -1,0 +1,11 @@
+# Do not deploy this file. It documents the initial migration baseline.
+apiVersion: cloudbrowser.pmo.city/v1
+kind: CloudBrowserRelease
+metadata:
+  name: cloudbrowser-v0.1.0
+spec:
+  productVersion: 0.1.0
+  specificationBaseline: historical-import-only
+  status: migration-baseline-not-installable
+  installable: false
+  reason: refactor contracts and broker security boundary are not yet implemented

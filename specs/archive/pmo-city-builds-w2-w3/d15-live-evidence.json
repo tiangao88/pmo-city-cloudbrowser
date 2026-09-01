@@ -1,0 +1,65 @@
+{
+  "artifact": "D15 live qualification — authenticated-session gate evidence",
+  "date_utc": "2026-08-27",
+  "scope": "cb-fleet-v2 / mother01 / router / slot-1 / owner spike-user@aikumi.pro",
+  "owner": {
+    "email": "spike-user@aikumi.pro",
+    "real_sso_identity": true,
+    "owner_pre": "spike-user@aikumi.pro",
+    "owner_post": "spike-user@aikumi.pro",
+    "owner_changed": false
+  },
+  "slot_health": {
+    "chrome": "RUNNING",
+    "cdp_ok": true,
+    "suspended": false,
+    "user": "spike-user@aikumi.pro",
+    "chrome_cdp_browser": "Chrome/128.0.6613.137",
+    "programs": {
+      "google-chrome": "RUNNING",
+      "restart-api": "RUNNING",
+      "sso-broker": "RUNNING",
+      "neko": "RUNNING",
+      "title-proxy": "RUNNING",
+      "downloads-api": "RUNNING"
+    }
+  },
+  "otp_exchange": {
+    "broker_request": "accepted",
+    "agent_submit": "accepted",
+    "broker_consumed": true,
+    "code_recorded": false,
+    "code_logged": false,
+    "code_persisted": false
+  },
+  "cdp_targets": {
+    "page_count_pre": 1,
+    "page_count_post": 1,
+    "service_worker_count_pre": 1,
+    "service_worker_count_post": 1,
+    "total_target_count_pre": 2,
+    "total_target_count_post": 2,
+    "agent_opened_tabs": 0,
+    "agent_closed_tabs": 0,
+    "tab_count_unchanged": true,
+    "tab_ids_changed": true,
+    "tab_ids_changed_reason": "Chrome restart during the guarded recovery attempt; the user-visible page count remained one."
+  },
+  "authentication_verdict": {
+    "authenticated_to_intended_surface": false,
+    "current_url_host": "auth.aikumi.app",
+    "authentik_advanced": false,
+    "reason": "The submitted one-time value was consumed by the broker but Authentik did not advance beyond the TOTP stage; the server-side audit recorded login_failed."
+  },
+  "restart_qualification": {
+    "authenticated_session_restart_test": "not_run",
+    "reason": "The authenticated owner-bound session was never established; restarting again would risk disrupting the live MFA page."
+  },
+  "guardrails": {
+    "synthetic_identities_added": false,
+    "tabs_created_or_evicted_by_agent": false,
+    "secrets_or_one_time_values_written": false,
+    "other_user_altered": false
+  },
+  "blocker": "Fresh MFA authentication is still required; the prior one-time submission was rejected by Authentik and must not be replayed."
+}

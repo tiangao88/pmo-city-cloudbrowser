@@ -1,0 +1,7 @@
+[Unit]
+Description=Normalize cb-fleet scripts volume permissions (app user readability)
+Documentation=cloud-browser-service specs — scripts volume must stay neko-readable
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/cb-normalize-volume.sh
