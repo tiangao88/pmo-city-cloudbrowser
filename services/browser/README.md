@@ -11,11 +11,16 @@ evaluation.
 - `CB_CHROME_HTTP_PORT` — loopback CDP HTTP port, default `9222`.
 - `CB_CHROME_HTTP_URL` — loopback Chrome HTTP origin, default
   `http://127.0.0.1:9222`.
+- `CB_CHROME_EXTRA_ARGS` — extra Chromium flags; the image default is
+  `--headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage`
+  (container-appropriate flags; overridable per deployment).
 - `CB_PROFILE_DIR` — absolute persistent profile path, default `/data/profile`.
 - `CB_PRINCIPAL_ID` and `CB_BINDING_GENERATION` — server-owned identity binding.
 - `CB_PORT` — restricted browser service port, default `9230`.
 
-The process manager starts Chromium with a private debugging address and an
+The browser service auto-starts Chromium at boot (owner/generation-bound) and
+recovers crashes through its watcher. The process manager starts Chromium with
+a private debugging address and an
 explicit profile directory. It waits for a real `/json/version` response,
 marks readiness only after validating the browser identity and WebSocket URL,
 and reports degraded health when Chrome is unavailable. A watcher detects a

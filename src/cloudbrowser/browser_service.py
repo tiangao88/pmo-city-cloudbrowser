@@ -60,6 +60,7 @@ def build_browser_service() -> tuple[BrowserProcess, object, threading.Event]:
 
 def run_browser_service() -> None:
     process, server, stop_event = build_browser_service()
+    process.start()
     watcher = threading.Thread(target=process.watch, args=(stop_event,), daemon=True)
     watcher.start()
     try:

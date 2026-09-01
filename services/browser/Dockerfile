@@ -4,6 +4,7 @@ ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app/src \
     CB_CHROME_EXECUTABLE=/usr/bin/chromium \
     CB_CHROME_HTTP_PORT=9222 \
     CB_PORT=9230
+ENV CB_CHROME_EXTRA_ARGS="--headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage"
 WORKDIR /app
 
 RUN apt-get update \
