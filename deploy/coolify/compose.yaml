@@ -65,12 +65,11 @@ services:
       CB_CHROME_HTTP_URL: http://127.0.0.1:9222
       CB_CHROME_HTTP_PORT: 9222
       CB_CHROME_EXECUTABLE: ${CB_CHROME_EXECUTABLE:-/usr/bin/chromium}
-      CB_CHROME_EXTRA_ARGS: ${CB_CHROME_EXTRA_ARGS:---headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage}
       CB_PROFILE_DIR: /data/profile
       CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
       CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9230/browser/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9230/browser/health', timeout=3)"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -93,6 +92,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
+    expose:
+      - "8082"
 
   downloads:
     <<: *common
