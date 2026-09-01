@@ -1,13 +1,17 @@
-# CloudBrowser deployment
+# Full compose scaffold
 
-The repository is the source of truth for deployment definitions. The
-bootstrap release is deliberately non-installable; the `v0.2.0-dev1` bundle
-is a source-built development scaffold and is also non-installable until its
-images are published, pinned, and accepted. A final Compose bundle must be
-backed by versioned service contracts, pinned images, health checks,
-backup/rollback operations, and side-by-side isolation tests.
+The primary `deploy/coolify/compose.yaml` remains the release's five-service
+scaffold. It intentionally does not include a browser process until the
+installable release gates are approved. Each installation is isolated by
+`CB_INSTANCE_ID`, including its network, volumes, and secret namespaces. For
+local development of the restricted browser-side adapter, combine it with
+`browser-overlay.yaml` using Compose's multiple-file merge behavior:
 
-Every installation must set a unique `CB_INSTANCE_ID` and derive its network,
-volumes, public hostnames, and secret namespaces from that identifier. The
-imported `legacy-compose-v2.reference.yaml` is retained for migration
-comparison only.
+```bash
+CB_INSTANCE_ID=cloudbrowser-dev-v01 \
+CB_RELEASE_VERSION=0.2.0-dev1 \
+docker compose -f deploy/coolify/compose.yaml \
+  -f deploy/coolify/browser-overlay.yaml config
+```
+
+The overlay is not an installability or production-deployment approval.
