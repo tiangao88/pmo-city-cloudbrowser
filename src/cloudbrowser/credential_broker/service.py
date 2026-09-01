@@ -68,7 +68,7 @@ class BrokerService:
         fetch_credentials: Callable[[str], object],
         run_adapter: Callable[[SiteDeclaration, object], AdapterResult],
     ) -> BrokerResult:
-        """Run the bounded orchestration with credential material kept internal."""
+        """Run bounded orchestration with credential material kept internal."""
         declaration_or_result = self.validate_intent(intent)
         if isinstance(declaration_or_result, BrokerResult):
             return declaration_or_result
