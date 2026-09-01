@@ -1,5 +1,115 @@
-services: {}
+name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
 
-# This bootstrap bundle is intentionally empty/non-installable. The canonical
-# service definitions will be added only after contracts and security tests are
-# approved. See deploy/coolify/README.md and the legacy reference compose file.
+x-common: &common
+  build:
+    context: ../..
+    dockerfile: services/router/Dockerfile
+  restart: unless-stopped
+  environment:
+    CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
+    CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+  networks:
+    - cloudbrowser
+
+services:
+  router:
+    <<: *common
+    build:
+      context: ../..
+      dockerfile: services/router/Dockerfile
+    environment:
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_PORT: 8080
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    volumes:
+      - router-state:/data/state
+
+  slot-supervisor:
+    <<: *common
+    build:
+      context: ../..
+      dockerfile: services/slot-supervisor/Dockerfile
+    environment:
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_PORT: 8081
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    volumes:
+      - slot-state:/data/state
+
+  viewer:
+    <<: *common
+    build:
+      context: ../..
+      dockerfile: services/viewer/Dockerfile
+    environment:
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_PORT: 8082
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8082/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  downloads:
+    <<: *common
+    build:
+      context: ../..
+      dockerfile: services/downloads/Dockerfile
+    environment:
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_PORT: 8083
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    volumes:
+      - downloads:/data/downloads
+
+  credential-broker:
+    <<: *common
+    build:
+      context: ../..
+      dockerfile: services/credential-broker/Dockerfile
+    environment:
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_PORT: 8084
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8084/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    volumes:
+      - broker-state:/data/state
+
+networks:
+  cloudbrowser:
+    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-network
+
+volumes:
+  router-state:
+    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-router-state
+  slot-state:
+    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-slot-state
+  downloads:
+    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-downloads
+  broker-state:
+    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-broker-state

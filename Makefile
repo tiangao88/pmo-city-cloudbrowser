@@ -18,6 +18,8 @@ security:
 
 install-check:
 	$(PYTHON) tools/validate-release-manifest.py
+	$(PYTHON) tools/validate-installation.py
+	$(PYTHON) tools/validate-image-inputs.py
 
 spec-check:
 	$(PYTHON) tools/validate-specs.py

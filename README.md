@@ -76,8 +76,13 @@ for a qualified release. See `deploy/coolify/README.md`.
 - W2/W3 implementation, tests, deployment references, and specifications have
   been imported from `pmo-city-builds` under explicit `legacy/` and
   `specs/archive/` paths.
-- The generic Credential Broker is specified as proposal `v0.2`; it is not yet
-  implemented.
+- The generic Credential Broker is implemented as the first v0.2 vertical
+  slice, including the controlled ordinary form adapter; it is not yet a
+  deployable service.
+- The v0.2.0-dev1 source-built development scaffold now includes separate
+  service entry points, health endpoints, scoped backup/rollback tooling, and
+  instance-isolated Compose resource names. It remains non-installable until
+  runtime/security acceptance, image publication, and release qualification.
 - The current W3-1 status remains partial: owner-bound recovery passes, while
   strict authenticated-surface continuity through the intended broker path is
   not proven.

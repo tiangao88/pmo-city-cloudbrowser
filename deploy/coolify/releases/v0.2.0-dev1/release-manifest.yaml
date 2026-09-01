@@ -1,0 +1,35 @@
+apiVersion: cloudbrowser.pmo.city/v1
+kind: CloudBrowserRelease
+metadata:
+  name: cloudbrowser-v0.2.0-dev1
+spec:
+  productVersion: 0.2.0-dev1
+  specificationBaseline: v0.2.0
+  status: development-scaffold-not-installable
+  installable: false
+  reason: image publication and runtime acceptance matrix are not complete
+  contracts:
+    controlApi: v1
+    agentControl: v1
+    credentialBroker: v1
+    events: v1
+  components:
+    router: 0.2.0-dev1
+    slotSupervisor: 0.2.0-dev1
+    viewer: 0.2.0-dev1
+    downloads: 0.2.0-dev1
+    credentialBroker: 0.2.0-dev1
+  imageDigests:
+    router: sha256:REPLACE_BEFORE_IMAGE_PUBLICATION
+    slotSupervisor: sha256:REPLACE_BEFORE_IMAGE_PUBLICATION
+    viewer: sha256:REPLACE_BEFORE_IMAGE_PUBLICATION
+    downloads: sha256:REPLACE_BEFORE_IMAGE_PUBLICATION
+    credentialBroker: sha256:REPLACE_BEFORE_IMAGE_PUBLICATION
+  instance:
+    id: CB_INSTANCE_ID_REQUIRED
+    network: CB_INSTANCE_ID_REQUIRED-network
+    volumePrefix: CB_INSTANCE_ID_REQUIRED
+    secretNamespace: CB_INSTANCE_ID_REQUIRED-secrets
+  migration:
+    strategy: backup-then-switch
+    rollbackSupported: true

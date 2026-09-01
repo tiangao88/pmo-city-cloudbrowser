@@ -2,14 +2,32 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing tag to qualify and release"
+        required: true
+        type: string
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
+  packages: read
+
+env:
+  RELEASE_TAG: ${{ inputs.release_tag }}
 
 jobs:
-  release:
+  qualify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "Release workflow is gated until an installable baseline exists."
+        with:
+          ref: ${{ inputs.release_tag }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: latest
+      - run: uv sync --dev
+      - run: uv run make check
+      - name: Verify release manifest exists
+        shell: bash
+        run: test -f "deploy/coolify/releases/${RELEASE_TAG#v}/release-manifest.yaml"
+      - run: echo "Release publication remains gated on immutable image digests and staging acceptance."
