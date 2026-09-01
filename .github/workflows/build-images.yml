@@ -25,6 +25,8 @@ jobs:
             dockerfile: services/router/Dockerfile
           - name: slot-supervisor
             dockerfile: services/slot-supervisor/Dockerfile
+          - name: browser
+            dockerfile: services/browser/Dockerfile
           - name: viewer
             dockerfile: services/viewer/Dockerfile
           - name: downloads
