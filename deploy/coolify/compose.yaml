@@ -1,9 +1,6 @@
 name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
 
 x-common: &common
-  build:
-    context: ../..
-    dockerfile: services/router/Dockerfile
   restart: unless-stopped
   environment:
     CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
@@ -39,6 +36,14 @@ services:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
       CB_PORT: 8081
+      CB_BROWSER_API_URL: http://browser:9230
+      CB_PROFILE_ID: ${CB_PROFILE_ID:-profile-unassigned}
+      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
+      CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-unassigned}
+      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
+    depends_on:
+      browser:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3)"]
       interval: 10s
@@ -47,6 +52,30 @@ services:
       start_period: 5s
     volumes:
       - slot-state:/data/state
+
+  browser:
+    <<: *common
+    build:
+      context: ../..
+      dockerfile: services/browser/Dockerfile
+    environment:
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_PORT: 9230
+      CB_CHROME_HTTP_URL: http://127.0.0.1:9222
+      CB_CHROME_HTTP_PORT: 9222
+      CB_CHROME_EXECUTABLE: ${CB_CHROME_EXECUTABLE:-/usr/bin/chromium}
+      CB_PROFILE_DIR: /data/profile
+      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
+      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9230/browser/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - browser-profile:/data/profile
 
   viewer:
     <<: *common
@@ -109,6 +138,8 @@ volumes:
     name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-router-state
   slot-state:
     name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-slot-state
+  browser-profile:
+    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-browser-profile
   downloads:
     name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-downloads
   broker-state:

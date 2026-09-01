@@ -1,29 +1,23 @@
-# CloudBrowser service images
+# CloudBrowser runtime service extraction
 
-Each service has a separate entry point and image definition. The current
-`v0.2.0-dev1` images provide a dependency-free, non-sensitive health/ready
-surface while product endpoints are extracted behind their versioned
-contracts. They are source-built for validation and are not installable until
-published, pinned, and accepted by the runtime/security matrix.
+The `v0.2.0-dev1` runtime is assembled as six separately defined service
+images:
 
-The services deliberately do not copy or mount `legacy/` at runtime. The
-legacy tree remains migration/reference material only.
+- `router` — control-plane entrypoint;
+- `slot-supervisor` — owner-bound lifecycle and slot orchestration;
+- `browser` — Chromium process and restricted browser transport;
+- `viewer` — user-facing viewer boundary;
+- `downloads` — durable download boundary;
+- `credential-broker` — status-only credential boundary.
 
-## Local validation
+Each service has an independent entrypoint, Dockerfile, non-root image user,
+healthcheck, and instance-scoped Compose wiring. Runtime code is built only
+from `src/` and its service entrypoint; the imported `legacy/` tree is not
+mounted or imported.
 
-```bash
-uv run make check
-```
-
-The local bundle can be inspected with a Compose implementation supporting the
-Compose specification. The development host may not have a running Docker
-engine; in that case image builds and container health must be exercised in CI
-or a Coolify staging environment before an installable release is claimed.
-
-## Build and publish
-
-The manually triggered or `v0.2.0-dev*` tag-triggered `Build images` workflow
-builds each service image with Buildx and publishes provenance/SBOM metadata.
-Publishing images does not by itself make a release installable; the release
-manifest must contain immutable digests and the runtime/security acceptance
-matrix must pass.
+The browser service is the first fully exercised runtime vertical slice. The
+other service endpoints remain bounded health surfaces until their respective
+product contracts are implemented. This is an extraction/dev release, not an
+installable production release: the manifest remains `installable: false`
+until immutable images, provenance, and the complete runtime/security matrix
+are accepted.

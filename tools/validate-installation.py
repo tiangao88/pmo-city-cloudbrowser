@@ -4,7 +4,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SERVICES = ("router", "slot-supervisor", "viewer", "downloads", "credential-broker")
+SERVICES = ("router", "slot-supervisor", "browser", "viewer", "downloads", "credential-broker")
 COMPOSE = ROOT / "deploy" / "coolify" / "compose.yaml"
 MANIFEST = ROOT / "deploy" / "coolify" / "releases" / "v0.2.0-dev1" / "release-manifest.yaml"
 
@@ -36,13 +36,14 @@ def main() -> None:
             fail(f"missing image inputs for {service}")
         docker_text = dockerfile.read_text(encoding="utf-8")
         for marker in (
-            "FROM python:3.12-slim",
             "COPY src/ /app/src/",
             f"COPY services/{service}/entrypoint.py",
             "HEALTHCHECK",
         ):
             if marker not in docker_text:
                 fail(f"{service} Dockerfile missing {marker}")
+        if not ("FROM python:3.12-slim" in docker_text or "FROM debian:bookworm-slim" in docker_text):
+            fail(f"{service} Dockerfile missing supported base image")
 
     manifest = MANIFEST.read_text(encoding="utf-8")
     for marker in (

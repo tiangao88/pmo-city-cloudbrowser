@@ -4,14 +4,14 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SERVICES = ("router", "slot-supervisor", "viewer", "downloads", "credential-broker")
+SERVICES = ("router", "slot-supervisor", "browser", "viewer", "downloads", "credential-broker")
 
 
 def main() -> None:
     for service in SERVICES:
         path = ROOT / "services" / service / "Dockerfile"
         text = path.read_text(encoding="utf-8")
-        if not text.startswith("FROM python:3.12-slim\n"):
+        if not text.startswith("FROM debian:bookworm-slim\n") and not text.startswith("FROM python:3.12-slim\n"):
             raise SystemExit(f"{service}: unsupported base image")
         for marker in (
             "COPY src/ /app/src/",

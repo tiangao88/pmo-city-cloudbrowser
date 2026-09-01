@@ -9,13 +9,17 @@ from cloudbrowser.deployment import InstanceNamespace
 from cloudbrowser.health import serve_health
 
 
+KNOWN_COMPONENTS = {"router", "slot-supervisor", "browser", "viewer", "downloads", "credential-broker"}
+
+
 def run_service(component: str) -> None:
     instance_id = os.environ.get("CB_INSTANCE_ID")
     release_version = os.environ.get("CB_RELEASE_VERSION")
     if not instance_id or not release_version:
         raise SystemExit("CB_INSTANCE_ID and CB_RELEASE_VERSION are required")
-    # Validate the installation namespace before opening a listener.
     InstanceNamespace(instance_id)
+    if component not in KNOWN_COMPONENTS:
+        raise SystemExit("unknown service component")
     try:
         port = int(os.environ.get("CB_PORT", "8080"))
     except ValueError as exc:
@@ -23,22 +27,9 @@ def run_service(component: str) -> None:
     if not 1 <= port <= 65535:
         raise SystemExit("CB_PORT must be between 1 and 65535")
     if component == "browser":
-        from cloudbrowser.browser_slots.chrome_adapter import (
-            ChromeBrowserAdapter,
-            ChromeHttpClient,
-            create_browser_server,
-        )
+        from cloudbrowser.browser_service import run_browser_service
 
-        adapter = ChromeBrowserAdapter(
-            ChromeHttpClient(os.environ.get("CB_CHROME_HTTP_URL", "http://127.0.0.1:9222")),
-            owner=os.environ.get("CB_PRINCIPAL_ID", "principal-unassigned"),
-            generation=os.environ.get("CB_BINDING_GENERATION", "generation-0"),
-        )
-        server = create_browser_server(adapter, address=("0.0.0.0", port))
-        try:
-            server.serve_forever()
-        finally:
-            server.server_close()
+        run_browser_service()
         return
     if component == "slot-supervisor":
         from cloudbrowser.browser_slots import BrowserBinding, OwnerBoundLifecycle, SlotSupervisor

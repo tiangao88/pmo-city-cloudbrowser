@@ -1,23 +1,27 @@
-# Browser sidecar integration (development scaffold)
+# Browser service
 
-The browser-side adapter is exposed by the `browser` service on port `9230`.
-It talks to the local Chrome HTTP JSON endpoint (`CB_CHROME_HTTP_URL`, default
-`http://127.0.0.1:9222`) and exposes only the restricted lifecycle/page API:
+The browser service owns exactly one Chromium process and one owner-bound
+profile. It exposes the restricted adapter API on port `9230` and never
+exposes raw CDP, cookies, storage, credentials, network bodies, or arbitrary
+evaluation.
 
-- `GET /browser/readiness`
-- `GET /browser/pages`
-- `POST /browser/start`
-- `POST /browser/stop`
-- `POST /browser/pages/open`
-- `POST /browser/pages/close-empty`
+## Runtime contract
 
-The slot supervisor consumes it through `CB_BROWSER_API_URL` (default
-`http://browser:9230`). The browser service reports only its server-derived
-owner and binding generation; it does not expose raw CDP, evaluation,
-cookies, storage, network bodies, or credentials.
+- `CB_CHROME_EXECUTABLE` — absolute Chromium/Chrome executable path.
+- `CB_CHROME_HTTP_PORT` — loopback CDP HTTP port, default `9222`.
+- `CB_CHROME_HTTP_URL` — loopback Chrome HTTP origin, default
+  `http://127.0.0.1:9222`.
+- `CB_PROFILE_DIR` — absolute persistent profile path, default `/data/profile`.
+- `CB_PRINCIPAL_ID` and `CB_BINDING_GENERATION` — server-owned identity binding.
+- `CB_PORT` — restricted browser service port, default `9230`.
 
-`browser-overlay.yaml` is a deployment overlay for the compose scaffold. It
-adds the browser sidecar and the supervisor's endpoint/binding environment.
-The release remains non-installable until the browser process lifecycle,
-viewer/authentication, queueing, and CI/staging image qualification gates are
-complete.
+The process manager starts Chromium with a private debugging address and an
+explicit profile directory. It waits for a real `/json/version` response,
+marks readiness only after validating the browser identity and WebSocket URL,
+and reports degraded health when Chrome is unavailable. A watcher detects a
+child crash and attempts recovery without changing owner or generation.
+
+The service uses a non-root image user and a per-install `CB_INSTANCE_ID`
+volume. The local source build is a development release gate; published
+immutable images and the runtime/security acceptance matrix are still required
+before `installable: true`.

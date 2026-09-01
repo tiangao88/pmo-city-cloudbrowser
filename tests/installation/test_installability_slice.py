@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SERVICE_NAMES = ("router", "slot-supervisor", "viewer", "downloads", "credential-broker")
+SERVICE_NAMES = ("router", "slot-supervisor", "browser", "viewer", "downloads", "credential-broker")
 
 
 def test_each_service_has_a_real_entrypoint_and_image_definition():
@@ -12,7 +12,7 @@ def test_each_service_has_a_real_entrypoint_and_image_definition():
         assert entrypoint.is_file(), f"missing entrypoint for {service}"
         assert dockerfile.is_file(), f"missing Dockerfile for {service}"
         docker_text = dockerfile.read_text(encoding="utf-8")
-        assert "FROM python:3.12-slim" in docker_text
+        assert "FROM python:3.12-slim" in docker_text or "FROM debian:bookworm-slim" in docker_text
         assert "COPY src/ /app/src/" in docker_text
         assert f"services/{service}/entrypoint.py" in docker_text
 
