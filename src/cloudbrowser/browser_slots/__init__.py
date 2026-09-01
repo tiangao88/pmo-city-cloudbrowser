@@ -1,5 +1,7 @@
 """Owner-bound browser lifecycle primitives."""
 
+from .http_client import HttpJsonClient
+from .http_transport import HttpBrowserTransport
 from .lifecycle import (
     BrowserBinding,
     BrowserState,
@@ -20,6 +22,8 @@ __all__ = [
     "BrowserState",
     "BrowserTransport",
     "BrowserUnavailable",
+    "HttpBrowserTransport",
+    "HttpJsonClient",
     "LifecycleError",
     "LifecycleSnapshot",
     "OrchestrationResult",

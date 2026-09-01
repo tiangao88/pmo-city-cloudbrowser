@@ -2,5 +2,74 @@ openapi: 3.0.3
 info:
   title: CloudBrowser Control API
   version: v1
-  description: Lifecycle and owner-bound control contract placeholder for v1.
-paths: {}
+  description: Bounded owner-bound slot lifecycle control surface.
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        '200':
+          description: Non-sensitive service health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /control:
+    post:
+      operationId: control
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ControlRequest'
+      responses:
+        '200':
+          description: Bounded lifecycle outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlResponse'
+components:
+  schemas:
+    ControlRequest:
+      type: object
+      additionalProperties: false
+      required: [request_id, operation]
+      properties:
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        operation:
+          type: string
+          enum: [wake, suspend, stop, recreate]
+    ControlResponse:
+      type: object
+      additionalProperties: false
+      required: [request_id, status]
+      properties:
+        request_id:
+          type: string
+        status:
+          type: string
+          enum: [ready, suspended, stopped, unsupported, failed]
+        state:
+          type: string
+          enum: [stopped, starting, ready, suspended, failed]
+        restored_count:
+          type: integer
+          minimum: 0
+        error_code:
+          type: string
+          maxLength: 64
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, component]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        component:
+          type: string
