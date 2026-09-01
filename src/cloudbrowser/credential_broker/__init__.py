@@ -1,6 +1,15 @@
-"""Credential Broker contract primitives."""
+"""Credential Broker contract and orchestration primitives."""
 
 from ..security import BROKER_STATUS_VALUES
 from .contracts import BrokerResult, LoginIntent, SiteDeclaration
+from .service import AdapterResult, BrokerService, ResolvedBinding
 
-__all__ = ["BROKER_STATUS_VALUES", "BrokerResult", "LoginIntent", "SiteDeclaration"]
+__all__ = [
+    "AdapterResult",
+    "BROKER_STATUS_VALUES",
+    "BrokerResult",
+    "BrokerService",
+    "LoginIntent",
+    "ResolvedBinding",
+    "SiteDeclaration",
+]

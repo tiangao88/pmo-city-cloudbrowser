@@ -17,6 +17,7 @@ class LoginIntent:
     username_ref: str
     target_tab_id: str | None = None
     idempotency_key: str | None = None
+    binding_generation: str | None = None
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,7 @@ class SiteDeclaration:
     redirect_origins: tuple[str, ...] = ()
 
     def allows(self, url: str) -> bool:
-        """Allow only an exact declared origin or an explicit redirect origin."""
+        """Allow only an exact declared or explicitly redirected origin."""
         candidate = urlsplit(url)
         if not candidate.scheme or not candidate.netloc:
             return False
