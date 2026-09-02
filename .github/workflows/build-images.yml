@@ -3,6 +3,8 @@ name: Build images
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - 'v0.2.0-dev*'
 
@@ -15,7 +17,20 @@ env:
   IMAGE_NAMESPACE: ghcr.io/tiangao88/pmo-city-cloudbrowser
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: latest
+      - run: uv sync --dev
+      - run: uv run make check
+
   build:
+    needs: validate
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
@@ -23,18 +38,32 @@ jobs:
         include:
           - name: router
             dockerfile: services/router/Dockerfile
+            port: 8080
+            health_path: /health
           - name: slot-supervisor
             dockerfile: services/slot-supervisor/Dockerfile
+            port: 8081
+            health_path: /health
           - name: browser
             dockerfile: services/browser/Dockerfile
+            port: 9230
+            health_path: /browser/health
           - name: viewer
             dockerfile: services/viewer/Dockerfile
+            port: 8082
+            health_path: /health
           - name: agent-control
             dockerfile: services/agent-control/Dockerfile
+            port: 8090
+            health_path: /health
           - name: downloads
             dockerfile: services/downloads/Dockerfile
+            port: 8083
+            health_path: /health
           - name: credential-broker
             dockerfile: services/credential-broker/Dockerfile
+            port: 8084
+            health_path: /health
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -51,6 +80,7 @@ jobs:
             type=ref,event=tag
             type=sha
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -59,3 +89,89 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           provenance: true
           sbom: true
+      - name: Qualify published image
+        env:
+          IMAGE: ${{ env.IMAGE_NAMESPACE }}/${{ matrix.name }}@${{ steps.build.outputs.digest }}
+          SERVICE: ${{ matrix.name }}
+          INTERNAL_PORT: ${{ matrix.port }}
+          HEALTH_PATH: ${{ matrix.health_path }}
+          INSTANCE_ID: qualification-${{ github.run_id }}-${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/image-qualification"
+          evidence="$RUNNER_TEMP/image-qualification/${SERVICE}.md"
+          digest="${IMAGE##*@}"
+          test -n "$digest"
+
+          docker pull "$IMAGE"
+          user="$(docker image inspect "$IMAGE" --format '{{.Config.User}}')"
+          test "$user" = "cloudbrowser"
+          health_test="$(docker image inspect "$IMAGE" --format '{{json .Config.Healthcheck.Test}}')"
+          test "$health_test" != "null"
+          test "$health_test" != "[]"
+
+          docker buildx imagetools inspect "$IMAGE" --raw \
+            > "$RUNNER_TEMP/image-qualification/${SERVICE}-registry.json"
+          grep -Eiq 'attestation|in-toto|provenance|sbom' \
+            "$RUNNER_TEMP/image-qualification/${SERVICE}-registry.json"
+
+          container="qualification-${SERVICE}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker create --name "$container" \
+            --publish 18080:"$INTERNAL_PORT" \
+            --env CB_INSTANCE_ID="$INSTANCE_ID" \
+            --env CB_RELEASE_VERSION=0.2.0-dev1 \
+            --env CB_PORT="$INTERNAL_PORT" \
+            --env CB_PROFILE_ID=qualification-profile \
+            --env CB_PRINCIPAL_ID=qualification-owner \
+            --env CB_BROWSER_ID=qualification-browser \
+            --env CB_BINDING_GENERATION=qualification-generation \
+            --env CB_VIEWER_TOKEN_SECRET=qualification-viewer-secret \
+            --env CB_AGENT_CONTROL_SHARED_SECRET=qualification-agent-secret \
+            --env CB_DOWNLOADS_SHARED_SECRET=qualification-downloads-secret \
+            --env CB_DOWNLOADS_ROOT=/data/downloads \
+            --env CB_CHROME_EXECUTABLE=/usr/bin/chromium \
+            --env CB_CHROME_HTTP_PORT=9222 \
+            --env CB_CHROME_HTTP_URL=http://127.0.0.1:9222 \
+            "$IMAGE" > /dev/null
+          cleanup() { docker rm -f "$container" > /dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker start "$container" > /dev/null
+
+          healthy=false
+          for attempt in $(seq 1 60); do
+            state="$(docker inspect "$container" --format '{{.State.Status}}')"
+            health="$(docker inspect "$container" --format '{{.State.Health.Status}}')"
+            if [ "$health" = healthy ]; then
+              healthy=true
+              break
+            fi
+            if [ "$state" = exited ] || [ "$state" = dead ]; then
+              echo "${SERVICE} exited before healthcheck became healthy" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          test "$healthy" = true
+          test "$(docker inspect "$container" --format '{{.State.Health.Status}}')" = healthy
+          test "$(docker exec "$container" python3 -c 'import os; print(os.getuid())')" = 10001
+          curl --fail --silent --show-error --max-time 5 \
+            "http://127.0.0.1:18080${HEALTH_PATH}" > /dev/null
+
+          {
+            echo "# Image qualification — ${SERVICE}"
+            echo
+            echo "- image: \`${IMAGE}\`"
+            echo "- digest: \`${digest}\`"
+            echo "- status: passed"
+            echo "- configured user: \`${user}\`"
+            echo "- healthcheck: passed (container status: healthy)"
+            echo "- runtime endpoint: passed (\`${HEALTH_PATH}\`)"
+            echo "- provenance/SBOM metadata: present in registry manifest"
+            echo "- CI run: \`${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\`"
+          } | tee "$evidence" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload qualification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-qualification-${{ matrix.name }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/image-qualification/

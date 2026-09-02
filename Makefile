@@ -1,8 +1,8 @@
-.PHONY: check test unit contract security install-check spec-check sensitive-check
+.PHONY: check test unit contract security install-check spec-check sensitive-check image-workflow-check
 
 PYTHON ?= uv run python
 
-check: spec-check sensitive-check install-check test
+check: spec-check sensitive-check install-check image-workflow-check test
 
 test:
 	$(PYTHON) -m pytest -q tests
@@ -26,3 +26,6 @@ spec-check:
 
 sensitive-check:
 	$(PYTHON) tools/check-sensitive-files.py
+
+image-workflow-check:
+	$(PYTHON) tools/validate-image-workflow.py
