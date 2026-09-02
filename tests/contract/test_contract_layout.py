@@ -9,6 +9,7 @@ def test_contract_surfaces_are_versioned():
         "control-api/v1/README.md",
         "agent-control/v1/README.md",
         "credential-broker/v1/README.md",
+        "downloads/v1/README.md",
         "events/v1/README.md",
     }
     actual = {

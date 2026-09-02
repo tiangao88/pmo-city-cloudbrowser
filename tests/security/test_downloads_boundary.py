@@ -8,6 +8,7 @@ import pytest
 
 from cloudbrowser.downloads.service import DownloadsService
 from cloudbrowser.downloads.contracts import DownloadNameError, OwnerMismatch, PrincipalIdentity
+from cloudbrowser.downloads.store import owner_key
 
 
 def _identity(principal: str) -> PrincipalIdentity:
@@ -52,15 +53,20 @@ def test_path_traversal_is_rejected_at_every_boundary(tmp_path: Path) -> None:
 
 
 def test_quarantine_entries_are_never_served(tmp_path: Path) -> None:
-    area = tmp_path / "owner-a"
-    area.mkdir()
-    quarantine = area / ".quarantine"
-    quarantine.mkdir()
-    (area / "good.pdf").write_bytes(b"%PDF-good")
+    area = tmp_path / owner_key("owner-a")
+    entries = area / "entries"
+    entries.mkdir(parents=True)
+    quarantine = area / "quarantine"
+    quarantine.mkdir(parents=True)
+    (entries / "good.pdf").write_bytes(b"%PDF-good")
     (quarantine / "bad.pdf").write_bytes(b"%PDF-bad")
     service = DownloadsService(store_root=tmp_path)
     listing = service.list_files(_identity("owner-a"))
-    names = [entry.name for entry in listing.entries]
-    assert "bad.pdf" not in names
-    assert "good.pdf" in names
+    by_name = {entry.name: entry for entry in listing.entries}
+    assert "bad.pdf" in by_name
+    assert by_name["bad.pdf"].quarantined is True
+    assert by_name["bad.pdf"].qname == "bad.pdf"
+    assert "good.pdf" in by_name
+    assert by_name["good.pdf"].quarantined is False
     assert service.read_file(_identity("owner-a"), "good.pdf") == b"%PDF-good"
+    assert service.read_file(_identity("owner-a"), "bad.pdf") is None

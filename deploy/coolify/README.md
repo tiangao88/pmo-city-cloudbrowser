@@ -17,6 +17,14 @@ satisfy `build:` contexts, so the deployed compose pins the published dev
 images (`ghcr.io/tiangao88/pmo-city-cloudbrowser/<service>:v0.2.0-dev1`) and
 keeps the same environment, healthcheck, volume, and network wiring.
 
+## Public downloads host
+
+The downloads service is fronted at `cloudfiles2.dev01.pmo.city`
+(`CB_PUBLIC_FILES_HOST` in `.env.example`). The Traefik router for that host
+is **not** embedded inside this compose: it is created in step 19 against
+the standalone `cloudfiles2` Coolify application so that the downloads
+surface is independently reachable from the CloudBrowser control plane.
+
 The `browser-overlay.yaml` was folded into the main compose when the browser
 service was added (step 11) and is retained only as a historical reference.
 

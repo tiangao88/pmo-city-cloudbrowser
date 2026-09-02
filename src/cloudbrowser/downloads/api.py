@@ -11,6 +11,7 @@ from urllib.parse import unquote
 from .contracts import PrincipalIdentity, ServerIdentity
 from .identity import TrustedSecret, check_trusted_secret
 from .service import DownloadsService
+from .store import owner_key, safe_name
 
 
 @dataclass(frozen=True)
@@ -27,7 +28,7 @@ def _resolve_context(
     path: str,
     headers: dict[str, str],
     identity_resolver: Callable[[_RequestContext], PrincipalIdentity],
-) -> PrincipalIdentity | None:
+) -> PrincipalIdentity:
     context = _RequestContext(
         method=method,
         path=path,
@@ -105,37 +106,28 @@ def _build_handler(
                 headers=headers,
                 identity_resolver=identity_resolver,
             )
-            if identity is None:
-                self._write_json(403, {"error_code": "identity_required"})
-                return
             if path == "/api/files":
                 response = service.list_files(identity)
                 self._write_json(200, response.public_dict())
                 return
             if path.startswith("/file/"):
-                raw_name = _extract_name(path)
-                if raw_name is None:
+                name = _extract_name(path) or ""
+                safe = safe_name(name)
+                if safe is None:
                     self._write_json(400, {"error_code": "invalid_name"})
                     return
-                try:
-                    payload = service.read_file(identity, raw_name)
-                except Exception:
-                    self._write_json(400, {"error_code": "invalid_name"})
-                    return
+                payload = service.read_file(identity, safe)
                 if payload is None:
                     self._write_json(404, {"error_code": "not_found"})
                     return
-                # never serve inline: always force attachment download
                 content_type = (
-                    "application/pdf"
-                    if raw_name.lower().endswith(".pdf")
-                    else "application/octet-stream"
+                    "application/pdf" if safe.lower().endswith(".pdf") else "application/octet-stream"
                 )
                 self._write_bytes(
                     200,
                     payload,
                     content_type=content_type,
-                    filename=raw_name,
+                    filename=safe,
                 )
                 return
             self._write_json(404, {"error_code": "not_found"})
@@ -144,15 +136,20 @@ def _build_handler(
 
 
 def _default_identity_resolver(context: _RequestContext) -> PrincipalIdentity:
-    """Read the server-derived principal from trusted-router-supplied headers."""
+    """Resolve the server-derived identity from the trusted router headers."""
 
-    principal = context.headers.get("x-cb-principal")
-    request_id = context.headers.get("x-cb-request-id", "rid-unassigned")
-    if not principal:
-        raise PermissionError("trusted router did not declare principal")
+    principal_id = (
+        context.headers.get("x-cb-principal")
+        or context.headers.get("x-cb-owner")
+        or ""
+    )
+    if not principal_id:
+        from .contracts import OwnerMismatch
+
+        raise OwnerMismatch("server-derived principal is required")
     return PrincipalIdentity(
-        request_id=request_id,
-        principal_id=principal,
+        request_id=context.headers.get("x-cb-request-id", "req-1"),
+        principal_id=principal_id,
         profile_id=context.headers.get("x-cb-profile", "profile-unassigned"),
         browser_id=context.headers.get("x-cb-browser", "browser-unassigned"),
         generation=context.headers.get("x-cb-generation", "generation-0"),
@@ -164,18 +161,27 @@ def create_downloads_server(
     *,
     server_identity: ServerIdentity,
     trusted_secret: bytes,
-    address: tuple[str, int] = ("127.0.0.1", 8083),
+    address: tuple[str, int],
     identity_resolver: Callable[[_RequestContext], PrincipalIdentity] | None = None,
 ) -> ThreadingHTTPServer:
-    """Create a bounded HTTP downloads server bound to a server-derived identity."""
+    """Create the bounded downloads HTTP server with server-derived identity."""
 
-    handler = _build_handler(
-        service=service,
-        server_identity=server_identity,
-        trusted_secret=TrustedSecret(trusted_secret),
-        identity_resolver=identity_resolver or _default_identity_resolver,
+    secret = TrustedSecret(trusted_secret)
+    resolver = identity_resolver or _default_identity_resolver
+    return ThreadingHTTPServer(
+        address,
+        _build_handler(
+            service=service,
+            server_identity=server_identity,
+            trusted_secret=secret,
+            identity_resolver=resolver,
+        ),
+        bind_and_activate=True,
     )
-    return ThreadingHTTPServer(address, handler)
 
 
-__all__ = ["create_downloads_server", "ServerIdentity"]
+__all__ = [
+    "create_downloads_server",
+    "owner_key",
+    "_default_identity_resolver",
+]

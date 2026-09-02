@@ -2,7 +2,17 @@
 # Image-based variant of deploy/coolify/compose.yaml: Coolify API-created
 # services cannot clone the private repo to satisfy `build:` contexts, so the
 # deployed compose pins the published dev images instead.
+#
+# Public host routing for the downloads service is handled outside this
+# compose (see deploy/coolify/README.md): the standalone `cloudfiles2`
+# application at `cloudfiles2.dev01.pmo.city` fronts the downloads service
+# when step 19 wires the Traefik route.
 name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
+
+# Public downloads host: cloudfiles2.dev01.pmo.city is routed by the
+# standalone `cloudfiles2` Coolify application (see deploy/coolify/README.md).
+# The Traefik route is added in step 19. The download service is reachable
+# from inside the CloudBrowser network on port 8083 (expose below).
 
 x-common: &common
   restart: unless-stopped
@@ -135,6 +145,8 @@ services:
       start_period: 5s
     volumes:
       - downloads:/data/downloads
+    expose:
+      - "8083"
 
   credential-broker:
     <<: *common
