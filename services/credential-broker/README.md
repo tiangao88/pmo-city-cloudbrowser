@@ -2,39 +2,26 @@
 
 The Credential Broker owns deterministic, status-only login execution.
 
-## Current slice (step 13, broker product boundary)
+## Current slice (step 13)
 
-- Status-only intent API via `cloudbrowser.credential_broker.BrokerHttpServer`.
-- Server-derived principal binding enforced at the transport boundary
-  (PRD-BR-03, S3).
-- Deterministic `BrokerCoordinator` that re-resolves the server-side binding
-  immediately before fill (PRD-BR-09).
-- `cloudbrowser.audit.v1` audit emitter that rejects credential-shaped
-  payloads (`password=`, `refresh_token=`, `Authorization: Bearer`, OTP codes).
-- Bounded idempotency store keyed by `(principal_id, idempotency_key)`.
-- Adapters:
-  - `FormLoginAdapter` (existing; bounded selectors, MFA reporting,
-    application-identity verification).
-  - `BasicAuthAdapter` (PRD-BR-04; HTTPS-only, exact origin, no URL
-    credentials, declared redirects only).
-  - `TOTPAdapter` (PRD-BR-06; broker-owned RFC 6238 SHA-1 6-digit code).
-  - `HumanHandoffStore` (PRD-BR-06 chat-ask path; one-shot opaque token,
-    no code retention or return).
+This repository now contains the generic, dependency-injected broker boundary:
 
-## Public surface
+- server-bound intent validation and status-only results;
+- deterministic coordinator with a second binding check after credential fetch
+  and immediately before adapter execution;
+- exact-origin form, HTTP Basic, SSO, and RFC 6238 TOTP adapter contracts;
+- one-shot, TTL-bound human MFA handoff without code retention;
+- bounded idempotency and `cloudbrowser.audit.v1` metadata events with
+  credential-shaped payload rejection;
+- synthetic contract/security coverage only.
 
-```python
-from cloudbrowser.credential_broker import (
-    AuthenticatedPrincipal,
-    BrokerCoordinator,
-    BrokerHttpServer,
-    ServerIdentity,
-)
-```
+The broker never returns passwords, tokens, cookies, storage values, page
+content, network bodies, raw exceptions, OTP seeds, or one-time codes.
 
-## Out of scope (status-only)
+## Deliberate non-goals
 
-The current slice is status-only and never returns credentials to the agent.
-Real Microsoft/Authentik connector wiring, durable Vaultwarden session
-acquisition, and the production `grant-sync` migration remain W3-13 deferred
-work pending explicit Tigo approval and migration path sign-off.
+No live Vaultwarden/GrantHub access, Authentik/TinyAuth daemon, network-hook
+capture, router-side unwrap, or real user login is included in this slice.
+The production grant/session provider and browser capability must be injected
+behind these contracts and separately qualified before the service can become
+an installable live credential broker. The release remains `installable: false`.

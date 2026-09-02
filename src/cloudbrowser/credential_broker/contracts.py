@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Mapping, Protocol
 from urllib.parse import urlsplit
 
 from ..security import BROKER_STATUS_VALUES

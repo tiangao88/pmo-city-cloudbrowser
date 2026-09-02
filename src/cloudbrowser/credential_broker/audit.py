@@ -1,10 +1,4 @@
-"""Broker audit envelope (`cloudbrowser.audit.v1`).
-
-Spec 82 bounds the envelope. The emitter rejects any payload that smells
-like a credential — passwords, refresh tokens, OTP codes, authorization
-headers — at the constructor boundary. The serialized form is JSON with
-only the allowlisted fields.
-"""
+"""Bounded ``cloudbrowser.audit.v1`` broker event envelope."""
 
 from __future__ import annotations
 
@@ -13,14 +7,14 @@ import json
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Mapping
 
 
 _FORBIDDEN_SHAPES = (
     re.compile(r"(?i)password\s*[:=]\s*\S+"),
     re.compile(r"(?i)refresh[_-]?token\s*[:=]\s*\S+"),
     re.compile(r"(?i)authorization\s*:\s*bearer\s+\S+"),
-    re.compile(r"\botp\s*[:=]\s*\d{4,8}\b"),
+    re.compile(r"(?i)\botp\s*[:=]\s*\d{4,8}\b"),
     re.compile(r"(?i)\baccess[_-]?token\s*[:=]\s*\S+"),
 )
 
@@ -81,10 +75,10 @@ class AuditEvent:
 
     def with_extra(self, **values: str) -> "AuditEvent":
         merged: dict[str, str] = dict(self.extra or {})
-        for key, val in values.items():
-            if _looks_like_credential(val):
+        for key, value in values.items():
+            if not isinstance(value, str) or _looks_like_credential(value):
                 raise ValueError(f"audit.extra value rejected: {key}")
-            merged[key] = val
+            merged[key] = value
         return AuditEvent(
             emitter=self.emitter,
             event_type=self.event_type,
@@ -98,10 +92,11 @@ class AuditEvent:
         )
 
     def to_json(self) -> str:
-        body = self.body()
-        return json.dumps(body, separators=(",", ":"), sort_keys=True)
+        return json.dumps(self.body(), separators=(",", ":"), sort_keys=True)
 
     def body(self) -> dict[str, Any]:
+        if self.duration_ms < 0 or self.duration_ms > 86_400_000:
+            raise ValueError("audit duration is out of bounds")
         result: dict[str, Any] = {
             "schema": "cloudbrowser.audit.v1",
             "event_at": self.event_at,
@@ -117,12 +112,15 @@ class AuditEvent:
         if self.request_id is not None:
             result["request_id"] = self.request_id
         if self.extra:
-            for k, v in self.extra.items():
-                if _looks_like_credential(v):
-                    raise ValueError(f"audit.extra value rejected: {k}")
-                result[k] = v
+            for key, value in self.extra.items():
+                if not isinstance(key, str) or not isinstance(value, str) or _looks_like_credential(value):
+                    raise ValueError("audit extra rejected")
+                result[key] = value
         return result
 
 
 def _looks_like_credential(value: str) -> bool:
     return any(pattern.search(value) for pattern in _FORBIDDEN_SHAPES)
+
+
+__all__ = ["AuditEmitter", "AuditEvent", "AuditEventType", "build_event"]
