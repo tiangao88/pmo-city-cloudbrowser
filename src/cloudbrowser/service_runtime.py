@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import time
 
 from cloudbrowser.deployment import InstanceNamespace
 from cloudbrowser.health import serve_health
@@ -28,7 +29,6 @@ def run_service(component: str) -> None:
         raise SystemExit("CB_PORT must be between 1 and 65535")
     if component == "browser":
         from cloudbrowser.browser_service import run_browser_service
-
         run_browser_service()
         return
     if component == "slot-supervisor":
@@ -36,7 +36,6 @@ def run_service(component: str) -> None:
         from cloudbrowser.browser_slots.http_client import HttpJsonClient
         from cloudbrowser.browser_slots.http_transport import HttpBrowserTransport
         from cloudbrowser.router.control_api import ControlApi, create_control_server
-
         binding = BrowserBinding(
             profile_id=os.environ.get("CB_PROFILE_ID", "profile-unassigned"),
             principal_id=os.environ.get("CB_PRINCIPAL_ID", "principal-unassigned"),
@@ -61,9 +60,21 @@ def run_service(component: str) -> None:
         finally:
             server.server_close()
         return
-    serve_health(
-        component=component,
-        instance_id=instance_id,
-        release_version=release_version,
-        port=port,
-    )
+    if component == "viewer":
+        from cloudbrowser.viewer import AuthenticatedViewer, ViewerSessionStore, create_viewer_server
+        secret = os.environ.get("CB_VIEWER_TOKEN_SECRET")
+        if not secret:
+            raise SystemExit("CB_VIEWER_TOKEN_SECRET is required")
+        try:
+            ttl_s = float(os.environ.get("CB_VIEWER_SESSION_TTL_S", "360"))
+        except ValueError as exc:
+            raise SystemExit("CB_VIEWER_SESSION_TTL_S must be a number") from exc
+        store = ViewerSessionStore(clock=time.time)
+        viewer = AuthenticatedViewer(store, token_secret=secret.encode("utf-8"), ttl_s=ttl_s)
+        server = create_viewer_server(viewer, address=("0.0.0.0", port))
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
+        return
+    serve_health(component=component, instance_id=instance_id, release_version=release_version, port=port)
