@@ -6,10 +6,22 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-SERVICES = ("router", "slot-supervisor", "browser", "viewer", "agent-control", "downloads", "credential-broker")
+SERVICES = (
+    "router",
+    "slot-supervisor",
+    "browser",
+    "viewer",
+    "agent-control",
+    "downloads",
+    "credential-broker",
+)
 MANIFEST = ROOT / "deploy" / "coolify" / "releases" / "v0.2.0-dev1" / "release-manifest.yaml"
 COMPOSE = ROOT / "deploy" / "coolify" / "compose.coolify.yaml"
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+PROVENANCE_RUN = "33684797404"
+PROVENANCE_COMMIT = "d640b56fb66fe49f2d944c21cbdd4fc88b681b42"
 
 
 def fail(message: str) -> None:
@@ -58,8 +70,8 @@ def main() -> None:
         "status: qualified-installable",
         "installable: true",
         "qualification:",
-        "run: https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33670797654",
-        "commit: b83620a47910542a9348f819845614f307b9372c",
+        f"run: https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/{PROVENANCE_RUN}",
+        f"commit: {PROVENANCE_COMMIT}",
         "rollbackSupported: true",
     ):
         if marker not in manifest:

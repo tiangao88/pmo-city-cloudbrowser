@@ -32,6 +32,10 @@ def test_release_is_installable_only_with_real_pinned_digests() -> None:
     assert "status: qualified-installable" in manifest
     assert "installable: true" in manifest
     assert "REPLACE_BEFORE_IMAGE_PUBLICATION" not in manifest
+    run_match = re.search(r"^    run: (https://github\.com/[^\s]+/actions/runs/[0-9]+)$", manifest, re.MULTILINE)
+    commit_match = re.search(r"^    commit: ([0-9a-f]{40})$", manifest, re.MULTILINE)
+    assert run_match
+    assert commit_match
     for _, component in SERVICES:
         match = re.search(rf"^    {re.escape(component)}: (sha256:\S+)$", manifest, re.MULTILINE)
         assert match, component
@@ -40,6 +44,9 @@ def test_release_is_installable_only_with_real_pinned_digests() -> None:
 
 def test_qualification_records_are_passed_and_match_manifest_digests() -> None:
     manifest = _manifest()
+    run_match = re.search(r"^    run: (https://github\.com/[^\s]+/actions/runs/[0-9]+)$", manifest, re.MULTILINE)
+    commit_match = re.search(r"^    commit: ([0-9a-f]{40})$", manifest, re.MULTILINE)
+    assert run_match and commit_match
     for service, component in SERVICES:
         manifest_match = re.search(
             rf"^    {re.escape(component)}: (sha256:\S+)$", manifest, re.MULTILINE
@@ -51,7 +58,8 @@ def test_qualification_records_are_passed_and_match_manifest_digests() -> None:
         assert record_match.group(1) == manifest_match.group(1), service
         assert "healthcheck" in record.lower(), f"{service}: missing healthcheck"
         assert "provenance" in record.lower(), f"{service}: missing provenance"
-        assert "CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33670797654`" in record
+        assert f"CI run: `{run_match.group(1)}`" in record
+        assert f"source commit `{commit_match.group(1)}`" in record
         assert re.search(r"^- status: passed$", record, re.MULTILINE), service
         assert "configured user: `cloudbrowser`" in record
         assert "runtime endpoint: passed" in record
