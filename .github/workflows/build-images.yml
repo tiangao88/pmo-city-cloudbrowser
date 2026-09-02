@@ -29,6 +29,8 @@ jobs:
             dockerfile: services/browser/Dockerfile
           - name: viewer
             dockerfile: services/viewer/Dockerfile
+          - name: agent-control
+            dockerfile: services/agent-control/Dockerfile
           - name: downloads
             dockerfile: services/downloads/Dockerfile
           - name: credential-broker

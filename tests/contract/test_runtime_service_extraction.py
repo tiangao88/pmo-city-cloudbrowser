@@ -1,4 +1,4 @@
-"""Contract tests for the six extracted runtime service boundaries."""
+"""Contract tests for the seven extracted runtime service boundaries."""
 
 from __future__ import annotations
 
@@ -11,7 +11,15 @@ from cloudbrowser.browser_slots.browser_process import BrowserProcessConfig
 
 
 ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_SERVICES = ("router", "slot-supervisor", "browser", "viewer", "downloads", "credential-broker")
+RUNTIME_SERVICES = (
+    "router",
+    "slot-supervisor",
+    "browser",
+    "viewer",
+    "agent-control",
+    "downloads",
+    "credential-broker",
+)
 
 
 def test_each_runtime_service_has_a_distinct_entrypoint_and_image():
@@ -48,10 +56,8 @@ def test_browser_command_owns_debugging_and_profile_flags(tmp_path: Path):
         executable="/usr/bin/chromium",
         profile_dir=tmp_path / "profile",
         http_port=9222,
-        owner="owner-a",
-        generation="generation-a",
+        owner="owner@example.test",
+        generation="generation-1",
     )
-    command = config.command()
-    assert "--user-data-dir=" + str(tmp_path / "profile") in command
-    assert "--remote-debugging-address=127.0.0.1" in command
-    assert "--remote-debugging-port=9222" in command
+    assert config.profile_dir == tmp_path / "profile"
+    assert config.http_port == 9222

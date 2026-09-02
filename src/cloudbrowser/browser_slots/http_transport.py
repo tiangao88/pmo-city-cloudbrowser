@@ -17,10 +17,20 @@ class HttpClient(Protocol):
 class HttpBrowserTransport:
     """Translate narrow lifecycle operations to a trusted browser service."""
 
-    def __init__(self, client: HttpClient, *, expected_owner: str, expected_generation: str) -> None:
+    def __init__(
+        self,
+        client: HttpClient,
+        *,
+        expected_owner: str,
+        expected_generation: str,
+    ) -> None:
         self._client = client
         self._expected_owner = expected_owner
         self._expected_generation = expected_generation
+
+    def client(self) -> HttpClient:
+        """Return the configured narrow HTTP client for adapter composition."""
+        return self._client
 
     def start(self) -> None:
         self._expect_ok(self._client.request("POST", "/browser/start"))

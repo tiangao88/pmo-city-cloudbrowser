@@ -4,7 +4,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SERVICES = ("router", "slot-supervisor", "browser", "viewer", "downloads", "credential-broker")
+SERVICES = ("router", "slot-supervisor", "browser", "viewer", "agent-control", "downloads", "credential-broker")
 COMPOSE = ROOT / "deploy" / "coolify" / "compose.yaml"
 MANIFEST = ROOT / "deploy" / "coolify" / "releases" / "v0.2.0-dev1" / "release-manifest.yaml"
 

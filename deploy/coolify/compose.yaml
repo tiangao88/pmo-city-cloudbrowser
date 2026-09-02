@@ -77,6 +77,32 @@ services:
     volumes:
       - browser-profile:/data/profile
 
+  agent-control:
+    <<: *common
+    build:
+      context: ../..
+      dockerfile: services/agent-control/Dockerfile
+    environment:
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_PORT: 8090
+      CB_BROWSER_API_URL: http://browser:9230
+      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:?CB_PRINCIPAL_ID is required}
+      CB_BROWSER_ID: ${CB_BROWSER_ID:?CB_BROWSER_ID is required}
+      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:?CB_BINDING_GENERATION is required}
+      CB_AGENT_CONTROL_SHARED_SECRET: ${CB_AGENT_CONTROL_SHARED_SECRET:?CB_AGENT_CONTROL_SHARED_SECRET is required}
+    depends_on:
+      browser:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    expose:
+      - "8090"
+
   viewer:
     <<: *common
     build:

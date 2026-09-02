@@ -10,7 +10,23 @@ from cloudbrowser.deployment import InstanceNamespace
 from cloudbrowser.health import serve_health
 
 
-KNOWN_COMPONENTS = {"router", "slot-supervisor", "browser", "viewer", "downloads", "credential-broker"}
+KNOWN_COMPONENTS = {
+    "router",
+    "slot-supervisor",
+    "browser",
+    "viewer",
+    "agent-control",
+    "downloads",
+    "credential-broker",
+}
+_REQUIRED_BINDING_ENV = ("CB_PRINCIPAL_ID", "CB_BROWSER_ID", "CB_BINDING_GENERATION")
+
+
+def _required_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise SystemExit(f"{name} is required")
+    return value
 
 
 def run_service(component: str) -> None:
@@ -29,6 +45,7 @@ def run_service(component: str) -> None:
         raise SystemExit("CB_PORT must be between 1 and 65535")
     if component == "browser":
         from cloudbrowser.browser_service import run_browser_service
+
         run_browser_service()
         return
     if component == "slot-supervisor":
@@ -36,6 +53,7 @@ def run_service(component: str) -> None:
         from cloudbrowser.browser_slots.http_client import HttpJsonClient
         from cloudbrowser.browser_slots.http_transport import HttpBrowserTransport
         from cloudbrowser.router.control_api import ControlApi, create_control_server
+
         binding = BrowserBinding(
             profile_id=os.environ.get("CB_PROFILE_ID", "profile-unassigned"),
             principal_id=os.environ.get("CB_PRINCIPAL_ID", "principal-unassigned"),
@@ -62,6 +80,7 @@ def run_service(component: str) -> None:
         return
     if component == "viewer":
         from cloudbrowser.viewer import AuthenticatedViewer, ViewerSessionStore, create_viewer_server
+
         secret = os.environ.get("CB_VIEWER_TOKEN_SECRET")
         if not secret:
             raise SystemExit("CB_VIEWER_TOKEN_SECRET is required")
@@ -72,6 +91,41 @@ def run_service(component: str) -> None:
         store = ViewerSessionStore(clock=time.time)
         viewer = AuthenticatedViewer(store, token_secret=secret.encode("utf-8"), ttl_s=ttl_s)
         server = create_viewer_server(viewer, address=("0.0.0.0", port))
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
+        return
+    if component == "agent-control":
+        from cloudbrowser.agent_browser_http import HttpAgentBrowser, HttpAgentBrowserTransport
+        from cloudbrowser.agent_control import AgentControlService
+        from cloudbrowser.browser_slots.http_client import HttpJsonClient
+        from cloudbrowser.browser_slots.http_transport import HttpBrowserTransport
+
+        principal_id, browser_id, generation = (
+            _required_env(name) for name in _REQUIRED_BINDING_ENV
+        )
+        trusted_secret = _required_env("CB_AGENT_CONTROL_SHARED_SECRET")
+        browser_api_url = os.environ.get("CB_BROWSER_API_URL", "http://browser:9230")
+        transport = HttpBrowserTransport(
+            HttpJsonClient(browser_api_url),
+            expected_owner=principal_id,
+            expected_generation=generation,
+        )
+        agent_transport = HttpAgentBrowserTransport(
+            transport.client(),
+            expected_owner=principal_id,
+            expected_generation=generation,
+        )
+        browser = HttpAgentBrowser(agent_transport)
+        server = AgentControlService.create_server(
+            browser,
+            principal_id=principal_id,
+            browser_id=browser_id,
+            generation=generation,
+            shared_secret=trusted_secret,
+            address=("0.0.0.0", port),
+        )
         try:
             server.serve_forever()
         finally:

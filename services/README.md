@@ -1,12 +1,13 @@
 # CloudBrowser runtime service extraction
 
-The `v0.2.0-dev1` runtime is assembled as six separately defined service
+The `v0.2.0-dev1` runtime is assembled as seven separately defined service
 images:
 
 - `router` — control-plane entrypoint;
 - `slot-supervisor` — owner-bound lifecycle and slot orchestration;
 - `browser` — Chromium process and restricted browser transport;
 - `viewer` — user-facing viewer boundary;
+- `agent-control` — owner-bound page-state and bounded interaction surface;
 - `downloads` — durable download boundary;
 - `credential-broker` — status-only credential boundary.
 
