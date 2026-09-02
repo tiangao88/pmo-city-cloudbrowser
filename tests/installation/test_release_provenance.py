@@ -11,12 +11,23 @@ MANIFEST = ROOT / "deploy/coolify/releases/v0.2.0-dev1/release-manifest.yaml"
 QUALIFICATION_DIR = ROOT / "deploy/coolify/image-qualification"
 
 
-def test_manifest_provenance_is_not_stale_or_placeholder() -> None:
-    manifest = MANIFEST.read_text(encoding="utf-8")
-    run_match = re.search(r"^    run: (https://github\.com/[^\s]+/actions/runs/[0-9]+)$", manifest, re.MULTILINE)
+def _provenance(manifest: str) -> tuple[str, str]:
+    run_match = re.search(
+        r"^    run: (https://github\.com/[^\s]+/actions/runs/[0-9]+)$",
+        manifest,
+        re.MULTILINE,
+    )
     commit_match = re.search(r"^    commit: ([0-9a-f]{40})$", manifest, re.MULTILINE)
     assert run_match
     assert commit_match
+    return run_match.group(1), commit_match.group(1)
+
+
+def test_manifest_provenance_is_not_stale_or_placeholder() -> None:
+    manifest = MANIFEST.read_text(encoding="utf-8")
+    run_url, commit = _provenance(manifest)
+    assert run_url.endswith("/actions/runs/33684797404")
+    assert commit == "d640b56fb66fe49f2d944c21cbdd4fc88b681b42"
     assert "QUALIFICATION_RUN_REQUIRED" not in manifest
     assert "QUALIFICATION_COMMIT_REQUIRED" not in manifest
     assert "REPLACE_BEFORE_IMAGE_PUBLICATION" not in manifest
@@ -24,11 +35,7 @@ def test_manifest_provenance_is_not_stale_or_placeholder() -> None:
 
 def test_qualification_records_share_manifest_provenance_and_digests() -> None:
     manifest = MANIFEST.read_text(encoding="utf-8")
-    run_match = re.search(r"^    run: (https://github\.com/[^\s]+/actions/runs/[0-9]+)$", manifest, re.MULTILINE)
-    commit_match = re.search(r"^    commit: ([0-9a-f]{40})$", manifest, re.MULTILINE)
-    assert run_match and commit_match
-    run_url = run_match.group(1)
-    commit = commit_match.group(1)
+    run_url, commit = _provenance(manifest)
     components = {
         "router": "router",
         "slot-supervisor": "slotSupervisor",

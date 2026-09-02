@@ -20,10 +20,6 @@ COMPOSE = ROOT / "deploy" / "coolify" / "compose.coolify.yaml"
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
-PROVENANCE_RUN = "33684797404"
-PROVENANCE_COMMIT = "d640b56fb66fe49f2d944c21cbdd4fc88b681b42"
-
-
 def fail(message: str) -> None:
     print(f"installation validation: FAIL: {message}")
     raise SystemExit(1)
@@ -62,6 +58,12 @@ def main() -> None:
             fail(f"{service} Dockerfile missing supported base image")
 
     manifest = MANIFEST.read_text(encoding="utf-8")
+    run_match = re.search(
+        r"^    run: (https://github\.com/[^\s]+/actions/runs/[0-9]+)$",
+        manifest,
+        re.MULTILINE,
+    )
+    commit_match = re.search(r"^    commit: ([0-9a-f]{40})$", manifest, re.MULTILINE)
     for marker in (
         "apiVersion: cloudbrowser.pmo.city/v1",
         "kind: CloudBrowserRelease",
@@ -70,12 +72,16 @@ def main() -> None:
         "status: qualified-installable",
         "installable: true",
         "qualification:",
-        f"run: https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/{PROVENANCE_RUN}",
-        f"commit: {PROVENANCE_COMMIT}",
         "rollbackSupported: true",
     ):
         if marker not in manifest:
             fail(f"release manifest missing {marker}")
+    if not run_match:
+        fail("release manifest is missing a concrete qualification run")
+    if not commit_match:
+        fail("release manifest is missing a concrete qualification commit")
+    if "QUALIFICATION_RUN_REQUIRED" in manifest or "QUALIFICATION_COMMIT_REQUIRED" in manifest:
+        fail("release manifest contains provenance placeholders")
     for component in ("router", "slotSupervisor", "browser", "viewer", "agentControl", "downloads", "credentialBroker"):
         match = re.search(rf"^    {component}: (sha256:\S+)$", manifest, re.MULTILINE)
         if not match or not DIGEST.fullmatch(match.group(1)):
