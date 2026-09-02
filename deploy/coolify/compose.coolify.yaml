@@ -25,7 +25,7 @@ x-common: &common
 services:
   router:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/router@sha256:e8cc096b8c80e93fcc70a38611647bbbda3a0cd6d54b4318dc7ce900840f6f74
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/router@sha256:57d9e7be63b09ddfe07d4998a5a7863b689039ed1a60df0ee60c847924808d10
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
@@ -41,7 +41,7 @@ services:
 
   slot-supervisor:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/slot-supervisor@sha256:083790d05e6a7f23a75666c5f5627444192d7845a31fc6d781fc873bbf858caf
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/slot-supervisor@sha256:3bada0e9c63dbc021aea70193e5f1d227cada7fe2e56482c44d8381f29213d0c
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
@@ -65,7 +65,7 @@ services:
 
   browser:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/browser@sha256:e97a1cc3e264436955c94d037d7116eb840f883662fcd703053908eddbc3bd18
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/browser@sha256:91ebcf31e2b06abb44da258cccb51c6f88cd503b5d39ed75754c940b5ea9bb3b
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
@@ -87,7 +87,7 @@ services:
 
   agent-control:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/agent-control@sha256:4118dd4768a23f7b350aa723b0a2d87f96924afd9e45a2a58c600ac97f06d52d
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/agent-control@sha256:c7c48f5feba7c508c050ac218dc16c3486f4ddd20234e1f16fbdf2b987e0657b
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
@@ -111,7 +111,7 @@ services:
 
   viewer:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/viewer@sha256:399d5f428e773a043d9f23bd579651f9a27710ddaa318cd01978c166bb9e59fa
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/viewer@sha256:35814616874f20a81cfc1f6394ea313f34f1ffac58ba3cc2c14fb2bb4922d6a5
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
@@ -128,7 +128,7 @@ services:
 
   downloads:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/downloads@sha256:04516af52481aa4f616458a073d90548a7267f1df277eee45e94b2286651f201
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/downloads@sha256:060083d77163286f2ad22d73287e9f9e95aa85e3aa03e1292369c7c49472593e
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
@@ -151,7 +151,7 @@ services:
 
   credential-broker:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/credential-broker@sha256:6b43206713d27c41a00a9a5228b15e57e1d99586805d5e1215a2dd38946745e9
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/credential-broker@sha256:33b009bdc1aa718b51cf7c1ec8b2b7ea0548193892fc3fb18c07bbba35c67746
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}

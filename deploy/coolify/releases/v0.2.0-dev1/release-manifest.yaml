@@ -9,8 +9,8 @@ spec:
   installable: true
   qualification:
     workflow: .github/workflows/build-images.yml
-    run: https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33684797404
-    commit: d640b56fb66fe49f2d944c21cbdd4fc88b681b42
+    run: https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33689715313
+    commit: 03a5565e2ca317a9c18554f876a313b4eb64d9d6
     records: deploy/coolify/image-qualification/<service>.md
   contracts:
     controlApi: v1
@@ -27,13 +27,13 @@ spec:
     downloads: 0.2.0-dev1
     credentialBroker: 0.2.0-dev1
   imageDigests:
-    router: sha256:e8cc096b8c80e93fcc70a38611647bbbda3a0cd6d54b4318dc7ce900840f6f74
-    slotSupervisor: sha256:083790d05e6a7f23a75666c5f5627444192d7845a31fc6d781fc873bbf858caf
-    browser: sha256:e97a1cc3e264436955c94d037d7116eb840f883662fcd703053908eddbc3bd18
-    viewer: sha256:399d5f428e773a043d9f23bd579651f9a27710ddaa318cd01978c166bb9e59fa
-    agentControl: sha256:4118dd4768a23f7b350aa723b0a2d87f96924afd9e45a2a58c600ac97f06d52d
-    downloads: sha256:04516af52481aa4f616458a073d90548a7267f1df277eee45e94b2286651f201
-    credentialBroker: sha256:6b43206713d27c41a00a9a5228b15e57e1d99586805d5e1215a2dd38946745e9
+    router: sha256:57d9e7be63b09ddfe07d4998a5a7863b689039ed1a60df0ee60c847924808d10
+    slotSupervisor: sha256:3bada0e9c63dbc021aea70193e5f1d227cada7fe2e56482c44d8381f29213d0c
+    browser: sha256:91ebcf31e2b06abb44da258cccb51c6f88cd503b5d39ed75754c940b5ea9bb3b
+    viewer: sha256:35814616874f20a81cfc1f6394ea313f34f1ffac58ba3cc2c14fb2bb4922d6a5
+    agentControl: sha256:c7c48f5feba7c508c050ac218dc16c3486f4ddd20234e1f16fbdf2b987e0657b
+    downloads: sha256:060083d77163286f2ad22d73287e9f9e95aa85e3aa03e1292369c7c49472593e
+    credentialBroker: sha256:33b009bdc1aa718b51cf7c1ec8b2b7ea0548193892fc3fb18c07bbba35c67746
   instance:
     id: CB_INSTANCE_ID_REQUIRED
     network: CB_INSTANCE_ID_REQUIRED-network

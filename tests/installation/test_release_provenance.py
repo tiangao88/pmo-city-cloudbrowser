@@ -26,8 +26,8 @@ def _provenance(manifest: str) -> tuple[str, str]:
 def test_manifest_provenance_is_not_stale_or_placeholder() -> None:
     manifest = MANIFEST.read_text(encoding="utf-8")
     run_url, commit = _provenance(manifest)
-    assert run_url.endswith("/actions/runs/33684797404")
-    assert commit == "d640b56fb66fe49f2d944c21cbdd4fc88b681b42"
+    assert run_url.endswith("/actions/runs/33689715313")
+    assert commit == "03a5565e2ca317a9c18554f876a313b4eb64d9d6"
     assert "QUALIFICATION_RUN_REQUIRED" not in manifest
     assert "QUALIFICATION_COMMIT_REQUIRED" not in manifest
     assert "REPLACE_BEFORE_IMAGE_PUBLICATION" not in manifest
