@@ -77,5 +77,5 @@ def test_release_manifest_lists_the_same_seven_image_components() -> None:
     for name in component_names:
         assert name in manifest
         assert name in image_section
-    assert "installable: false" in manifest
-    assert "REPLACE_BEFORE_IMAGE_PUBLICATION" in manifest
+    assert "installable: true" in manifest
+    assert "REPLACE_BEFORE_IMAGE_PUBLICATION" not in manifest

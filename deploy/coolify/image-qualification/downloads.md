@@ -1,22 +1,24 @@
 # Image qualification — downloads
 
 - image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/downloads:v0.2.0-dev1`
-- digest: `sha256:REPLACE_AFTER_CI_BUILD`
-- status: pending
+- digest: `sha256:72dda663b1abf813fd61b90dd3ad196de76a7e29ab4740b176977fb65fb02b59`
+- status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/downloads/Dockerfile`
 - runtime port: `8083`
 - public host: `cloudfiles2.dev01.pmo.city` (route is step 19)
-- non-root: required (`cloudbrowser`, uid 10001)
-- healthcheck: required (`GET /health`)
-- provenance: required (BuildKit provenance and SBOM)
+- non-root: passed (`cloudbrowser`, uid 10001)
+- healthcheck: passed (`GET /health`; container status: healthy)
+- configured user: `cloudbrowser`
+- runtime endpoint: passed (`/health`)
+- provenance/SBOM metadata: present in registry manifest
+- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33670797654`
 
 ## Qualification evidence
 
-Populate this record from the immutable CI run and image inspect output. Do
-not mark `status` complete from source review alone. Confirm the published
-manifest digest, non-root runtime user, healthcheck result, provenance/SBOM
-attestations, the durable volume mount, and the attachment-only service
-startup check. The release remains `installable: false` until all seven
-records are complete and the runtime and security acceptance matrix is
-approved.
+The immutable digest was resolved from the GHCR manifest for the `sha-b83620a`
+image tag after every Step-17 matrix job completed successfully. The CI job
+also verified the non-root user, image healthcheck, provenance/SBOM metadata,
+container health, runtime UID, and downloads health endpoint. The durable
+volume is configured by the Coolify compose. No credentials, cookies, tokens,
+passwords, or OTPs are included in this record.

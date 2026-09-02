@@ -24,4 +24,6 @@ No live Vaultwarden/GrantHub access, Authentik/TinyAuth daemon, network-hook
 capture, router-side unwrap, or real user login is included in this slice.
 The production grant/session provider and browser capability must be injected
 behind these contracts and separately qualified before the service can become
-an installable live credential broker. The release remains `installable: false`.
+an installable live credential broker. The v0.2.0-dev1 release manifest is
+installable from source-level qualification; live broker qualification remains
+Step 19 and no live credential operation is implied.

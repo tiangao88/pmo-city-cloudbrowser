@@ -1,12 +1,15 @@
-#!/usr/bin/env python3
-"""Validate the installability development scaffold without PyYAML."""
+"""Validate the digest-pinned installable release bundle."""
+
+from __future__ import annotations
 
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICES = ("router", "slot-supervisor", "browser", "viewer", "agent-control", "downloads", "credential-broker")
-COMPOSE = ROOT / "deploy" / "coolify" / "compose.yaml"
 MANIFEST = ROOT / "deploy" / "coolify" / "releases" / "v0.2.0-dev1" / "release-manifest.yaml"
+COMPOSE = ROOT / "deploy" / "coolify" / "compose.coolify.yaml"
+DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def fail(message: str) -> None:
@@ -22,9 +25,10 @@ def main() -> None:
         "${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}",
         "name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-network",
         "name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-router-state",
+        "CB_VIEWER_TOKEN_SECRET: ${CB_VIEWER_TOKEN_SECRET:?CB_VIEWER_TOKEN_SECRET is required}",
     ):
         if marker not in compose:
-            fail(f"missing isolation marker: {marker}")
+            fail(f"missing installation marker: {marker}")
     if "legacy/" in compose or "scripts:/app" in compose:
         fail("Compose bundle imports legacy runtime paths")
     if compose.count("healthcheck:") < len(SERVICES):
@@ -51,12 +55,19 @@ def main() -> None:
         "kind: CloudBrowserRelease",
         "productVersion: 0.2.0-dev1",
         "specificationBaseline: v0.2.0",
-        "installable: false",
-        "image publication",
+        "status: qualified-installable",
+        "installable: true",
+        "qualification:",
+        "run: https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33670797654",
+        "commit: b83620a47910542a9348f819845614f307b9372c",
         "rollbackSupported: true",
     ):
         if marker not in manifest:
             fail(f"release manifest missing {marker}")
+    for component in ("router", "slotSupervisor", "browser", "viewer", "agentControl", "downloads", "credentialBroker"):
+        match = re.search(rf"^    {component}: (sha256:\S+)$", manifest, re.MULTILINE)
+        if not match or not DIGEST.fullmatch(match.group(1)):
+            fail(f"{component} does not have a valid immutable digest")
     print("installation validation: PASS")
 
 

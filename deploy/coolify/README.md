@@ -28,6 +28,8 @@ surface is independently reachable from the CloudBrowser control plane.
 The `browser-overlay.yaml` was folded into the main compose when the browser
 service was added (step 11) and is retained only as a historical reference.
 
-The dev staging service on Coolify is **not** a production release: the
-release manifest remains `installable: false` until image digests are pinned
-and the runtime/security acceptance matrix is approved.
+The dev staging service on Coolify is not yet deployed: installation and
+runtime qualification are Step 19. The release manifest is now
+`installable: true` because the Step-17 image qualification passed and the
+release images are pinned by immutable digest. Step 19 still requires
+separate deployment approval.

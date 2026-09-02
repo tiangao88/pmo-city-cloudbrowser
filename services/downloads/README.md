@@ -38,5 +38,6 @@ service compares the header against the configured secret with
 - `src/cloudbrowser/downloads/identity.py` — `TrustedSecret`, server identity.
 - `src/cloudbrowser/downloads/api.py` — `ThreadingHTTPServer` shell.
 
-The release remains `installable: false` until image publication, runtime,
-and security acceptance pass.
+The release is installable after image publication and source-level runtime,
+security, and release qualification pass. The v0.2.0-dev1 manifest records the
+immutable CI-qualified images; deployed runtime qualification remains Step 19.

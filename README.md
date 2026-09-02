@@ -79,10 +79,10 @@ for a qualified release. See `deploy/coolify/README.md`.
 - The generic Credential Broker is implemented as the first v0.2 vertical
   slice, including the controlled ordinary form adapter; it is not yet a
   deployable service.
-- The v0.2.0-dev1 source-built development scaffold now includes separate
-  service entry points, health endpoints, scoped backup/rollback tooling, and
-  instance-isolated Compose resource names. It remains non-installable until
-  runtime/security acceptance, image publication, and release qualification.
+- The v0.2.0-dev1 release now has a digest-pinned, installable manifest after
+  runtime image publication and qualification. Coolify deployment, runtime /
+  security acceptance, and live-fleet mutation remain Step 19+ work and require
+  separate approval.
 - The current W3-1 status remains partial: owner-bound recovery passes, while
   strict authenticated-surface continuity through the intended broker path is
   not proven.
@@ -96,5 +96,6 @@ uv sync --dev
 make check
 ```
 
-The initial release manifest is deliberately marked non-installable until the
-new contracts and broker security boundary are implemented and qualified.
+The release is now digest-pinned and installable after image publication and
+qualification. Coolify deployment and runtime/security acceptance remain
+separate Step 19 work.

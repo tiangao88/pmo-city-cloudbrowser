@@ -34,6 +34,7 @@ def test_release_preview_is_explicitly_gated_until_images_are_published():
         ROOT / "deploy" / "coolify" / "releases" / "v0.2.0-dev1" / "release-manifest.yaml"
     ).read_text(encoding="utf-8")
     assert "productVersion: 0.2.0-dev1" in manifest
-    assert "installable: false" in manifest
-    assert "image publication" in manifest
+    assert "installable: true" in manifest
+    assert "status: qualified-installable" in manifest
+    assert "image publication" not in manifest
     assert "rollbackSupported: true" in manifest

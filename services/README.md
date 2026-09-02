@@ -18,7 +18,6 @@ mounted or imported.
 
 The browser service is the first fully exercised runtime vertical slice. The
 other service endpoints remain bounded health surfaces until their respective
-product contracts are implemented. This is an extraction/dev release, not an
-installable production release: the manifest remains `installable: false`
-until immutable images, provenance, and the complete runtime/security matrix
-are accepted.
+product contracts are implemented. The v0.2.0-dev1 release is an installable,
+digest-pinned source-qualified release; deployed runtime/security acceptance
+remains Step 19.

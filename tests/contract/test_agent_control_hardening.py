@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import re
+import threading
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
-import json
-import threading
 
 import pytest
 
@@ -24,7 +25,7 @@ def test_agent_control_is_in_ci_matrix_and_release_manifest() -> None:
     assert "name: agent-control" in workflow
     assert "dockerfile: services/agent-control/Dockerfile" in workflow
     assert "agentControl: 0.2.0-dev1" in manifest
-    assert "agentControl: sha256:REPLACE_BEFORE_IMAGE_PUBLICATION" in manifest
+    assert re.search(r"agentControl: sha256:[0-9a-f]{64}", manifest)
 
 
 def test_agent_control_health_endpoint_is_bounded() -> None:

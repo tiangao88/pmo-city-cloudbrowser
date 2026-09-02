@@ -20,6 +20,7 @@ customer data, or raw browser state in these records. The public downloads
 route remains `cloudfiles2.dev01.pmo.city`; routing and live qualification are
 step 19, not step 17.
 
-The v0.2.0-dev1 release manifest intentionally remains `installable: false`
-until all records are complete and the runtime/security acceptance matrix has
-been approved.
+The seven Step-17 records are now complete and marked `status: passed`; their
+immutable digests are recorded in the v0.2.0-dev1 release manifest. The release
+is installable at the source/package level. Step 19 still covers deployment
+and runtime/security qualification and requires separate approval.

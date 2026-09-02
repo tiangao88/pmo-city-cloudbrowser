@@ -25,7 +25,7 @@ x-common: &common
 services:
   router:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/router:v0.2.0-dev1
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/router@sha256:c56259d639e2e4a65bd5ec80efa6344cc97a9282d2ff562fa2ba7ab9af212b97
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
@@ -41,7 +41,7 @@ services:
 
   slot-supervisor:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/slot-supervisor:v0.2.0-dev1
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/slot-supervisor@sha256:78c814b42188835782e00d01fd7422673cde53ce1aad042a6b65ffddc6361725
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
@@ -65,7 +65,7 @@ services:
 
   browser:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/browser:v0.2.0-dev1
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/browser@sha256:4d652f8c6feaaa5a494764442e759aacd7a013251113bf6df12e58a5ec251ca5
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
@@ -87,7 +87,7 @@ services:
 
   agent-control:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/agent-control:v0.2.0-dev1
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/agent-control@sha256:1726c8929f03e1ccf8fd92647eb88155e4d365f6501b9df7f98bab0bcad86472
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
@@ -111,11 +111,12 @@ services:
 
   viewer:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/viewer:v0.2.0-dev1
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/viewer@sha256:b43d9da6bdf091e63d0bbf4f647ce28e12d6af88b5fb99784fe233615f4043d7
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
       CB_PORT: 8082
+      CB_VIEWER_TOKEN_SECRET: ${CB_VIEWER_TOKEN_SECRET:?CB_VIEWER_TOKEN_SECRET is required}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8082/health', timeout=3)"]
       interval: 10s
@@ -127,7 +128,7 @@ services:
 
   downloads:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/downloads:v0.2.0-dev1
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/downloads@sha256:72dda663b1abf813fd61b90dd3ad196de76a7e29ab4740b176977fb65fb02b59
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
@@ -150,7 +151,7 @@ services:
 
   credential-broker:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/credential-broker:v0.2.0-dev1
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/credential-broker@sha256:35598e12b4c9e3bbf299fb2c84a988c4f195a676d2d0b35d3937f1fc97b913cb
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}

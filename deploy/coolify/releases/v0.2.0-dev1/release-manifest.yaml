@@ -5,9 +5,13 @@ metadata:
 spec:
   productVersion: 0.2.0-dev1
   specificationBaseline: v0.2.0
-  status: development-scaffold-not-installable
-  installable: false
-  reason: image publication and runtime acceptance matrix are not complete
+  status: qualified-installable
+  installable: true
+  qualification:
+    workflow: .github/workflows/build-images.yml
+    run: https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33670797654
+    commit: b83620a47910542a9348f819845614f307b9372c
+    records: deploy/coolify/image-qualification/<service>.md
   contracts:
     controlApi: v1
     agentControl: v1
@@ -23,13 +27,13 @@ spec:
     downloads: 0.2.0-dev1
     credentialBroker: 0.2.0-dev1
   imageDigests:
-    router: sha256:REPLACE_BEFORE_IMAGE_PUBLICATION
-    slotSupervisor: sha256:REPLACE_BEFORE_IMAGE_PUBLICATION
-    browser: sha256:REPLACE_BEFORE_IMAGE_PUBLICATION
-    viewer: sha256:REPLACE_BEFORE_IMAGE_PUBLICATION
-    agentControl: sha256:REPLACE_BEFORE_IMAGE_PUBLICATION
-    downloads: sha256:REPLACE_BEFORE_IMAGE_PUBLICATION
-    credentialBroker: sha256:REPLACE_BEFORE_IMAGE_PUBLICATION
+    router: sha256:c56259d639e2e4a65bd5ec80efa6344cc97a9282d2ff562fa2ba7ab9af212b97
+    slotSupervisor: sha256:78c814b42188835782e00d01fd7422673cde53ce1aad042a6b65ffddc6361725
+    browser: sha256:4d652f8c6feaaa5a494764442e759aacd7a013251113bf6df12e58a5ec251ca5
+    viewer: sha256:b43d9da6bdf091e63d0bbf4f647ce28e12d6af88b5fb99784fe233615f4043d7
+    agentControl: sha256:1726c8929f03e1ccf8fd92647eb88155e4d365f6501b9df7f98bab0bcad86472
+    downloads: sha256:72dda663b1abf813fd61b90dd3ad196de76a7e29ab4740b176977fb65fb02b59
+    credentialBroker: sha256:35598e12b4c9e3bbf299fb2c84a988c4f195a676d2d0b35d3937f1fc97b913cb
   instance:
     id: CB_INSTANCE_ID_REQUIRED
     network: CB_INSTANCE_ID_REQUIRED-network

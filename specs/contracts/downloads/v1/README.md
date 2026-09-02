@@ -20,5 +20,7 @@ denials, and implementation reference.
 
 ## Release status
 
-The v0.2 release manifest remains `installable: false` until image
-publication, runtime, and security acceptance pass.
+The v0.2 release manifest is installable only after image publication,
+runtime, and security acceptance pass. The digest-pinned v0.2.0-dev1 release
+manifest records the Step-17 qualification; deployed runtime qualification is
+Step 19.

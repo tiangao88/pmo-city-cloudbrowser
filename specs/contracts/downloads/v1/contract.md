@@ -65,5 +65,6 @@ the server-derived principal.
   identity.
 - `cloudbrowser.downloads.contracts` — error types and value objects.
 
-The release remains `installable: false` until image publication, runtime,
-and security acceptance pass.
+The release is installable after image publication and source-level runtime
+and security acceptance pass. The v0.2.0-dev1 manifest records the immutable
+CI-qualified images; deployed runtime qualification remains Step 19.
