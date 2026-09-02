@@ -130,6 +130,11 @@ services:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
       CB_PORT: 8083
+      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:?CB_PRINCIPAL_ID is required}
+      CB_BROWSER_ID: ${CB_BROWSER_ID:?CB_BROWSER_ID is required}
+      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:?CB_BINDING_GENERATION is required}
+      CB_DOWNLOADS_SHARED_SECRET: ${CB_DOWNLOADS_SHARED_SECRET:?CB_DOWNLOADS_SHARED_SECRET is required}
+      CB_DOWNLOADS_ROOT: /data/downloads
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3)"]
       interval: 10s

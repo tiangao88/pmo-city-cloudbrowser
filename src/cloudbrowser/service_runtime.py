@@ -131,4 +131,28 @@ def run_service(component: str) -> None:
         finally:
             server.server_close()
         return
+    if component == "downloads":
+        from cloudbrowser.downloads.api import create_downloads_server
+        from cloudbrowser.downloads.identity import ServerIdentity
+        from cloudbrowser.downloads.service import DownloadsService
+
+        principal_id = _required_env("CB_PRINCIPAL_ID")
+        browser_id = _required_env("CB_BROWSER_ID")
+        generation = _required_env("CB_BINDING_GENERATION")
+        shared_secret = _required_env("CB_DOWNLOADS_SHARED_SECRET").encode("utf-8")
+        store_root = Path(os.environ.get("CB_DOWNLOADS_ROOT", "/data/downloads"))
+        server = create_downloads_server(
+            DownloadsService(store_root=store_root),
+            server_identity=ServerIdentity(
+                component="downloads",
+                instance_id=instance_id,
+            ),
+            trusted_secret=shared_secret,
+            address=("0.0.0.0", port),
+        )
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
+        return
     serve_health(component=component, instance_id=instance_id, release_version=release_version, port=port)

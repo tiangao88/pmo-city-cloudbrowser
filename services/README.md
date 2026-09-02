@@ -8,7 +8,7 @@ images:
 - `browser` — Chromium process and restricted browser transport;
 - `viewer` — user-facing viewer boundary;
 - `agent-control` — owner-bound page-state and bounded interaction surface;
-- `downloads` — durable download boundary;
+- `downloads` — durable per-owner downloads boundary (port 8083);
 - `credential-broker` — status-only credential boundary.
 
 Each service has an independent entrypoint, Dockerfile, non-root image user,

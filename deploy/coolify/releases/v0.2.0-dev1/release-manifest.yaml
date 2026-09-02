@@ -12,6 +12,7 @@ spec:
     controlApi: v1
     agentControl: v1
     credentialBroker: v1
+    downloads: v1
     events: v1
   components:
     router: 0.2.0-dev1
