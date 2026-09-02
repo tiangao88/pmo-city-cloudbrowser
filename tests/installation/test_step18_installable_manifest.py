@@ -90,7 +90,7 @@ def test_coolify_compose_uses_the_same_immutable_digests() -> None:
             rf"^    {re.escape(component)}: (sha256:\S+)$", manifest, re.MULTILINE
         ).group(1)
         image_match = re.search(
-            rf"^    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/{re.escape(service)}@({re.escape(digest)})$",
+            rf"^    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/{re.escape(service)}@{re.escape(digest)}$",
             compose,
             re.MULTILINE,
         )
