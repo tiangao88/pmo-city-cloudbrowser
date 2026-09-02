@@ -156,6 +156,9 @@ def create_viewer_server(
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - stdlib HTTP handler contract
+            if self.path == "/health":
+                self._json(200, {"status": "ok", "component": "viewer"})
+                return
             if self.path != "/viewer":
                 self.send_error(404)
                 return
