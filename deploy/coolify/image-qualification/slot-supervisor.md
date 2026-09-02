@@ -1,7 +1,7 @@
 # Image qualification — slot-supervisor
 
 - image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/slot-supervisor:v0.2.0-dev1`
-- digest: `sha256:2a1aa7d3f39bc5a1fcaedc9baf555669c6436f2c31620a44cad5215ddfe70a5a`
+- digest: `sha256:8f52d1b155cf047adeb7cec0a3e707d942a1f1d1e354dba8cb742f5e3b327c08`
 - status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/slot-supervisor/Dockerfile`
@@ -11,14 +11,14 @@
 - configured user: `cloudbrowser`
 - runtime endpoint: passed (`/health`)
 - provenance/SBOM metadata: present in registry manifest
-- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33691294596`
-- source commit `677deb845ab92fbf54a816f3e7e44af73a2bf352`
+- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33693777354`
+- source commit `5a3d2204165b2662b7a432d30e124999c737b132`
 
 ## Qualification evidence
 
 The immutable digest was resolved from the GHCR manifest for the image built from
-source commit `677deb845ab92fbf54a816f3e7e44af73a2bf352` in CI run
-`33691294596`, after every matrix job completed successfully. The image config
+source commit `5a3d2204165b2662b7a432d30e124999c737b132` in CI run
+`33693777354`, after every matrix job completed successfully. The image config
 revision matches the source commit. The CI job also verified the non-root user,
 image healthcheck, provenance/SBOM metadata, container health, runtime UID, and
 service health endpoint. No credentials, cookies, tokens, passwords, or OTPs
