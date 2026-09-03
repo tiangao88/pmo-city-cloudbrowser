@@ -1,10 +1,17 @@
 #!/bin/bash
 # sso-creds-provision.sh — host-side credential provisioner for the D15 broker.
 #
+# v4 (2026-09-03): follows the gateway's OWN bw state dir. v3 hardcoded
+# XDG_CONFIG_HOME=/opt/data/bw-cli-state, but bw-session.sh moved to per-service
+# state dirs under /tmp (multi-writer fix: the compose runs gateway + dashboard,
+# and bw CLI state is not concurrency-safe — two parallel `bw login` on one
+# data.json fail one of the two). The gateway's XDG_CONFIG_HOME is exported in
+# its process env, so read it from the same /proc read that yields BW_SESSION.
+# Fallback to the legacy path keeps the script working if the env read fails.
+#
 # v3 (2026-08-19): session-reuse design. Reads the gateway's live BW_SESSION
 # from /proc (no login, no master password anywhere in this script) and runs
-# `bw get item` with XDG_CONFIG_HOME isolated to /opt/data/bw-cli-state (never
-# under /home/hermes/.hermes).
+# `bw get item` with XDG_CONFIG_HOME isolated from /home/hermes/.hermes.
 #
 # Why not the REST API key (client_credentials)? Probed 2026-08-18/19:
 #   - password grant: Vaultwarden 1.32+ rejects plaintext master passwords and
@@ -27,9 +34,8 @@ set -u
 ITEM="${D15_BW_ITEM:-cloudbrowser-w1-test}"
 SSH_KEY="${D15_SSH_KEY:-/home/hermes/.hermes/home/.ssh/id_ed25519_mother01}"
 VOL_DIR="/var/lib/docker/volumes/4guplgcrvug7l7h64m2cxkm1_scripts/_data"
-export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-/opt/data/bw-cli-state}"
 
-# 1. Read the gateway's live BW_SESSION (no login, no password)
+# 1. Read the gateway's live BW_SESSION + bw state dir (no login, no password)
 GWPID=$(pgrep -f "hermes gateway run" | head -1)
 if [ -z "$GWPID" ]; then
   echo "[d15-creds] ERROR: gateway not running (no session source)" >&2
@@ -40,6 +46,8 @@ if [ -z "$SESSION" ]; then
   echo "[d15-creds] ERROR: gateway has no BW_SESSION (bw-session.sh failed at boot?)" >&2
   exit 2
 fi
+GW_XDG=$(tr '\0' '\n' < "/proc/$GWPID/environ" 2>/dev/null | sed -n 's/^XDG_CONFIG_HOME=//p' | head -1)
+export XDG_CONFIG_HOME="${GW_XDG:-/opt/data/bw-cli-state}"
 
 # 2. Fetch item (retry races), extract creds, base64 in memory
 CREDS_B64=""
