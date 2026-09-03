@@ -19,17 +19,61 @@ keeps the same environment, healthcheck, volume, and network wiring.
 
 ## Public downloads host
 
-The downloads service is fronted at `cloudfiles2.dev01.pmo.city`
-(`CB_PUBLIC_FILES_HOST` in `.env.example`). The Traefik router for that host
-is **not** embedded inside this compose: it is created in step 19 against
-the standalone `cloudfiles2` Coolify application so that the downloads
-surface is independently reachable from the CloudBrowser control plane.
+The downloads service is fronted at `cloudfiles2.dev01.pmo.city` as a second
+Domains entry on the existing `cloudbrowser2` Coolify service. This follows the
+same service-scoped model used by the live `cb-fleet` resource for its browser
+and files hosts. No standalone `cloudfiles2` Coolify application is created.
+
+Coolify's Domains configuration generates the HTTP/HTTPS router and applies
+the existing `tinyauth-pmo@file` middleware. Do not add compose-authored
+Traefik routers for these public hosts: defining the route in both Compose and
+Coolify generates duplicate routers for the same host rule.
+
+### TinyAuth labels
+
+`cloudbrowser2` uses explicit, stable TinyAuth app keys on the two exposed
+containers. These keys are intentionally not raw deployment/container UUIDs;
+the live `cb-fleet` resource uses the same short-key convention (`cloudbrowser`
+and `cloudfiles`).
+
+```yaml
+# viewer application labels
+- tinyauth.apps.cloudbrowser2-viewer.oauth.groups=PMOC_Users
+- tinyauth.apps.cloudbrowser2-viewer.config.domain=cloudbrowser2.dev01.pmo.city
+- traefik.http.middlewares.tinyauth-pmo@file
+
+# downloads application labels
+- tinyauth.apps.cloudbrowser2-downloads.oauth.groups=PMOC_Users
+- tinyauth.apps.cloudbrowser2-downloads.config.domain=cloudfiles2.dev01.pmo.city
+- traefik.http.middlewares.tinyauth-pmo@file
+```
+
+For reference, these are the live `cb-fleet` labels:
+
+```yaml
+- tinyauth.apps.cloudbrowser.config.domain=cloudbrowser.dev01.pmo.city
+- tinyauth.apps.cloudbrowser.oauth.groups=PMOC_Users
+- tinyauth.apps.cloudfiles.config.domain=cloudfiles.dev01.pmo.city
+- tinyauth.apps.cloudfiles.oauth.groups=PMOC_Users
+- traefik.http.middlewares.tinyauth-pmo@file
+```
+
+`oauth.groups=PMOC_Users` is the group authorization gate. `config.domain`
+binds the TinyAuth app registration to the host. TinyAuth's Docker label
+provider discovers these app keys from application containers; they are not
+placed on the TinyAuth container. Coolify's Domains configuration provides the
+actual HTTP/HTTPS router and attaches `tinyauth-pmo@file`. The route must not
+also be authored in Compose.
+
+`/health` remains unauthenticated for container healthchecks. Protected
+file/API requests still require the downloads service's trusted secret and
+server-derived owner headers after the edge authentication check.
 
 The `browser-overlay.yaml` was folded into the main compose when the browser
 service was added (step 11) and is retained only as a historical reference.
 
-The dev staging service on Coolify is not yet deployed: installation and
-runtime qualification are Step 19. The release manifest is now
-`installable: true` because the Step-17 image qualification passed and the
-release images are pinned by immutable digest. Step 19 still requires
-separate deployment approval.
+The dev staging service on Coolify is deployed for Step 19 runtime
+qualification. The release manifest is `installable: true` because the Step-17
+image qualification passed and the release images are pinned by immutable
+digest. Remaining Step 19 acceptance gates are recorded in the runtime
+qualification document.

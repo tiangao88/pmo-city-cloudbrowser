@@ -6,7 +6,7 @@
 - Coolify service UUID: `nievufka0cggf82cregyihav`
 - Instance ID: `cloudbrowser2-dev-v01`
 - Release: `0.2.0-dev1`
-- Current status: **partial — browser startup blocker fixed; full Step 19 remains open**
+- Current status: **partial — service health and downloads-domain routing verified; persistence/isolation/viewer-binding/rollback gates remain open**
 
 ## Root cause and correction
 
@@ -78,3 +78,65 @@ No credential operation or credential rotation was performed. With explicit
 redeploy approval, the live `cloudbrowser2` stack was changed to the fixed browser
 image and restarted through Coolify. Existing unrelated fleet services were not
 changed.
+
+
+## Service-scoped downloads domain routing
+
+On 2026-09-03, the existing `cloudbrowser2` Coolify service was updated through
+its service Domains configuration only. The `downloads` container is mapped to:
+
+- `https://cloudfiles2.dev01.pmo.city`
+
+No standalone Coolify application was created, and no global or standalone
+Traefik rule was edited. Coolify redeployed the existing `cloudbrowser2`
+service; all seven child applications returned `running:healthy`.
+
+Runtime verification:
+
+- DNS resolves `cloudfiles2.dev01.pmo.city` to `145.223.34.130`.
+- `GET /health` returns HTTP 200 with `component: downloads` and the
+  `cloudbrowser2-dev-v01` instance identifier.
+- `GET /` returns HTTP 401 with `error_code: unauthorized`, confirming the
+  public surface is not anonymously readable.
+- The existing viewer domain remains healthy: `GET
+  https://cloudbrowser2.dev01.pmo.city/health` returns HTTP 200.
+
+### TinyAuth labels
+
+`cloudbrowser2` uses the same service-scoped TinyAuth label pattern as the
+live `cb-fleet` resource. The app-key is an explicit stable name for each
+exposed application, and is not a raw deployment UUID:
+
+```yaml
+# viewer application labels
+- tinyauth.apps.cloudbrowser2-viewer.oauth.groups=PMOC_Users
+- tinyauth.apps.cloudbrowser2-viewer.config.domain=cloudbrowser2.dev01.pmo.city
+- traefik.http.middlewares.tinyauth-pmo@file
+
+# downloads application labels
+- tinyauth.apps.cloudbrowser2-downloads.oauth.groups=PMOC_Users
+- tinyauth.apps.cloudbrowser2-downloads.config.domain=cloudfiles2.dev01.pmo.city
+- traefik.http.middlewares.tinyauth-pmo@file
+```
+
+The live `cb-fleet` resource uses the equivalent short keys:
+
+```yaml
+- tinyauth.apps.cloudbrowser.config.domain=cloudbrowser.dev01.pmo.city
+- tinyauth.apps.cloudbrowser.oauth.groups=PMOC_Users
+- tinyauth.apps.cloudfiles.config.domain=cloudfiles.dev01.pmo.city
+- tinyauth.apps.cloudfiles.oauth.groups=PMOC_Users
+- traefik.http.middlewares.tinyauth-pmo@file
+```
+
+`oauth.groups=PMOC_Users` is the group authorization gate. `config.domain`
+binds the TinyAuth app registration to its public host. TinyAuth's Docker label
+provider discovers these app keys from the exposed application containers; they
+are not placed on the TinyAuth container. Coolify's Domains configuration
+provides the actual HTTP/HTTPS router and attaches `tinyauth-pmo@file`. The
+route must not also be authored in Compose, because that would create duplicate
+routers.
+
+`/health` remains unauthenticated for container healthchecks. Protected
+file/API requests still require the downloads service's trusted secret and
+server-derived owner headers after the edge authentication check.

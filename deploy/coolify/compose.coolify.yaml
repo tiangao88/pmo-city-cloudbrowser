@@ -3,16 +3,19 @@
 # services cannot clone the private repo to satisfy `build:` contexts, so the
 # deployed compose pins the published dev images instead.
 #
-# Public host routing for the downloads service is handled outside this
-# compose (see deploy/coolify/README.md): the standalone `cloudfiles2`
-# application at `cloudfiles2.dev01.pmo.city` fronts the downloads service
-# when step 19 wires the Traefik route.
+# Public host routing for the downloads service is managed by the existing
+# cloudbrowser2 Coolify service Domains configuration. Do not add compose-level
+# Traefik routers for these hosts: that would create duplicate routes.
+# TinyAuth discovers app keys from labels on the externally exposed containers;
+# the existing `tinyauth-pmo@file` middleware is attached by Coolify's domain
+# configuration at render time.
 name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
 
-# Public downloads host: cloudfiles2.dev01.pmo.city is routed by the
-# standalone `cloudfiles2` Coolify application (see deploy/coolify/README.md).
-# The Traefik route is added in step 19. The download service is reachable
-# from inside the CloudBrowser network on port 8083 (expose below).
+# Public downloads host: cloudfiles2.dev01.pmo.city is a second Domains entry
+# on this same cloudbrowser2 Coolify service, targeting the downloads container.
+# Authentication is the existing TinyAuth file middleware plus an app-key label
+# on the externally exposed container; the downloads service remains internal
+# on port 8083 and does its own trusted-header authorization.
 
 x-common: &common
   restart: unless-stopped
@@ -126,6 +129,13 @@ services:
       start_period: 5s
     expose:
       - "8082"
+    # These labels document the TinyAuth app-key contract. Coolify's Domains
+    # entry supplies the generated Traefik router and tinyauth-pmo@file gate.
+    # Keep the app-key stable and distinct from the Coolify deployment UUID.
+    labels:
+      - tinyauth.apps.cloudbrowser2-viewer.oauth.groups=PMOC_Users
+      - tinyauth.apps.cloudbrowser2-viewer.config.domain=cloudbrowser2.dev01.pmo.city
+      - traefik.http.middlewares.tinyauth-pmo@file
 
   downloads:
     <<: *common
@@ -149,6 +159,12 @@ services:
       - downloads:/data/downloads
     expose:
       - "8083"
+    # Separate host and TinyAuth app-key, matching the live cb-fleet pattern.
+    # Keep the app-key stable and distinct from the Coolify deployment UUID.
+    labels:
+      - tinyauth.apps.cloudbrowser2-downloads.oauth.groups=PMOC_Users
+      - tinyauth.apps.cloudbrowser2-downloads.config.domain=cloudfiles2.dev01.pmo.city
+      - traefik.http.middlewares.tinyauth-pmo@file
 
   credential-broker:
     <<: *common
