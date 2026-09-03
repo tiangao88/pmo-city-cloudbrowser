@@ -19,6 +19,9 @@ packages = ["src/cloudbrowser"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "gateway: public CloudFiles gateway HTTP boundary tests",
+]
 addopts = "-ra"
 
 [tool.ruff]

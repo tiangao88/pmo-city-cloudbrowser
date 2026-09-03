@@ -161,12 +161,6 @@ services:
       - downloads:/data/downloads
     expose:
       - "8083"
-    # Separate host and TinyAuth app-key, matching the live cb-fleet pattern.
-    # Keep the app-key stable and distinct from the Coolify deployment UUID.
-    labels:
-      - tinyauth.apps.cloudbrowser2-downloads.oauth.groups=PMOC_Users
-      - tinyauth.apps.cloudbrowser2-downloads.config.domain=cloudfiles2.dev01.pmo.city
-      - traefik.http.middlewares.tinyauth-pmo@file
 
   credential-broker:
     <<: *common

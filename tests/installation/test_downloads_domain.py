@@ -19,5 +19,4 @@ def test_downloads_service_is_exposed_without_host_port_publishing() -> None:
         end = text.find("\n  credential-broker:", start)
         block = text[start:end]
         assert "expose:\n      - \"8083\"" in block
-        assert "cloudfiles2.dev01.pmo.city" in text
         assert "ports:" not in block

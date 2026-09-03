@@ -66,7 +66,11 @@ class CallRecord:
 class FakeDownloads:
     """In-memory stand-in for the internal downloads/v1 port."""
 
-    store: dict[PrincipalBinding, list[dict[str, object]]] = field(
+    store: dict[str, list[dict[str, object]]] = field(
+        default_factory=dict,
+        kw_only=True,
+    )
+    files: dict[str, dict[str, bytes]] = field(
         default_factory=dict,
         kw_only=True,
     )
@@ -74,7 +78,13 @@ class FakeDownloads:
 
     def list_files(self, binding: PrincipalBinding, headers: dict[str, str]) -> dict:
         self.calls.append(CallRecord("/api/files", dict(headers), binding))
-        return {"entries": list(self.store.get(binding, []))}
+        # If `files` was populated directly, derive a listing from it.
+        files = self.files.get(binding.principal_id, {})
+        if files and not self.store.get(binding.principal_id):
+            return {"entries": [
+                {"name": n, "size": len(c), "mtime": 0} for n, c in files.items()
+            ]}
+        return {"entries": list(self.store.get(binding.principal_id, []))}
 
     def read_file(
         self,
@@ -83,10 +93,7 @@ class FakeDownloads:
         headers: dict[str, str],
     ) -> bytes | None:
         self.calls.append(CallRecord(f"/file/{name}", dict(headers), binding))
-        for entry in self.store.get(binding, []):
-            if entry["name"] == name:
-                return b"%PDF-" + name.encode("utf-8")
-        return None
+        return self.files.get(binding.principal_id, {}).get(name)
 
 
 def make_resolver(
@@ -95,14 +102,23 @@ def make_resolver(
     revoked: bool = False,
     generation: str = "generation-0",
 ):
-    """Return a server-owned resolver that trusts only the Authorization header."""
+    """Return a server-owned resolver that trusts only the TinyAuth session."""
 
-    def resolve(context: dict[str, str]) -> PrincipalBinding:
-        if revoked:
-            raise RevokedBinding(context.get("path", ""))
+    from cloudbrowser.cloudfiles.identity import TinyAuthSession, resolve_principal
+
+    def resolve(context: dict[str, object]):
         if subject is None:
-            raise MissingBinding(context.get("path", ""))
-        return PrincipalBinding(principal_id=subject, generation=generation)
+            session = TinyAuthSession(subject=None, status="missing",
+                                       request_id=str(context.get("request_id", "req-0")))
+        else:
+            session = TinyAuthSession(
+                subject=subject,
+                status="revoked" if revoked else "active",
+                generation=generation,
+                request_id=str(context.get("request_id", "req-0")),
+            )
+        return resolve_principal({"session": session,
+                                   "request_id": session.request_id})
 
     return resolve
 

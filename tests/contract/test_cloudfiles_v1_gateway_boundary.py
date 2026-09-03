@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import importlib
 import re
+import socket
 from typing import Mapping
 
 import pytest
@@ -34,9 +35,13 @@ def test_remote_email_header_is_not_authoritative() -> None:
     module = importlib.import_module("cloudbrowser.cloudfiles.identity")
     resolver = getattr(module, "resolve_principal", None)
     assert resolver is not None, "resolve_principal is missing"
-    ctx = {"headers": {"Remote-Email": "victim@example.test"}}
-    principal = resolver(ctx)
-    assert principal != "victim@example.test", (
+    from cloudbrowser.cloudfiles.identity import TinyAuthSession
+    ctx = {
+        "headers": {"Remote-Email": "victim@example.test"},
+        "session": TinyAuthSession(subject="owner-a", request_id="req-1"),
+    }
+    binding = resolver(ctx)
+    assert getattr(binding, "principal_id", binding) != "victim@example.test", (
         "Remote-Email must not be authoritative; identity must be "
         "server-derived from TinyAuth session"
     )
@@ -47,9 +52,13 @@ def test_xcb_principal_header_is_not_authoritative() -> None:
     module = importlib.import_module("cloudbrowser.cloudfiles.identity")
     resolver = getattr(module, "resolve_principal", None)
     assert resolver is not None, "resolve_principal is missing"
-    ctx = {"headers": {"X-CB-Principal": "owner-b"}}
-    principal = resolver(ctx)
-    assert principal != "owner-b", (
+    from cloudbrowser.cloudfiles.identity import TinyAuthSession
+    ctx = {
+        "headers": {"X-CB-Principal": "owner-b"},
+        "session": TinyAuthSession(subject="owner-a", request_id="req-1"),
+    }
+    binding = resolver(ctx)
+    assert getattr(binding, "principal_id", binding) != "owner-b", (
         "X-CB-Principal must not be authoritative"
     )
 
@@ -59,9 +68,16 @@ def test_query_string_owner_is_not_authoritative() -> None:
     module = importlib.import_module("cloudbrowser.cloudfiles.identity")
     resolver = getattr(module, "resolve_principal", None)
     assert resolver is not None, "resolve_principal is missing"
-    ctx = {"headers": {}, "query": {"owner": "owner-b"}}
-    principal = resolver(ctx)
-    assert principal != "owner-b", "Query string must not be authoritative"
+    from cloudbrowser.cloudfiles.identity import TinyAuthSession
+    ctx = {
+        "headers": {},
+        "query": {"owner": "owner-b"},
+        "session": TinyAuthSession(subject="owner-a", request_id="req-1"),
+    }
+    binding = resolver(ctx)
+    assert getattr(binding, "principal_id", binding) != "owner-b", (
+        "Query string must not be authoritative"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -431,8 +447,13 @@ def test_listing_excludes_special_files(tmp_path) -> None:
     assert hasattr(module, "list_entries"), "list_entries is missing"
     special = tmp_path / "owner-a" / "entries" / "weird.sock"
     special.parent.mkdir(parents=True, exist_ok=True)
-    special.write_text("")
-    listing = module.list_entries(principal="owner-a", store_root=tmp_path)
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.bind(str(special))
+        listing = module.list_entries(principal="owner-a", store_root=tmp_path)
+    finally:
+        sock.close()
+        special.unlink(missing_ok=True)
     assert "weird.sock" not in listing, "special files must not be listed"
 
 
