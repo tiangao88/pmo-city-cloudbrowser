@@ -1,9 +1,8 @@
 name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
 
-# Public downloads host: cloudfiles2.dev01.pmo.city is routed by the standalone
-# `cloudfiles2` Coolify application (see deploy/coolify/README.md). The
-# Traefik route is added in step 19. The download service is reachable from
-# inside the CloudBrowser network on port 8083 (expose below).
+# The internal downloads service is not the public CloudFiles product surface.
+# The public gateway will be added as a separate service after its contract,
+# implementation, image, and end-to-end qualification are complete.
 
 x-common: &common
   restart: unless-stopped

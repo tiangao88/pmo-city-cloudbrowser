@@ -1,5 +1,11 @@
 # PMO City CloudBrowser
 
+CloudFiles is the TinyAuth-protected, user-scoped file door in the employee's
+normal/main browser. Its frozen product target and development plan are in:
+
+- `specs/proposals/v0.2/89-cloudfiles-product-requirement.md`
+- `specs/proposals/v0.2/90-cloudfiles-development-plan.md`
+
 CloudBrowser is an independently installable, owner-bound cloud-browser
 component for PMO City. It provides persistent Chromium sessions, lifecycle
 and queue control, a viewer, restricted agent control, and durable per-user
@@ -11,6 +17,9 @@ CloudBrowser and the Credential Broker are separate capabilities:
 
 - **CloudBrowser runtime** owns browser lifecycle, slots, profiles, tabs,
   viewer access, queueing, routing, downloads, and restricted browser control.
+- **CloudFiles** is the TinyAuth-protected, user-scoped file door in the
+  employee's normal/main browser. It lists files downloaded inside CloudBrowser
+  and returns them as local-browser attachments; it is not a slot-local API.
 - **Credential Broker** is a deterministic, non-LLM service. It obtains
   explicitly authorized Vaultwarden material, fills an owner-bound browser,
   verifies the result, and returns status only.

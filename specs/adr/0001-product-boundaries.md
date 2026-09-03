@@ -10,5 +10,5 @@ Hermes may issue intent but must not receive credential material. Authentik is
 an adapter, not the generic broker definition.
 
 The legacy code is imported under `legacy/` until a test-first extraction is
-complete. No legacy slot-side vault decryption path may be promoted as the new
-security architecture.
+complete. New CloudFiles implementation must not import or copy the legacy
+`downloads-api.py` or monolithic router/storage process.

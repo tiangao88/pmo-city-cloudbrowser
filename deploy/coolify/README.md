@@ -1,9 +1,10 @@
 # Deploy compose (dev staging)
 
-The primary `deploy/coolify/compose.yaml` defines the six runtime services
-(router, slot-supervisor, browser, viewer, downloads, credential-broker) with
-source-build contexts for local validation. Each installation is isolated by
-`CB_INSTANCE_ID`, including its network, volumes, and secret namespaces:
+The primary `deploy/coolify/compose.yaml` defines the runtime services with
+source-build contexts for local validation. The current compose includes the
+internal `downloads` service; the planned public `cloudfiles` gateway is not
+yet a deployable service. Each installation is isolated by `CB_INSTANCE_ID`,
+including its network, volumes, and secret namespaces:
 
 ```bash
 CB_INSTANCE_ID=cloudbrowser-dev-v01 \
@@ -23,6 +24,12 @@ The downloads service is fronted at `cloudfiles2.dev01.pmo.city` as a second
 Domains entry on the existing `cloudbrowser2` Coolify service. This follows the
 same service-scoped model used by the live `cb-fleet` resource for its browser
 and files hosts. No standalone `cloudfiles2` Coolify application is created.
+
+The frozen product target adds an application-level CloudFiles gateway in front
+of this internal service. The public host must target that gateway, which is
+TinyAuth-protected at the edge and forwards a server-derived owner binding to
+the downloads service. The downloads container must not be exposed directly as
+the public product surface.
 
 Coolify's Domains configuration generates the HTTP/HTTPS router and applies
 the existing `tinyauth-pmo@file` middleware. Do not add compose-authored

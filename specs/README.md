@@ -12,9 +12,11 @@ This directory separates working proposals from approved, immutable baselines.
 
 ## Active work
 
-- `proposals/v0.2/` — generic deterministic Credential Broker refactor and
-  current W3 status.
-- `contracts/` — compatibility-versioned API and event contracts.
+- `proposals/v0.2/` — generic Credential Broker, frozen CloudFiles target,
+  development plan, and current W3 status.
+- `contracts/` — compatibility-versioned API and event contracts, including
+  the proposed public `cloudfiles/v1` gateway and internal `downloads/v1`
+  boundary.
 - `adr/` — decisions affecting multiple versions or installations.
 
 ## Historical import

@@ -7,15 +7,31 @@ against `<CB_DOWNLOADS_ROOT>/<principal_id>/`.
 
 ## Surface
 
+This service is the internal `downloads/v1` data boundary. The public
+CloudFiles gateway (specified in
+`specs/proposals/v0.2/89-cloudfiles-product-requirement.md`) owns the
+TinyAuth-protected HTML surface in the employee's normal browser; it is not
+implemented by this service.
+
 - `GET /health` — bounded non-sensitive health metadata.
 - `GET /api/files` — bounded list of `{name, size, mtime, owner}` entries.
 - `GET /file/<name>` — bounded file bytes, **always** `Content-Disposition:
   attachment`. The downloads service never renders inline.
 - `GET /ready` — bounded readiness metadata.
 
-## Authentication
+The current runtime is intentionally only the internal `downloads/v1` contract
+slice. It does not yet provide the public CloudFiles gateway, HTML homepage, or
+browser-download ingest path. The frozen product target and the new-structure
+implementation plan are documented in
+`specs/proposals/v0.2/89-cloudfiles-product-requirement.md` and
+`specs/proposals/v0.2/90-cloudfiles-development-plan.md`.
 
-Every request other than `/health` and `/ready` requires the trusted router to
+The public product target is deliberately separate from this service:
+`cloudfiles2.dev01.pmo.city` must terminate at a TinyAuth-protected CloudFiles
+gateway, which forwards a server-derived owner binding to this internal
+service. Do not expose this container directly as the public CloudFiles host.
+
+## Authentication
 present `CB_DOWNLOADS_SHARED_SECRET` via the `X-CB-Trusted-Secret` header. The
 service compares the header against the configured secret with
 `hmac.compare_digest`; missing or mismatched secrets yield `401 unauthorized`.

@@ -3,19 +3,21 @@
 # services cannot clone the private repo to satisfy `build:` contexts, so the
 # deployed compose pins the published dev images instead.
 #
-# Public host routing for the downloads service is managed by the existing
-# cloudbrowser2 Coolify service Domains configuration. Do not add compose-level
-# Traefik routers for these hosts: that would create duplicate routes.
-# TinyAuth discovers app keys from labels on the externally exposed containers;
-# the existing `tinyauth-pmo@file` middleware is attached by Coolify's domain
-# configuration at render time.
+# The current compose exposes the internal downloads service through the
+# existing cloudbrowser2 service Domains wiring. The frozen CloudFiles target
+# requires a future public `cloudfiles` gateway in front of downloads. Until
+# that gateway is implemented and qualified, this file is not evidence that
+# the complete CloudFiles product flow is deployed.
+#
+# Public host routing is managed by the existing cloudbrowser2 Coolify service
+# Domains configuration. Do not add compose-level Traefik routers for these
+# hosts: that would create duplicate routes.
 name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
 
 # Public downloads host: cloudfiles2.dev01.pmo.city is a second Domains entry
-# on this same cloudbrowser2 Coolify service, targeting the downloads container.
-# Authentication is the existing TinyAuth file middleware plus an app-key label
-# on the externally exposed container; the downloads service remains internal
-# on port 8083 and does its own trusted-header authorization.
+# on the existing cloudbrowser2 service only after the CloudFiles gateway is
+# implemented and qualified. The internal downloads service remains reachable
+# inside the CloudBrowser network on port 8083.
 
 x-common: &common
   restart: unless-stopped
