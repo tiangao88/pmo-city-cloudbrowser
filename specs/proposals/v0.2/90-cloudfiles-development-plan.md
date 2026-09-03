@@ -5,6 +5,26 @@
 > This plan describes implementation gates. It does not authorize live
 > deployment or fleet mutation.
 
+## How to read this plan
+
+**Phase 0 is the pre-implementation definition and safety gate.** It is not a
+service, a deployment step, or a hidden coding phase. Its purpose is to settle
+what the public CloudFiles surface means, define the trust boundaries, and
+write security tests that fail before production code exists.
+
+Current position as of 2026-09-03:
+
+- **Done:** the product target is frozen in `89-cloudfiles-product-requirement.md`;
+  this development plan is committed; the `cloudfiles/v1` public contract is
+  drafted; and the existing `downloads/v1` internal contract is identified.
+- **Remaining in Phase 0:** review/approve the public contract, complete the
+  route/threat matrix, and add and observe the focused security tests failing.
+- **Not started:** Phase 1 production implementation.
+
+The issue list in §7 is grouped by phase. The correct dependency order is
+Phase 0 → Phase 1 → Phase 2 → Phase 3 → Phase 4 → local E2E/release
+qualification → explicitly approved live deployment.
+
 ## 1. Development decision
 
 Build CloudFiles as a new product slice in the new repository. Do **not** copy

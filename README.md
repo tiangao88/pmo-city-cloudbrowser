@@ -1,10 +1,12 @@
 # PMO City CloudBrowser
 
 CloudFiles is the TinyAuth-protected, user-scoped file door in the employee's
-normal/main browser. Its frozen product target and development plan are in:
+normal/main browser. Its frozen product target, development plan, and
+phase-by-phase delivery map are in:
 
 - `specs/proposals/v0.2/89-cloudfiles-product-requirement.md`
 - `specs/proposals/v0.2/90-cloudfiles-development-plan.md`
+- `specs/proposals/v0.2/91-cloudfiles-delivery-phases.md`
 
 CloudBrowser is an independently installable, owner-bound cloud-browser
 component for PMO City. It provides persistent Chromium sessions, lifecycle

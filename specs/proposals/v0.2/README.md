@@ -9,7 +9,12 @@ The recommended new-structure implementation plan is in
 `90-cloudfiles-development-plan.md`. These documents freeze the desired product
 outcome and development approach; they do not authorize live deployment.
 
+**Phase 0 is the current pre-implementation gate.** It covers public-contract
+review, the route/threat matrix, and red security tests. Phase 1 begins only
+when Phase 0's exit criteria are met.
+
 The new public contract is `specs/contracts/cloudfiles/v1/README.md`.
+A concise phase-by-phase map is in `91-cloudfiles-delivery-phases.md`.
 
 Exit criteria before implementation:
 
