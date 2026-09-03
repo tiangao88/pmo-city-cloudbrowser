@@ -115,6 +115,7 @@ class BrowserProcess:
         if self.state == "starting":
             raise BrowserProcessError("browser is already starting")
         self.config.profile_dir.mkdir(parents=True, exist_ok=True)
+        self._clear_stale_profile_locks()
         self._state = "starting"
         try:
             self._process = self._popen(
@@ -226,6 +227,15 @@ class BrowserProcess:
                     wait(timeout=self.config.stop_timeout_s)
                 except (TimeoutError, subprocess.TimeoutExpired, OSError):
                     pass
+
+    def _clear_stale_profile_locks(self) -> None:
+        """Remove Chromium singleton links left by an unclean container exit."""
+        for name in ("SingletonCookie", "SingletonLock", "SingletonSocket"):
+            marker = self.config.profile_dir / name
+            try:
+                marker.unlink(missing_ok=True)
+            except OSError as exc:
+                raise BrowserProcessError("browser profile lock cleanup failed") from exc
 
 
 def chrome_version_is_ready(raw: object) -> bool:
