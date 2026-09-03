@@ -1,11 +1,4 @@
-# CloudBrowser runtime services
-
-The repository contains independently deployable service images. The current
-release includes router, slot-supervisor, browser, viewer, agent-control,
-downloads, and credential-broker. The public CloudFiles gateway is introduced
-as a separate service in the later delivery phase.
-
-## CloudFiles Phase 2 integration
+# CloudFiles Phase 2 integration
 
 Phase 2 adds the owner-bound browser-download ingest seam and the typed
 internal `downloads/v1` client. The pipeline stages a bounded stream in a
@@ -13,6 +6,8 @@ private temporary file, scans it before publication, and sends clean material
 to the internal downloads boundary. Non-clean material is kept in the
 owner-scoped quarantine namespace and is never published as a retrievable
 entry.
+
+## Boundaries
 
 - `IngestPipeline` accepts only a server-derived `PrincipalBinding`; it has no
   `principal_id` or destination-path argument.

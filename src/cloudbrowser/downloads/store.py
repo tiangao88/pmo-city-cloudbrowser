@@ -56,10 +56,8 @@ def safe_name(raw: object) -> str | None:
 class DownloadStore:
     """Persist owner files under ``root/<sha256(principal)>/entries``.
 
-    The hashed layout is the canonical layout. For one compatibility release,
-    reads also accept the prior plain owner directory when it is already
-    present; all new ingests use the hashed layout and never create a PII
-    path.
+    Existing ``root/<principal>`` directories remain readable for one
+    compatibility release; new writes always use the hashed layout.
     """
 
     root: Path
@@ -74,6 +72,8 @@ class DownloadStore:
             raise ValueError("max_entries must be positive")
 
     def _owner_root(self, principal_id: str) -> Path:
+        if not isinstance(principal_id, str) or not _OWNER_PATTERN.fullmatch(principal_id):
+            raise ValueError("principal_id must be bounded non-empty text")
         return self.root / owner_key(principal_id)
 
     def _prior_owner_root(self, principal_id: str) -> Path:
@@ -94,8 +94,6 @@ class DownloadStore:
         return self._prior_owner_root(principal_id) / ".quarantine"
 
     def _assert_directory(self, path: Path) -> None:
-        """Reject symlinked storage directories before traversing them."""
-
         try:
             metadata = path.lstat()
         except FileNotFoundError:
@@ -120,9 +118,7 @@ class DownloadStore:
         entries_dir.mkdir(exist_ok=True)
         return entries_dir
 
-    def list_entries(self, principal_id: str) -> list[DownloadEntry]:
-        """Return bounded metadata from canonical and prior entries."""
-
+    def _storage_dirs(self, principal_id: str) -> tuple[Path, ...]:
         canonical = self._entries_dir(principal_id)
         prior = self._prior_entries_dir(principal_id)
         self._assert_under_root(canonical)
@@ -136,6 +132,12 @@ class DownloadStore:
                     dirs.append(path)
             except OSError:
                 continue
+        return tuple(dirs)
+
+    def list_entries(self, principal_id: str) -> list[DownloadEntry]:
+        """Return bounded metadata for canonical and prior files."""
+
+        dirs = self._storage_dirs(principal_id)
         result: list[DownloadEntry] = []
         seen: set[str] = set()
         for entries_dir in dirs:
@@ -178,17 +180,12 @@ class DownloadStore:
                     metadata = child.lstat()
                 except FileNotFoundError:
                     continue
-                if not stat_module.S_ISREG(metadata.st_mode) or stat_module.S_ISLNK(metadata.st_mode):
-                    continue
                 qname = safe_name(child.name)
-                if qname is None:
-                    continue
-                original = qname.split("_", 1)[1] if "_" in qname else qname
-                if safe_name(original) is None:
+                if not stat_module.S_ISREG(metadata.st_mode) or stat_module.S_ISLNK(metadata.st_mode) or qname is None:
                     continue
                 result.append(
                     DownloadEntry(
-                        name=original,
+                        name=qname,
                         size=int(metadata.st_size),
                         mtime=int(metadata.st_mtime),
                         owner=principal_id,
@@ -200,12 +197,15 @@ class DownloadStore:
         return result
 
     def _read_index_hash(self, principal_id: str, name: str) -> str | None:
-        try:
-            data = json.loads((self._owner_root(principal_id) / _INDEX_FILE).read_text())
-            value = data.get(name, {}).get("sha256")
-            return value if isinstance(value, str) and len(value) == 64 else None
-        except (OSError, ValueError, TypeError, AttributeError):
-            return None
+        for path in (self._owner_root(principal_id) / _INDEX_FILE, self._prior_owner_root(principal_id) / _INDEX_FILE):
+            try:
+                data = json.loads(path.read_text())
+                value = data.get(name, {}).get("sha256")
+                if isinstance(value, str) and len(value) == 64:
+                    return value
+            except (OSError, ValueError, TypeError, AttributeError):
+                continue
+        return None
 
     def read(self, principal_id: str, name: str) -> bytes | None:
         """Read a regular, non-symlink entry; quarantine is never readable."""
@@ -213,21 +213,11 @@ class DownloadStore:
         safe = safe_name(name)
         if safe is None:
             raise DownloadNameError("download name is unsafe")
-        canonical = self._entries_dir(principal_id)
-        prior = self._prior_entries_dir(principal_id)
-        self._assert_under_root(canonical)
-        self._assert_directory(self._owner_root(principal_id))
-        self._assert_directory(canonical)
-        self._assert_directory(prior)
-        candidates = [canonical / safe]
-        if prior != self._owner_root(principal_id):
-            candidates.append(prior / safe)
-        for path in candidates:
+        for entries_dir in self._storage_dirs(principal_id):
+            path = entries_dir / safe
             try:
                 descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-            except (FileNotFoundError, NotADirectoryError):
-                continue
-            except OSError:
+            except (FileNotFoundError, NotADirectoryError, OSError):
                 continue
             try:
                 metadata = os.fstat(descriptor)
@@ -236,9 +226,7 @@ class DownloadStore:
                 with os.fdopen(descriptor, "rb") as handle:
                     descriptor = -1
                     payload = handle.read(self.max_file_bytes + 1)
-                if len(payload) > self.max_file_bytes:
-                    return None
-                return payload
+                return None if len(payload) > self.max_file_bytes else payload
             finally:
                 if descriptor >= 0:
                     os.close(descriptor)
@@ -253,8 +241,8 @@ class DownloadStore:
         if not hasattr(source, "read"):
             raise ValueError("source must be a binary stream")
         entries_dir = self._prepare_entries_dir(principal_id)
-        owner_root = self._owner_root(principal_id)
-        temp = entries_dir / f".{safe}.{secrets.token_hex(8)}.tmp"
+        final_name = self._next_name(entries_dir, safe)
+        temp = entries_dir / f".{final_name}.{secrets.token_hex(8)}.tmp"
         digest = sha256()
         size = 0
         try:
@@ -272,11 +260,11 @@ class DownloadStore:
                     target.write(chunk)
                 target.flush()
                 os.fsync(target.fileno())
-            final = entries_dir / safe
+            final = entries_dir / final_name
             os.replace(temp, final)
             stat_result = final.lstat()
             receipt = DownloadReceipt(
-                name=safe,
+                name=final.name,
                 size=size,
                 mtime=int(stat_result.st_mtime),
                 sha256=digest.hexdigest(),
@@ -290,6 +278,83 @@ class DownloadStore:
             except FileNotFoundError:
                 pass
 
+    @staticmethod
+    def _next_name(entries_dir: Path, safe: str) -> str:
+        """Choose a flat ``name (n).ext`` suffix without overwriting."""
+
+        if not (entries_dir / safe).exists():
+            return safe
+        stem, dot, extension = safe.rpartition(".")
+        if not dot:
+            stem, extension = safe, ""
+        suffix = f".{extension}" if extension else ""
+        for index in range(1, 1001):
+            candidate = f"{stem} ({index}){suffix}"
+            if not (entries_dir / candidate).exists():
+                return candidate
+        raise ValueError("download name space exhausted")
+
+    def quarantine(self, principal_id: str, name: str, source: BinaryIO) -> DownloadReceipt:
+        """Store a staged non-clean stream under the quarantine directory."""
+
+        safe = safe_name(name)
+        if safe is None:
+            raise DownloadNameError("download name is unsafe")
+        if not hasattr(source, "read"):
+            raise ValueError("source must be a binary stream")
+        self.root.mkdir(parents=True, exist_ok=True)
+        owner_root = self._owner_root(principal_id)
+        quarantine_dir = self._quarantine_dir(principal_id)
+        self._assert_under_root(quarantine_dir)
+        self._assert_directory(owner_root)
+        owner_root.mkdir(exist_ok=True)
+        self._assert_directory(quarantine_dir)
+        quarantine_dir.mkdir(exist_ok=True)
+        for index in range(1001):
+            candidate = quarantine_dir / (safe if index == 0 else f"{safe} ({index})")
+            try:
+                descriptor = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                break
+            except FileExistsError:
+                continue
+        else:
+            raise ValueError("quarantine name space exhausted")
+        digest = sha256()
+        size = 0
+        try:
+            with os.fdopen(descriptor, "wb", buffering=0) as target:
+                descriptor = -1
+                while True:
+                    chunk = source.read(64 * 1024)
+                    if not isinstance(chunk, (bytes, bytearray)):
+                        raise ValueError("source must yield bytes")
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > self.max_file_bytes:
+                        raise ValueError("download exceeds size limit")
+                    digest.update(chunk)
+                    target.write(chunk)
+                target.flush()
+                os.fsync(target.fileno())
+            metadata = candidate.lstat()
+            return DownloadReceipt(
+                name=candidate.name,
+                size=size,
+                mtime=int(metadata.st_mtime),
+                sha256=digest.hexdigest(),
+                owner=principal_id,
+            )
+        except Exception:
+            try:
+                candidate.unlink()
+            except FileNotFoundError:
+                pass
+            raise
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+
     def _write_index(self, principal_id: str, receipt: DownloadReceipt) -> None:
         owner_root = self._owner_root(principal_id)
         owner_root.mkdir(parents=True, exist_ok=True)
@@ -300,11 +365,7 @@ class DownloadStore:
                 data = {}
         except (OSError, ValueError):
             data = {}
-        data[receipt.name] = {
-            "size": receipt.size,
-            "mtime": receipt.mtime,
-            "sha256": receipt.sha256,
-        }
+        data[receipt.name] = {"size": receipt.size, "mtime": receipt.mtime, "sha256": receipt.sha256}
         temp = owner_root / f".{_INDEX_FILE}.{secrets.token_hex(8)}.tmp"
         try:
             with temp.open("x", encoding="utf-8") as handle:
@@ -319,11 +380,4 @@ class DownloadStore:
                 pass
 
 
-__all__ = [
-    "DownloadStore",
-    "DownloadEntry",
-    "DownloadNameError",
-    "DownloadReceipt",
-    "owner_key",
-    "safe_name",
-]
+__all__ = ["DownloadStore", "DownloadEntry", "DownloadNameError", "DownloadReceipt", "owner_key", "safe_name"]

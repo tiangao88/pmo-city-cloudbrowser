@@ -1,3 +1,5 @@
+"""Internal downloads service entrypoint."""
+
 from cloudbrowser.service_runtime import run_service
 
 

@@ -25,6 +25,11 @@ __all__ = [
     "deployment",
     "gateway",
     "api",
+    "downloads_client",
+    "downloads_adapter",
+    "browser_downloads",
+    "phase2",
+    "scanner",
 ]
 
-__version__ = "0.2.0-phase1"
+__version__ = "0.2.0-phase2"

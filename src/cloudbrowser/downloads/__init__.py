@@ -1,5 +1,6 @@
-"""Durable per-owner downloads boundary for the v0.2 runtime."""
+"""Internal downloads service contract and adapters."""
 
 from .service import DownloadsService
+from .store import DownloadStore, owner_key, safe_name
 
-__all__ = ["DownloadsService"]
+__all__ = ["DownloadStore", "DownloadsService", "owner_key", "safe_name"]

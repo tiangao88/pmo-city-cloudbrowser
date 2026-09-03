@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Mapping
+from typing import BinaryIO
 
 from .contracts import (
-    DownloadEntry,
     DownloadNameError,
     DownloadRequest,
     DownloadResponse,
@@ -26,44 +25,31 @@ class DownloadsService:
         """Return bounded metadata for the requesting owner's area."""
 
         entries = tuple(self._store.list_entries(identity.principal_id))
-        return DownloadResponse(
-            principal_id=identity.principal_id,
-            entries=entries,
-        )
+        return DownloadResponse(principal_id=identity.principal_id, entries=entries)
 
     def read_file(self, identity: PrincipalIdentity, name: str) -> bytes | None:
-        """Return the bounded file bytes for the requester's area."""
+        """Return bounded file bytes for the requester's area."""
 
         DownloadRequest(name=name, request_id=identity.request_id)
-        if not isinstance(name, str) or not name:
-            raise DownloadNameError("name must be non-empty text")
-        # Path separators and absolute paths are owner-escape attempts.
-        if "/" in name or "\\" in name or name.startswith("/"):
+        if "/" in name or "\\" in name or name.startswith("/") or ".." in Path(name).parts:
             raise OwnerMismatch("cross-owner paths are rejected")
-        if ".." in Path(name).parts:
-            raise OwnerMismatch("path traversal is rejected")
         safe = safe_name(name)
         if safe is None:
             raise DownloadNameError("download name is unsafe")
         return self._store.read(identity.principal_id, safe)
 
+    def ingest(self, identity: PrincipalIdentity, name: str, source: BinaryIO):
+        """Atomically ingest a stream into the server-derived owner area."""
 
-__all__ = [
-    "DownloadsService",
-    "DownloadEntry",
-    "DownloadNameError",
-    "DownloadRequest",
-    "DownloadResponse",
-    "OwnerMismatch",
-    "PrincipalIdentity",
-    "safe_name",
-]
+        return self._store.ingest(identity.principal_id, name, source)
+
+    def quarantine(self, identity: PrincipalIdentity, name: str, source: BinaryIO):
+        """Retain a non-clean stream outside the retrievable namespace."""
+
+        safe = safe_name(name)
+        if safe is None:
+            raise DownloadNameError("download name is unsafe")
+        return self._store.quarantine(identity.principal_id, safe, source)
 
 
-def health_metadata(*, identity: PrincipalIdentity | None = None) -> Mapping[str, str]:
-    """Return bounded health metadata for the downloads service."""
-
-    return {
-        "status": "ok",
-        "component": "downloads",
-    }
+__all__ = ["DownloadsService"]
