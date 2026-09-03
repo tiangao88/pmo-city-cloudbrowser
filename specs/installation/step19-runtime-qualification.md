@@ -49,6 +49,12 @@ browser qualification job and its `image-qualification-browser` artifact.
 - `cloudbrowser2.dev01.pmo.city/health` returns HTTP 200.
 - `cloudbrowser2.dev01.pmo.city/viewer` returns HTTP 401 without a viewer
   token, as expected.
+- The browser image was redeployed through Coolify from the fixed digest; the
+  stored compose and live container both reference
+  `sha256:5f00814037f4e260a001088a0e1fccd1cf66cefd0d22ba6422e72cd24f9af0c5`.
+- A controlled Coolify service restart temporarily stopped all seven child
+  containers, then returned the service to `running:healthy`; the browser
+  returned with restart count `0` and health `healthy`.
 - The public files host is **not yet wired**:
   `cloudfiles2.dev01.pmo.city/health` returns HTTP 302 to
   `https://www.on-ai.sbs/error.html`; no standalone `cloudfiles2` Coolify
@@ -68,6 +74,7 @@ browser qualification job and its `image-qualification-browser` artifact.
 5. Exercise rollback from a backed-up state and verify the rollback target and
    instance scope.
 
-No credential operation, credential rotation, or existing fleet mutation was
-performed as part of this qualification. The live stack was changed only to
-remove the stale browser singleton markers and restart the browser container.
+No credential operation or credential rotation was performed. With explicit
+redeploy approval, the live `cloudbrowser2` stack was changed to the fixed browser
+image and restarted through Coolify. Existing unrelated fleet services were not
+changed.

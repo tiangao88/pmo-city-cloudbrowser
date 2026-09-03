@@ -29,7 +29,7 @@ spec:
   imageDigests:
     router: sha256:147efd81ac5f4665a9a6f15df37858c7e4d4d41be976b1e54659f026d4ae5d84
     slotSupervisor: sha256:8f52d1b155cf047adeb7cec0a3e707d942a1f1d1e354dba8cb742f5e3b327c08
-    browser: sha256:08038826b87f4895a6ef7c41b2c35ce7cfcc473b8d05e16246cbb3efc5c2cfa4
+    browser: sha256:5f00814037f4e260a001088a0e1fccd1cf66cefd0d22ba6422e72cd24f9af0c5
     viewer: sha256:b15584f21e28c4f9bf612f4bbbfdabd542b333903388aa8cf1517e7b55a37b66
     agentControl: sha256:ab428bf50ccde5f45e67d9b987f73c8c698bef4c8337f62e9acb090b4fa37b08
     downloads: sha256:b2deaec9b7a6709f584d07d00abba77b09911b598249b319cd0c427c17b32f42

@@ -1,7 +1,7 @@
 # Image qualification — browser
 
 - image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/browser:v0.2.0-dev1`
-- digest: `sha256:08038826b87f4895a6ef7c41b2c35ce7cfcc473b8d05e16246cbb3efc5c2cfa4`
+- digest: `sha256:5f00814037f4e260a001088a0e1fccd1cf66cefd0d22ba6422e72cd24f9af0c5`
 - status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/browser/Dockerfile`
