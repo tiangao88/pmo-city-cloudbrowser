@@ -37,6 +37,7 @@ for component in (
     "agentControl",
     "downloads",
     "credentialBroker",
+    "cloudfiles",
 ):
     match = re.search(rf"^    {component}: (sha256:\S+)$", release_text, re.MULTILINE)
     if not match or not re.fullmatch(r"sha256:[0-9a-f]{64}", match.group(1)):

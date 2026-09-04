@@ -17,6 +17,7 @@ SERVICES = (
     ("agent-control", "agentControl"),
     ("downloads", "downloads"),
     ("credential-broker", "credentialBroker"),
+    ("cloudfiles", "cloudfiles"),
 )
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
