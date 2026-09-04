@@ -138,6 +138,9 @@ jobs:
             --env CB_DOWNLOADS_SHARED_SECRET=qualification-downloads-secret \
             --env CB_DOWNLOADS_BASE_URL=http://127.0.0.1:8083 \
             --env CB_DOWNLOADS_ROOT=/data/downloads \
+            --env CB_IDENTITY_LINK_SHARED_SECRET=qualification-identity-link-secret \
+            --env CB_OIDC_ISSUER=https://qualification.example.test \
+            --env CB_TINYAUTH_REALM=qualification.example.test \
             --env CB_CHROME_EXECUTABLE=/usr/bin/chromium \
             --env CB_CHROME_HTTP_PORT=9222 \
             --env CB_CHROME_HTTP_URL=http://127.0.0.1:9222 \
