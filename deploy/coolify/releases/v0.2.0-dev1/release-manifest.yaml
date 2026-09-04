@@ -26,6 +26,7 @@ spec:
     agentControl: 0.2.0-dev1
     downloads: 0.2.0-dev1
     credentialBroker: 0.2.0-dev1
+    cloudfiles: 0.2.0-phase3
   imageDigests:
     router: sha256:147efd81ac5f4665a9a6f15df37858c7e4d4d41be976b1e54659f026d4ae5d84
     slotSupervisor: sha256:8f52d1b155cf047adeb7cec0a3e707d942a1f1d1e354dba8cb742f5e3b327c08
@@ -34,6 +35,7 @@ spec:
     agentControl: sha256:ab428bf50ccde5f45e67d9b987f73c8c698bef4c8337f62e9acb090b4fa37b08
     downloads: sha256:b2deaec9b7a6709f584d07d00abba77b09911b598249b319cd0c427c17b32f42
     credentialBroker: sha256:467d7e1cd07ad350547d7a68047ad54b515131f9ae8d4cc4704aca8eb5173366
+    cloudfiles: sha256:REPLACE_BEFORE_IMAGE_QUALIFICATION
   instance:
     id: CB_INSTANCE_ID_REQUIRED
     network: CB_INSTANCE_ID_REQUIRED-network

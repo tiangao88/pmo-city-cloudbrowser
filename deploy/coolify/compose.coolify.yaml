@@ -162,6 +162,27 @@ services:
     expose:
       - "8083"
 
+  cloudfiles:
+    <<: *common
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/cloudfiles@sha256:REPLACE_BEFORE_IMAGE_QUALIFICATION
+    environment:
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_PORT: 8085
+      CB_DOWNLOADS_BASE_URL: http://downloads:8083
+      CB_DOWNLOADS_SHARED_SECRET: ${CB_DOWNLOADS_SHARED_SECRET:?CB_DOWNLOADS_SHARED_SECRET is required}
+    depends_on:
+      downloads:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8085/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    expose:
+      - "8085"
+
   credential-broker:
     <<: *common
     image: ghcr.io/tiangao88/pmo-city-cloudbrowser/credential-broker@sha256:467d7e1cd07ad350547d7a68047ad54b515131f9ae8d4cc4704aca8eb5173366

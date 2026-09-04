@@ -64,7 +64,13 @@ class CallRecord:
 
 @dataclass
 class FakeDownloads:
-    """In-memory stand-in for the internal downloads/v1 port."""
+    """In-memory stand-in for the internal downloads/v1 port.
+
+    Mirrors the production ``DownloadsClient`` port shape: the gateway
+    supplies the server-derived binding and a fresh request id, and the
+    port derives the trusted headers itself. The recorded headers therefore
+    reflect exactly what the real internal client would forward.
+    """
 
     store: dict[str, list[dict[str, object]]] = field(
         default_factory=dict,
@@ -76,8 +82,24 @@ class FakeDownloads:
     )
     calls: list[CallRecord] = field(default_factory=list, kw_only=True)
 
-    def list_files(self, binding: PrincipalBinding, headers: dict[str, str]) -> dict:
-        self.calls.append(CallRecord("/api/files", dict(headers), binding))
+    @staticmethod
+    def _trusted_headers(binding: PrincipalBinding, request_id: str) -> dict[str, str]:
+        return {
+            "X-CB-Principal": binding.principal_id,
+            "X-CB-Profile": "profile-unassigned",
+            "X-CB-Browser": "browser-unassigned",
+            "X-CB-Generation": binding.generation,
+            "X-CB-Request-Id": request_id,
+        }
+
+    def list_files(self, binding: PrincipalBinding, *, request_id: str) -> dict:
+        self.calls.append(
+            CallRecord(
+                "/api/files",
+                self._trusted_headers(binding, request_id),
+                binding,
+            )
+        )
         # If `files` was populated directly, derive a listing from it.
         files = self.files.get(binding.principal_id, {})
         if files and not self.store.get(binding.principal_id):
@@ -90,9 +112,16 @@ class FakeDownloads:
         self,
         binding: PrincipalBinding,
         name: str,
-        headers: dict[str, str],
+        *,
+        request_id: str,
     ) -> bytes | None:
-        self.calls.append(CallRecord(f"/file/{name}", dict(headers), binding))
+        self.calls.append(
+            CallRecord(
+                f"/file/{name}",
+                self._trusted_headers(binding, request_id),
+                binding,
+            )
+        )
         return self.files.get(binding.principal_id, {}).get(name)
 
 

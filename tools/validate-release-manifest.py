@@ -29,7 +29,15 @@ release_text = release.read_text(encoding="utf-8")
 if "installable: true" not in release_text:
     print("v0.2.0-dev1 release must be installable after Step 18")
     raise SystemExit(1)
-for component in ("router", "slotSupervisor", "browser", "viewer", "agentControl", "downloads", "credentialBroker"):
+for component in (
+    "router",
+    "slotSupervisor",
+    "browser",
+    "viewer",
+    "agentControl",
+    "downloads",
+    "credentialBroker",
+):
     match = re.search(rf"^    {component}: (sha256:\S+)$", release_text, re.MULTILINE)
     if not match or not re.fullmatch(r"sha256:[0-9a-f]{64}", match.group(1)):
         print(f"release component lacks an immutable digest: {component}")

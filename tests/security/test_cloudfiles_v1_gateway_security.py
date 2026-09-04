@@ -358,6 +358,39 @@ def test_t8_quarantine_files_are_not_retrievable(gateway_app) -> None:
     )
 
 
+def test_t8_quarantined_names_never_appear_in_the_public_listing(gateway_app) -> None:
+    """T8: quarantine metadata must never surface names through /api/files.
+
+    The internal downloads listing may carry quarantine metadata, but the
+    public gateway must filter it out before any response is rendered.
+    """
+    downloads = FakeDownloads(
+        store={
+            "owner-a": [
+                {"name": "invoice.pdf", "size": 5, "mtime": 1},
+                {
+                    "name": "infected.exe",
+                    "qname": "infected.exe",
+                    "size": 4,
+                    "mtime": 1,
+                    "quarantined": True,
+                },
+            ],
+        },
+    )
+    app = gateway_app(
+        downloads=downloads,
+        resolve_identity=make_resolver(subject="owner-a"),
+        server_identity={"component": "cloudfiles", "instance_id": "inst"},
+    )
+    response = wsgi_get(app, "/api/files", headers={"Accept": "application/json"})
+    assert response.status_code == 200
+    names = [entry["name"] for entry in response.json["entries"]]
+    assert names == ["invoice.pdf"], (
+        "quarantined names must never be listed publicly"
+    )
+
+
 # ---------------------------------------------------------------------------
 # T9 — Quota/retention tampering
 # ---------------------------------------------------------------------------

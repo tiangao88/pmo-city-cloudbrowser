@@ -38,6 +38,25 @@ class DownloadsClient:
     timeout_s: float = 3.0
     max_response_bytes: int = 8 * 1024 * 1024
 
+    @property
+    def ready(self) -> bool:
+        """Report whether the internal downloads dependency responds."""
+        try:
+            with urlopen(
+                Request(
+                    self.base_url.rstrip("/") + "/health",
+                    method="GET",
+                    headers={"X-CB-Trusted-Secret": self.shared_secret},
+                ),
+                timeout=self.timeout_s,
+            ) as response:
+                body = response.read(self.max_response_bytes + 1)
+                if len(body) > self.max_response_bytes:
+                    return False
+                return True
+        except (HTTPError, URLError, TimeoutError, OSError, DownloadsClientError):
+            return False
+
     def __post_init__(self) -> None:
         if not isinstance(self.base_url, str) or not self.base_url.startswith(("http://", "https://")):
             raise ValueError("base_url must be an HTTP(S) URL")

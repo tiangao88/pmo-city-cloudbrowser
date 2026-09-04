@@ -30,22 +30,30 @@ import json
 from typing import Callable, Iterable, Mapping
 
 from .contracts import (
-    FileEntry,
     InvalidName,
     NotFound,
-    OwnerMismatch,
     PrincipalBinding,
 )
 from .errors import build_error, public_code_for
-from .filenames import safe_content_disposition, validate_name
+from .filenames import validate_name
 from .gateway import build_internal_headers, sanitize_public_headers
 from .headers import bake_response_headers
 from .routes import PUBLIC_ROUTES
+from .templates import render_listing
 
 
 # ---------------------------------------------------------------------------
 # Response builders used by the tests
 # ---------------------------------------------------------------------------
+
+
+SESSION_ENVIRON_KEY = "cloudbrowser.tinyauth_session"
+"""WSGI environ key for the server-validated TinyAuth session.
+
+Only trusted edge middleware may set this key. WSGI maps request headers to
+``HTTP_*`` keys only, so a public client can never forge an environ session
+(threat T1). When the key is absent the identity resolver fails closed.
+"""
 
 
 def build_health_response(*, instance_id: str = "instance") -> dict[str, str]:
@@ -73,6 +81,10 @@ def build_listing_response(*, entries: Iterable[Mapping[str, object]]) -> dict[s
 
     bounded = []
     for entry in entries:
+        # Threat T8: quarantine metadata may exist on the internal listing,
+        # but quarantined names must never surface on the public surface.
+        if bool(entry.get("quarantined")):
+            continue
         bounded.append({
             "name": str(entry.get("name", "")),
             "size": int(entry.get("size", 0)),
@@ -104,7 +116,8 @@ class _InternalDownloads:
     def list_files(
         self,
         binding: PrincipalBinding,
-        headers: Mapping[str, str],
+        *,
+        request_id: str,
     ) -> dict[str, list[dict[str, object]]]:
         if self.files is None:
             return {"entries": []}
@@ -122,7 +135,8 @@ class _InternalDownloads:
         self,
         binding: PrincipalBinding,
         name: str,
-        headers: Mapping[str, str],
+        *,
+        request_id: str,
     ) -> bytes | None:
         if self.files is None:
             return None
@@ -145,6 +159,7 @@ class _App:
     downloads: _InternalDownloads
     resolve_identity: IdentityResolver
     server_identity: Mapping[str, str]
+    max_response_bytes: int = 8 * 1024 * 1024
 
     def __call__(self, environ: Mapping[str, object], start_response):  # noqa: ANN001
         path = str(environ.get("PATH_INFO", "/"))
@@ -168,34 +183,68 @@ class _App:
         if path == "/health":
             return self._ok(start_response, build_health_response(instance_id=str(self.server_identity.get("instance_id", "instance"))))
         if path == "/ready":
-            return self._ok(start_response, build_readiness_response(ready=self.downloads.ready))
+            return self._readiness(start_response)
         if path == "/" or path == "/api/files":
-            return self._list(cleaned=cleaned, start_response=start_response)
+            return self._list(cleaned=cleaned, environ=environ, path=path, start_response=start_response)
         if path.startswith("/file/"):
-            return self._file(cleaned=cleaned, path=path, start_response=start_response)
+            return self._file(cleaned=cleaned, environ=environ, path=path, start_response=start_response)
         return self._error_response(NotFound("route not found"), start_response,
                                      request_id=str(headers.get("X-CB-Request-Id", "req-0")))
 
     # ------------------------------------------------------------------
 
-    def _list(self, *, cleaned, start_response):
-        binding = self._resolve(cleaned)
-        internal_headers = build_internal_headers(binding=binding,
-                                                  request_id=binding.request_id or "req-0")
-        listing = self.downloads.list_files(binding=binding, headers=internal_headers)
-        return self._ok(start_response, build_listing_response(entries=listing["entries"]))
+    def _readiness(self, start_response):
+        ready = bool(getattr(self.downloads, "ready", False))
+        payload = build_readiness_response(ready=ready)
+        body = json.dumps(payload).encode("utf-8")
+        status = "200 OK" if ready else "503 Service Unavailable"
+        headers = {
+            "Content-Type": "application/json; charset=utf-8",
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+            "Referrer-Policy": "no-referrer",
+            "Server": "cloudfiles",
+        }
+        start_response(status, [(key, value) for key, value in headers.items()])
+        return [body]
 
-    def _file(self, *, cleaned, path, start_response):
-        binding = self._resolve(cleaned)
+    def _list(self, *, cleaned, environ, path, start_response):
+        binding = self._resolve(cleaned, environ)
+        listing = self.downloads.list_files(
+            binding=binding, request_id=binding.request_id or "req-0"
+        )
+        payload = build_listing_response(entries=listing["entries"])
+        if self._is_html_request(cleaned) or path == "/":
+            return self._html_listing(start_response, payload["entries"])
+        return self._ok(start_response, payload)
+
+    @staticmethod
+    def _is_html_request(headers: Mapping[str, str]) -> bool:
+        return "text/html" in str(headers.get("Accept", headers.get("accept", ""))).lower()
+
+    @staticmethod
+    def _html_listing(start_response, entries):
+        body = render_listing(entries)
+        headers = {
+            "Content-Type": "text/html; charset=utf-8",
+            "Content-Length": str(len(body)),
+            "Cache-Control": "no-store",
+            "Referrer-Policy": "no-referrer",
+            "Server": "cloudfiles",
+        }
+        start_response("200 OK", [(key, value) for key, value in headers.items()])
+        return [body]
+
+    def _file(self, *, cleaned, environ, path, start_response):
+        binding = self._resolve(cleaned, environ)
         name = path[len("/file/"):]
         valid = validate_name(name)
         if valid is None:
             return self._error_response(InvalidName("invalid filename"), start_response,
                                          request_id=binding.request_id or "req-0")
-        internal_headers = build_internal_headers(binding=binding,
-                                                  request_id=binding.request_id or "req-0")
-        content = self.downloads.read_file(binding=binding, name=valid,
-                                            headers=internal_headers)
+        content = self.downloads.read_file(
+            binding=binding, name=valid, request_id=binding.request_id or "req-0"
+        )
         if content is None:
             return self._error_response(NotFound("file not found"), start_response,
                                          request_id=binding.request_id or "req-0")
@@ -206,12 +255,19 @@ class _App:
 
     # ------------------------------------------------------------------
 
-    def _resolve(self, cleaned):
+    def _resolve(self, cleaned, environ):
         # Pass a bounded context to the resolver; the resolver MUST NOT look
         # at headers for identity (threat T1). The resolver returns a
         # PrincipalBinding or raises a CloudFilesError.
+        #
+        # The session comes exclusively from the trusted edge middleware via
+        # the non-HTTP environ key (SESSION_ENVIRON_KEY). WSGI never maps
+        # request headers into that key, so a public client cannot forge it.
+        session = None
+        if isinstance(environ, dict):
+            session = environ.get(SESSION_ENVIRON_KEY)
         ctx = {
-            "session": cleaned.get("session"),
+            "session": session,
             "request_id": str(cleaned.get("X-CB-Request-Id", "req-0")),
             "headers": cleaned,
         }
@@ -221,8 +277,11 @@ class _App:
 
     def _ok(self, start_response, payload):
         body = json.dumps(payload).encode("utf-8")
+        if len(body) > self.max_response_bytes:
+            raise ValueError("response exceeds configured size limit")
         headers = {
             "Content-Type": "application/json; charset=utf-8",
+            "Content-Length": str(len(body)),
             "Cache-Control": "no-store",
             "Referrer-Policy": "no-referrer",
             "Server": "cloudfiles",
@@ -234,6 +293,9 @@ class _App:
         code = public_code_for(exc)
         payload = build_error(code=code, request_id=request_id)
         body = json.dumps(payload).encode("utf-8")
+        if len(body) > self.max_response_bytes:
+            body = json.dumps(build_error(code="internal_error", request_id="req-0")).encode("utf-8")
+            code = "internal_error"
         status = _status_for(code)
         headers = {
             "Content-Type": "application/json; charset=utf-8",
@@ -270,6 +332,7 @@ def create_cloudfiles_app(
     downloads,
     resolve_identity: IdentityResolver,
     server_identity: Mapping[str, str],
+    max_response_bytes: int = 8 * 1024 * 1024,
 ) -> object:
     """Construct the public WSGI application.
 
@@ -279,8 +342,11 @@ def create_cloudfiles_app(
 
     if not callable(resolve_identity):
         raise TypeError("resolve_identity must be callable")
+    if not isinstance(max_response_bytes, int) or max_response_bytes <= 0:
+        raise ValueError("max_response_bytes must be positive")
     return _App(downloads=downloads, resolve_identity=resolve_identity,
-                  server_identity=dict(server_identity))
+                  server_identity=dict(server_identity),
+                  max_response_bytes=max_response_bytes)
 
 
 __all__ = [
@@ -291,4 +357,5 @@ __all__ = [
     "Downloads",
     "safe_content_disposition",
     "PUBLIC_ROUTES",
+    "SESSION_ENVIRON_KEY",
 ]

@@ -14,6 +14,7 @@ SERVICES = (
     "agent-control",
     "downloads",
     "credential-broker",
+    "cloudfiles",
 )
 
 
@@ -72,6 +73,7 @@ def test_release_manifest_lists_the_same_seven_image_components() -> None:
         "agentControl:",
         "downloads:",
         "credentialBroker:",
+        "cloudfiles:",
     }
     image_section = manifest.split("  imageDigests:", 1)[1]
     for name in component_names:
@@ -79,3 +81,4 @@ def test_release_manifest_lists_the_same_seven_image_components() -> None:
         assert name in image_section
     assert "installable: true" in manifest
     assert "REPLACE_BEFORE_IMAGE_PUBLICATION" not in manifest
+    assert "REPLACE_BEFORE_IMAGE_QUALIFICATION" in manifest

@@ -84,13 +84,14 @@ def is_retrievable(
 def erase_principal(*, principal: str, store_root: Path) -> None:
     """Erase all references to `principal` under `store_root`.
 
-    Implementation lives in `store.py`; this function is a typed policy
-    surface that the red tests can call without depending on the store
-    implementation details.
+    Delegates to the GDPR erasure facade, which removes the durable hashed
+    owner root and the prior raw-principal root (threat T10) and emits a
+    redacted audit event.
     """
 
-    from .store import DownloadStore
-    DownloadStore(store_root=store_root).erase(principal=principal)
+    from .erasure import erase_principal as _erase
+
+    _erase(principal=principal, store_root=store_root)
 
 
 def authorize_public_request(context: Mapping[str, object]) -> PrincipalBinding:

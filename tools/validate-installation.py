@@ -14,6 +14,7 @@ SERVICES = (
     "agent-control",
     "downloads",
     "credential-broker",
+    "cloudfiles",
 )
 MANIFEST = ROOT / "deploy" / "coolify" / "releases" / "v0.2.0-dev1" / "release-manifest.yaml"
 COMPOSE = ROOT / "deploy" / "coolify" / "compose.coolify.yaml"

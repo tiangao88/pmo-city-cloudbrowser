@@ -13,6 +13,7 @@ SERVICES = (
     "agent-control",
     "downloads",
     "credential-broker",
+    "cloudfiles",
 )
 
 

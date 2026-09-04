@@ -4,7 +4,16 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SERVICES = ("router", "slot-supervisor", "browser", "viewer", "agent-control", "downloads", "credential-broker")
+SERVICES = (
+    "router",
+    "slot-supervisor",
+    "browser",
+    "viewer",
+    "agent-control",
+    "downloads",
+    "credential-broker",
+    "cloudfiles",
+)
 
 
 def main() -> None:

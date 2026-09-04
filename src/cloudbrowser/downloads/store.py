@@ -19,6 +19,7 @@ from .contracts import DownloadEntry, DownloadNameError, DownloadReceipt
 _OWNER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@:+-]{0,255}$")
 _NAME_MAX = 255
 _MAX_DEFAULT = 5 * 1024 * 1024 * 1024
+_QUOTA_DEFAULT = 5 * 1024 * 1024 * 1024  # 5 GB per principal
 _QUARANTINE_DIR = "quarantine"
 _ENTRIES_DIR = "entries"
 _INDEX_FILE = ".index.json"
@@ -63,6 +64,7 @@ class DownloadStore:
     root: Path
     max_file_bytes: int = _MAX_DEFAULT
     max_entries: int = 1000
+    quota_bytes: int = _QUOTA_DEFAULT
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "root", Path(self.root))
@@ -70,6 +72,8 @@ class DownloadStore:
             raise ValueError("max_file_bytes must be positive")
         if not isinstance(self.max_entries, int) or self.max_entries <= 0:
             raise ValueError("max_entries must be positive")
+        if not isinstance(self.quota_bytes, int) or self.quota_bytes <= 0:
+            raise ValueError("quota_bytes must be positive")
 
     def _owner_root(self, principal_id: str) -> Path:
         if not isinstance(principal_id, str) or not _OWNER_PATTERN.fullmatch(principal_id):
@@ -260,6 +264,11 @@ class DownloadStore:
                     target.write(chunk)
                 target.flush()
                 os.fsync(target.fileno())
+            # Quota enforcement precedes publication: nothing is made
+            # retrievable until the per-principal usage would stay within
+            # quota (threat T9).
+            if self.usage_bytes(principal_id) + size > self.quota_bytes:
+                raise ValueError("owner would exceed per-principal quota")
             final = entries_dir / final_name
             os.replace(temp, final)
             stat_result = final.lstat()
@@ -278,10 +287,97 @@ class DownloadStore:
             except FileNotFoundError:
                 pass
 
+    def usage_bytes(self, principal_id: str) -> int:
+        """Return the total retrievable bytes stored for one principal.
+
+        Counts only regular, non-symlink entry files in the canonical and
+        prior layouts. Quarantine and staging files never count toward the
+        retrievable quota.
+        """
+
+        if not isinstance(principal_id, str) or not _OWNER_PATTERN.fullmatch(principal_id):
+            raise ValueError("principal_id must be bounded non-empty text")
+        total = 0
+        for entries_dir in self._storage_dirs(principal_id):
+            try:
+                children = entries_dir.iterdir()
+            except (FileNotFoundError, NotADirectoryError):
+                continue
+            for child in children:
+                if safe_name(child.name) is None:
+                    # Hidden files, staging temps, and unsafe names are not
+                    # retrievable and never count toward the quota.
+                    continue
+                try:
+                    metadata = child.lstat()
+                except OSError:
+                    continue
+                if not stat_module.S_ISREG(metadata.st_mode):
+                    continue
+                total += int(metadata.st_size)
+        return total
+
+    def purge(self, principal_id: str, *, older_than_ts: float) -> list[str]:
+        """Delete retrievable entries older than ``older_than_ts``.
+
+        Returns the removed safe names (deduplicated, sorted) so the caller
+        can emit a redacted audit summary. Quarantine is never purged here.
+        """
+
+        if not isinstance(principal_id, str) or not _OWNER_PATTERN.fullmatch(principal_id):
+            raise ValueError("principal_id must be bounded non-empty text")
+        removed: list[str] = []
+        seen: set[str] = set()
+        for entries_dir in self._storage_dirs(principal_id):
+            try:
+                children = list(entries_dir.iterdir())
+            except (FileNotFoundError, NotADirectoryError):
+                continue
+            for child in children:
+                if child.name in seen or safe_name(child.name) is None:
+                    continue
+                try:
+                    metadata = child.lstat()
+                except OSError:
+                    continue
+                if not stat_module.S_ISREG(metadata.st_mode):
+                    continue
+                if int(metadata.st_mtime) >= older_than_ts:
+                    continue
+                seen.add(child.name)
+                try:
+                    child.unlink()
+                except OSError:
+                    continue
+                removed.append(child.name)
+        removed.sort()
+        return removed
+
+    def erase(self, principal_id: str) -> None:
+        """Remove every durable reference to a principal.
+
+        Deletes the canonical hashed owner root and the prior raw-principal
+        root without following symlinks. Missing areas are a successful
+        no-op so erasure is idempotent (threat T10).
+        """
+
+        if not isinstance(principal_id, str) or not _OWNER_PATTERN.fullmatch(principal_id):
+            raise ValueError("principal_id must be bounded non-empty text")
+        self.root.mkdir(parents=True, exist_ok=True)
+        for owner_root in (self._owner_root(principal_id), self._prior_owner_root(principal_id)):
+            try:
+                self._assert_directory(owner_root)
+            except ValueError:
+                # Not a directory (missing or unsafe): nothing to erase.
+                continue
+            try:
+                _rmtree(owner_root)
+            except FileNotFoundError:
+                continue
+
     @staticmethod
     def _next_name(entries_dir: Path, safe: str) -> str:
         """Choose a flat ``name (n).ext`` suffix without overwriting."""
-
         if not (entries_dir / safe).exists():
             return safe
         stem, dot, extension = safe.rpartition(".")
@@ -378,6 +474,24 @@ class DownloadStore:
                 temp.unlink()
             except FileNotFoundError:
                 pass
+
+
+def _rmtree(path: Path) -> None:
+    """Recursively remove a directory tree without following symlinks."""
+
+    for child in path.iterdir():
+        try:
+            metadata = child.lstat()
+        except FileNotFoundError:
+            continue
+        if stat_module.S_ISLNK(metadata.st_mode):
+            child.unlink()
+            continue
+        if stat_module.S_ISDIR(metadata.st_mode):
+            _rmtree(child)
+        else:
+            child.unlink()
+    path.rmdir()
 
 
 __all__ = ["DownloadStore", "DownloadEntry", "DownloadNameError", "DownloadReceipt", "owner_key", "safe_name"]

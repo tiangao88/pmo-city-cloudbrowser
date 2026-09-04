@@ -48,21 +48,38 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _is_raw_string(value: str) -> bool:
+    """Return True when a string carries a raw identity or file reference."""
+
+    return bool(
+        _RAW_PRINCIPAL.search(value)
+        or _RAW_PATH.search(value)
+        or _RAW_FILENAME.search(value)
+    )
+
+
 def redact_event(event: dict[str, object]) -> dict[str, object]:
     """Return a bounded, redacted view of `event`.
 
     Removes any value containing an `@` (email), an absolute path, or a file
-    extension. Returns a copy with only bounded fields.
+    extension. List values are scrubbed item by item (a purge result carries
+    raw filenames). Returns a copy with only bounded fields.
     """
 
     safe: dict[str, object] = {}
     for key, value in event.items():
-        if not isinstance(value, str):
+        if isinstance(value, str):
+            if _is_raw_string(value):
+                continue
             safe[key] = value
             continue
-        if _RAW_PRINCIPAL.search(value) or _RAW_PATH.search(value):
-            continue
-        if _RAW_FILENAME.search(value):
+        if isinstance(value, (list, tuple)):
+            bounded_items = [
+                item
+                for item in value
+                if not (isinstance(item, str) and _is_raw_string(item))
+            ]
+            safe[key] = list(bounded_items)
             continue
         safe[key] = value
     return safe

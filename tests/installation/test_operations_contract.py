@@ -22,3 +22,26 @@ def test_operations_do_not_fall_back_to_another_installation():
         text = path.read_text(encoding="utf-8")
         assert "CB_INSTANCE_ID or" not in text
         assert "default=" not in text or "instance-id" not in text
+
+
+def test_cloudfiles_lifecycle_runbook_covers_phase4_guarantees():
+    runbook = OPERATIONS / "cloudfiles-lifecycle.md"
+    assert runbook.is_file(), "missing CloudFiles lifecycle runbook"
+    text = runbook.read_text(encoding="utf-8").lower()
+    for marker in (
+        "quota",
+        "retention",
+        "erasure",
+        "backup",
+        "restore",
+        "clamav",
+        "eu residency",
+        "durable volume",
+        "non-root",
+        "fail closed",
+    ):
+        assert marker in text, f"runbook missing operational marker: {marker}"
+    for forbidden in ("http://", "https://", "sha256:"):
+        assert forbidden not in text, (
+            f"runbook must not embed credentials or digests: {forbidden}"
+        )

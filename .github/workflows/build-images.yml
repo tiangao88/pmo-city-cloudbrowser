@@ -64,6 +64,10 @@ jobs:
             dockerfile: services/credential-broker/Dockerfile
             port: 8084
             health_path: /health
+          - name: cloudfiles
+            dockerfile: services/cloudfiles/Dockerfile
+            port: 8085
+            health_path: /health
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -128,6 +132,7 @@ jobs:
             --env CB_VIEWER_TOKEN_SECRET=qualification-viewer-secret \
             --env CB_AGENT_CONTROL_SHARED_SECRET=qualification-agent-secret \
             --env CB_DOWNLOADS_SHARED_SECRET=qualification-downloads-secret \
+            --env CB_DOWNLOADS_BASE_URL=http://127.0.0.1:8083 \
             --env CB_DOWNLOADS_ROOT=/data/downloads \
             --env CB_CHROME_EXECUTABLE=/usr/bin/chromium \
             --env CB_CHROME_HTTP_PORT=9222 \

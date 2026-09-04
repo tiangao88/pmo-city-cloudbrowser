@@ -18,6 +18,7 @@ KNOWN_COMPONENTS = {
     "agent-control",
     "downloads",
     "credential-broker",
+    "cloudfiles",
 }
 _REQUIRED_BINDING_ENV = ("CB_PRINCIPAL_ID", "CB_BROWSER_ID", "CB_BINDING_GENERATION")
 
@@ -154,5 +155,10 @@ def run_service(component: str) -> None:
             server.serve_forever()
         finally:
             server.server_close()
+        return
+    if component == "cloudfiles":
+        from cloudbrowser.cloudfiles_entrypoint import main
+
+        main()
         return
     serve_health(component=component, instance_id=instance_id, release_version=release_version, port=port)

@@ -41,6 +41,13 @@ class Scanner(Protocol):
         """Return ``clean`` or a non-clean result such as ``infected``."""
 
 
+class QuarantineNotifier(Protocol):
+    """Bounded quarantine notification seam (threat T14)."""
+
+    def notify_quarantine(self, *, event: dict[str, object]) -> None:
+        """Deliver a redacted quarantine event. Never raises into ingest."""
+
+
 class DownloadsPort(Protocol):
     """Typed internal downloads publication port."""
 
@@ -76,6 +83,7 @@ class IngestPipeline:
     temp_root: Path
     max_bytes: int = 1024 * 1024 * 1024
     chunk_bytes: int = 64 * 1024
+    notifier: QuarantineNotifier | None = None
 
     def __post_init__(self) -> None:
         self.temp_root = Path(self.temp_root)
@@ -143,6 +151,13 @@ class IngestPipeline:
                         sha256=digest.hexdigest(),
                     )
                     status = "quarantined"
+                    self._notify_quarantine(
+                        principal=binding.principal_id,
+                        name=safe_name,
+                        size=size,
+                        sha256=digest.hexdigest(),
+                        request_id=binding.request_id,
+                    )
             receipt_name = getattr(receipt, "name", safe_name)
             return IngestReceipt(
                 name=str(receipt_name),
@@ -156,6 +171,37 @@ class IngestPipeline:
                 temp.unlink()
             except FileNotFoundError:
                 pass
+
+
+    def _notify_quarantine(
+        self,
+        *,
+        principal: str,
+        name: str,
+        size: int,
+        sha256: str,
+        request_id: str,
+    ) -> None:
+        """Emit a redacted quarantine event when a notifier is configured.
+
+        Only hashes and bounded fields leave the pipeline (threat T14). A
+        notifier failure must never fail the ingest itself.
+        """
+        if self.notifier is None:
+            return
+        from .identity import hash_principal
+
+        event = {
+            "request_id": request_id,
+            "principal_hash": hash_principal(principal),
+            "name_hash": hashlib.sha256(name.encode("utf-8")).hexdigest(),
+            "size": size,
+            "sha256": sha256,
+        }
+        try:
+            self.notifier.notify_quarantine(event=event)
+        except Exception:  # noqa: BLE001 - notification must not break ingest
+            return
 
 
 def bounded_copy(*, src, max_bytes: int, chunk_bytes: int = 64 * 1024):
@@ -192,6 +238,7 @@ __all__ = [
     "IngestPipeline",
     "IngestReceipt",
     "IngestReceiptError",
+    "QuarantineNotifier",
     "Scanner",
     "TooLarge",
     "bounded_copy",

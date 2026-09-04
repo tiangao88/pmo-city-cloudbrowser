@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO
 
@@ -18,8 +19,11 @@ from .store import DownloadStore, safe_name
 class DownloadsService:
     """Resolve one bounded owner area per server-derived identity."""
 
-    def __init__(self, *, store_root: Path) -> None:
-        self._store = DownloadStore(Path(store_root))
+    def __init__(self, *, store_root: Path, quota_bytes: int | None = None) -> None:
+        if quota_bytes is None:
+            self._store = DownloadStore(Path(store_root))
+        else:
+            self._store = DownloadStore(Path(store_root), quota_bytes=quota_bytes)
 
     def list_files(self, identity: PrincipalIdentity) -> DownloadResponse:
         """Return bounded metadata for the requesting owner's area."""
@@ -50,6 +54,34 @@ class DownloadsService:
         if safe is None:
             raise DownloadNameError("download name is unsafe")
         return self._store.quarantine(identity.principal_id, safe, source)
+
+    # ------------------------------------------------------------------
+    # Operational lifecycle (Phase 4): quota, retention purge, erasure
+    # ------------------------------------------------------------------
+
+    def usage_bytes(self, principal_id: str) -> int:
+        """Return the retrievable bytes stored for one principal."""
+
+        return self._store.usage_bytes(principal_id)
+
+    def purge_expired(
+        self, principal_id: str, *, older_than: datetime | None = None
+    ) -> list[str]:
+        """Purge retrievable entries older than the retention cutoff.
+
+        The default cutoff is 90 days before the current UTC time. Returns
+        the removed safe names for a redacted audit summary.
+        """
+
+        moment = older_than or datetime.now(timezone.utc)
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        return self._store.purge(principal_id, older_than_ts=moment.timestamp())
+
+    def erase(self, principal_id: str) -> None:
+        """Erase every durable reference to a principal (idempotent)."""
+
+        self._store.erase(principal_id)
 
 
 __all__ = ["DownloadsService"]
