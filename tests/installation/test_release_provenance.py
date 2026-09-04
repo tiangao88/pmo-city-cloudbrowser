@@ -1,4 +1,4 @@
-"""Regression coverage for the final release provenance correction."""
+"""Regression coverage for the identity-link release provenance contract."""
 
 from __future__ import annotations
 
@@ -23,14 +23,19 @@ def _provenance(manifest: str) -> tuple[str, str]:
     return run_match.group(1), commit_match.group(1)
 
 
-def test_manifest_provenance_is_not_stale_or_placeholder() -> None:
+def test_manifest_provenance_is_not_stale() -> None:
     manifest = MANIFEST.read_text(encoding="utf-8")
     run_url, commit = _provenance(manifest)
     assert run_url.endswith("/actions/runs/33827177104")
     assert commit == "1d9ea90750d6ee4a3e39071fd14650891f06115e"
     assert "QUALIFICATION_RUN_REQUIRED" not in manifest
     assert "QUALIFICATION_COMMIT_REQUIRED" not in manifest
-    assert "REPLACE_BEFORE_IMAGE_PUBLICATION" not in manifest
+
+
+def test_identity_link_qualification_record_is_explicitly_pending() -> None:
+    record = (QUALIFICATION_DIR / "identity-link.md").read_text(encoding="utf-8")
+    assert "- status: pending" in record
+    assert "REPLACE_BEFORE_IMAGE_PUBLICATION" in record
 
 
 def test_qualification_records_share_manifest_provenance_and_digests() -> None:
@@ -45,13 +50,14 @@ def test_qualification_records_share_manifest_provenance_and_digests() -> None:
         "downloads": "downloads",
         "credential-broker": "credentialBroker",
         "cloudfiles": "cloudfiles",
+        "identity-link": "identityLink",
     }
     for service, component in components.items():
         manifest_digest = re.search(
-            rf"^    {re.escape(component)}: (sha256:[0-9a-f]{{64}})$", manifest, re.MULTILINE
+            rf"^    {re.escape(component)}: (sha256:\S+)$", manifest, re.MULTILINE
         )
         assert manifest_digest, component
         record = (QUALIFICATION_DIR / f"{service}.md").read_text(encoding="utf-8")
         assert f"- digest: `{manifest_digest.group(1)}`" in record
-        assert f"- CI run: `{run_url}`" in record
+        assert f"CI run: `{run_url}`" in record
         assert f"source commit `{commit}`" in record

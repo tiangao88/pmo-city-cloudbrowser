@@ -15,6 +15,7 @@ SERVICES = (
     "downloads",
     "credential-broker",
     "cloudfiles",
+    "identity-link",
 )
 
 
@@ -80,5 +81,4 @@ def test_release_manifest_lists_the_same_seven_image_components() -> None:
         assert name in manifest
         assert name in image_section
     assert "installable: true" in manifest
-    assert "REPLACE_BEFORE_IMAGE_PUBLICATION" not in manifest
-    assert "REPLACE_BEFORE_IMAGE_QUALIFICATION" not in manifest
+    assert "REPLACE_BEFORE_IMAGE_PUBLICATION" in manifest

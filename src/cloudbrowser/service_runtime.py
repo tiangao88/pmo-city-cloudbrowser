@@ -19,6 +19,7 @@ KNOWN_COMPONENTS = {
     "downloads",
     "credential-broker",
     "cloudfiles",
+    "identity-link",
 }
 _REQUIRED_BINDING_ENV = ("CB_PRINCIPAL_ID", "CB_BROWSER_ID", "CB_BINDING_GENERATION")
 
@@ -89,9 +90,29 @@ def run_service(component: str) -> None:
             ttl_s = float(os.environ.get("CB_VIEWER_SESSION_TTL_S", "360"))
         except ValueError as exc:
             raise SystemExit("CB_VIEWER_SESSION_TTL_S must be a number") from exc
+        edge_mode = os.environ.get("CB_EDGE_AUTH") or None
+        if edge_mode is not None and edge_mode != "traefik-forwardauth":
+            raise SystemExit("CB_EDGE_AUTH must be 'traefik-forwardauth' when set")
+        # All service binaries use the shared PMO identity-link resolver when
+        # the authenticated edge mode is enabled. Without it, the viewer is
+        # deliberately bearer-only.
+        identity_client = None
+        if edge_mode == "traefik-forwardauth":
+            from cloudbrowser.identity_links import build_identity_link_client
+
+            identity_client = build_identity_link_client()
         store = ViewerSessionStore(clock=time.time)
-        viewer = AuthenticatedViewer(store, token_secret=secret.encode("utf-8"), ttl_s=ttl_s)
-        server = create_viewer_server(viewer, address=("0.0.0.0", port))
+        viewer = AuthenticatedViewer(
+            store,
+            token_secret=secret.encode("utf-8"),
+            ttl_s=ttl_s,
+            identity_client=identity_client,
+        )
+        server = create_viewer_server(
+            viewer,
+            address=("0.0.0.0", port),
+            allow_edge_identity=edge_mode == "traefik-forwardauth",
+        )
         try:
             server.serve_forever()
         finally:
@@ -160,5 +181,21 @@ def run_service(component: str) -> None:
         from cloudbrowser.cloudfiles_entrypoint import main
 
         main()
+        return
+    if component == "identity-link":
+        from cloudbrowser.identity_link_service import IdentityLinkStore, create_identity_link_server
+
+        database_path = os.environ.get("CB_IDENTITY_LINK_DB", "/data/identity-links.sqlite3")
+        server = create_identity_link_server(
+            IdentityLinkStore(database_path),
+            shared_secret=_required_env("CB_IDENTITY_LINK_SHARED_SECRET"),
+            oidc_issuer=_required_env("CB_OIDC_ISSUER"),
+            tinyauth_realm=_required_env("CB_TINYAUTH_REALM"),
+            address=("0.0.0.0", port),
+        )
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
         return
     serve_health(component=component, instance_id=instance_id, release_version=release_version, port=port)

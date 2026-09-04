@@ -120,6 +120,15 @@ services:
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
       CB_PORT: 8082
       CB_VIEWER_TOKEN_SECRET: ${CB_VIEWER_TOKEN_SECRET:?CB_VIEWER_TOKEN_SECRET is required}
+      # Trust the Traefik/TinyAuth forward-auth identity headers
+      # (remote-user/email/name/groups, copied by tinyauth-pmo@file) for the
+      # public employee surface. Must only be set behind the authenticated
+      # proxy; unset keeps the bearer-token-only behavior.
+      CB_EDGE_AUTH: ${CB_EDGE_AUTH:?CB_EDGE_AUTH is required for the deployed authenticated edge}
+      CB_IDENTITY_LINK_BASE_URL: http://identity-link:8091
+      CB_IDENTITY_LINK_SHARED_SECRET: ${CB_IDENTITY_LINK_SHARED_SECRET:?CB_IDENTITY_LINK_SHARED_SECRET is required}
+      CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:?CB_OIDC_ISSUER is required}
+      CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:?CB_TINYAUTH_REALM is required}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8082/health', timeout=3)"]
       interval: 10s
@@ -172,9 +181,20 @@ services:
       CB_PORT: 8085
       CB_DOWNLOADS_BASE_URL: http://downloads:8083
       CB_DOWNLOADS_SHARED_SECRET: ${CB_DOWNLOADS_SHARED_SECRET:?CB_DOWNLOADS_SHARED_SECRET is required}
+      # Translate the Traefik/TinyAuth forward-auth identity headers into the
+      # validated gateway session. Must only be set behind the authenticated
+      # proxy (tinyauth-pmo@file + PMOC_Users gate on this host); unset keeps
+      # the gateway fail-closed for every protected route.
+      CB_EDGE_AUTH: ${CB_EDGE_AUTH:?CB_EDGE_AUTH is required for the deployed authenticated edge}
+      CB_IDENTITY_LINK_BASE_URL: http://identity-link:8091
+      CB_IDENTITY_LINK_SHARED_SECRET: ${CB_IDENTITY_LINK_SHARED_SECRET:?CB_IDENTITY_LINK_SHARED_SECRET is required}
+      CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:?CB_OIDC_ISSUER is required}
+      CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:?CB_TINYAUTH_REALM is required}
     depends_on:
       downloads:
         condition: service_started
+      identity-link:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8085/health', timeout=3)"]
       interval: 10s
@@ -183,6 +203,25 @@ services:
       start_period: 5s
     expose:
       - "8085"
+
+  identity-link:
+    <<: *common
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/identity-link@sha256:REPLACE_BEFORE_IMAGE_PUBLICATION
+    environment:
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_PORT: 8091
+      CB_IDENTITY_LINK_SHARED_SECRET: ${CB_IDENTITY_LINK_SHARED_SECRET:?CB_IDENTITY_LINK_SHARED_SECRET is required}
+      CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:?CB_OIDC_ISSUER is required}
+      CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:?CB_TINYAUTH_REALM is required}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    volumes:
+      - identity-link-state:/data
 
   credential-broker:
     <<: *common
@@ -215,3 +254,5 @@ volumes:
     name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-downloads
   broker-state:
     name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-broker-state
+  identity-link-state:
+    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-identity-link-state

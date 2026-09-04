@@ -13,6 +13,7 @@ SERVICES = (
     "downloads",
     "credential-broker",
     "cloudfiles",
+    "identity-link",
 )
 
 

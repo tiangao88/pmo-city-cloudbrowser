@@ -15,11 +15,15 @@ spec:
     slotSupervisor: 0.1.0
     viewer: 0.1.0
     credentialBroker: 0.1.0
+    cloudfiles: 0.1.0
+    identityLink: 0.1.0
   imageDigests:
     router: sha256:REPLACE_BEFORE_DEPLOY
     slotSupervisor: sha256:REPLACE_BEFORE_DEPLOY
     viewer: sha256:REPLACE_BEFORE_DEPLOY
     credentialBroker: sha256:REPLACE_BEFORE_DEPLOY
+    cloudfiles: sha256:REPLACE_BEFORE_DEPLOY
+    identityLink: sha256:REPLACE_BEFORE_DEPLOY
   instance:
     id: cloudbrowser-dev-v01
     network: cloudbrowser-dev-v01

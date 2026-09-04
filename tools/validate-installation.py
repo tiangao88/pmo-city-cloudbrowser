@@ -15,6 +15,7 @@ SERVICES = (
     "downloads",
     "credential-broker",
     "cloudfiles",
+    "identity-link",
 )
 MANIFEST = ROOT / "deploy" / "coolify" / "releases" / "v0.2.0-dev1" / "release-manifest.yaml"
 COMPOSE = ROOT / "deploy" / "coolify" / "compose.coolify.yaml"
@@ -83,10 +84,23 @@ def main() -> None:
         fail("release manifest is missing a concrete qualification commit")
     if "QUALIFICATION_RUN_REQUIRED" in manifest or "QUALIFICATION_COMMIT_REQUIRED" in manifest:
         fail("release manifest contains provenance placeholders")
-    for component in ("router", "slotSupervisor", "browser", "viewer", "agentControl", "downloads", "credentialBroker"):
+    for component in (
+        "router",
+        "slotSupervisor",
+        "browser",
+        "viewer",
+        "agentControl",
+        "downloads",
+        "credentialBroker",
+        "cloudfiles",
+    ):
         match = re.search(rf"^    {component}: (sha256:\S+)$", manifest, re.MULTILINE)
         if not match or not DIGEST.fullmatch(match.group(1)):
             fail(f"{component} does not have a valid immutable digest")
+    if "identityLink" in manifest:
+        match = re.search(r"^    identityLink: (sha256:\S+)$", manifest, re.MULTILINE)
+        if not match or "REPLACE_BEFORE_IMAGE_PUBLICATION" not in match.group(1):
+            fail("identityLink qualification must be completed before installation")
     print("installation validation: PASS")
 
 

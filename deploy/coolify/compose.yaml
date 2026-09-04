@@ -1,8 +1,8 @@
 name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
 
 # The internal downloads service is not the public CloudFiles product surface.
-# The public gateway will be added as a separate service after its contract,
-# implementation, image, and end-to-end qualification are complete.
+# CloudFiles is the authenticated public gateway; identity-link is its private
+# PMO-owned identity authority.
 
 x-common: &common
   restart: unless-stopped
@@ -117,6 +117,14 @@ services:
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
       CB_PORT: 8082
       CB_VIEWER_TOKEN_SECRET: ${CB_VIEWER_TOKEN_SECRET:?CB_VIEWER_TOKEN_SECRET is required}
+      # Opt into trusting the Traefik/TinyAuth forward-auth identity headers
+      # ONLY when running behind the authenticated proxy (deployed variant).
+      # Unset here so local/CI runs keep the bearer-token-only behavior.
+      CB_EDGE_AUTH: ${CB_EDGE_AUTH:-}
+      CB_IDENTITY_LINK_BASE_URL: http://identity-link:8091
+      CB_IDENTITY_LINK_SHARED_SECRET: ${CB_IDENTITY_LINK_SHARED_SECRET:-}
+      CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:-}
+      CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8082/health', timeout=3)"]
       interval: 10s
@@ -162,9 +170,16 @@ services:
       CB_PORT: 8085
       CB_DOWNLOADS_BASE_URL: http://downloads:8083
       CB_DOWNLOADS_SHARED_SECRET: ${CB_DOWNLOADS_SHARED_SECRET:?CB_DOWNLOADS_SHARED_SECRET is required}
+      CB_EDGE_AUTH: ${CB_EDGE_AUTH:-}
+      CB_IDENTITY_LINK_BASE_URL: http://identity-link:8091
+      CB_IDENTITY_LINK_SHARED_SECRET: ${CB_IDENTITY_LINK_SHARED_SECRET:-}
+      CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:-}
+      CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:-}
     depends_on:
       downloads:
         condition: service_started
+      identity-link:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8085/health', timeout=3)"]
       interval: 10s
@@ -173,6 +188,27 @@ services:
       start_period: 5s
     expose:
       - "8085"
+
+  identity-link:
+    <<: *common
+    build:
+      context: ../..
+      dockerfile: services/identity-link/Dockerfile
+    environment:
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_PORT: 8091
+      CB_IDENTITY_LINK_SHARED_SECRET: ${CB_IDENTITY_LINK_SHARED_SECRET:?CB_IDENTITY_LINK_SHARED_SECRET is required}
+      CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:?CB_OIDC_ISSUER is required}
+      CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:?CB_TINYAUTH_REALM is required}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    volumes:
+      - identity-link-state:/data
 
   credential-broker:
     <<: *common
@@ -191,7 +227,6 @@ services:
       start_period: 5s
     volumes:
       - broker-state:/data/state
-
 networks:
   cloudbrowser:
     name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-network
@@ -207,3 +242,5 @@ volumes:
     name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-downloads
   broker-state:
     name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-broker-state
+  identity-link-state:
+    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-identity-link-state

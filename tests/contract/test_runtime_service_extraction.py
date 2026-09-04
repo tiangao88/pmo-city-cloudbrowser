@@ -19,6 +19,8 @@ RUNTIME_SERVICES = (
     "agent-control",
     "downloads",
     "credential-broker",
+    "cloudfiles",
+    "identity-link",
 )
 
 

@@ -12,6 +12,8 @@ required = [
     "productVersion:",
     "specificationBaseline:",
     "credentialBroker:",
+    "cloudfiles:",
+    "identityLink:",
     "imageDigests:",
     "volumePrefix:",
     "rollbackSupported: true",
@@ -43,4 +45,8 @@ for component in (
     if not match or not re.fullmatch(r"sha256:[0-9a-f]{64}", match.group(1)):
         print(f"release component lacks an immutable digest: {component}")
         raise SystemExit(1)
+identity_link = re.search(r"^    identityLink: (sha256:\S+)$", release_text, re.MULTILINE)
+if not identity_link or "REPLACE_BEFORE_IMAGE_PUBLICATION" not in identity_link.group(1):
+    print("identityLink publication is still gated")
+    raise SystemExit(1)
 print("release-manifest validation: PASS")

@@ -64,6 +64,10 @@ jobs:
             dockerfile: services/credential-broker/Dockerfile
             port: 8084
             health_path: /health
+          - name: identity-link
+            dockerfile: services/identity-link/Dockerfile
+            port: 8091
+            health_path: /health
           - name: cloudfiles
             dockerfile: services/cloudfiles/Dockerfile
             port: 8085

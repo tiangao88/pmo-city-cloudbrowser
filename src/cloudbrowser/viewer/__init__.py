@@ -9,6 +9,8 @@ import secrets
 import threading
 from typing import Callable, Mapping
 
+from cloudbrowser.identity_links import IdentityLinkClient, IdentityLinkClientError
+
 
 @dataclass(frozen=True)
 class ViewerRequest:
@@ -92,6 +94,7 @@ class AuthenticatedViewer:
         token_secret: bytes,
         ttl_s: float = 360.0,
         token_factory: Callable[[], str] | None = None,
+        identity_client=None,
     ) -> None:
         if not isinstance(token_secret, bytes) or len(token_secret) < 16:
             raise ValueError("token_secret must be at least 16 bytes")
@@ -100,6 +103,7 @@ class AuthenticatedViewer:
         self._store = store
         self._ttl_s = float(ttl_s)
         self._token_factory = token_factory or (lambda: secrets.token_urlsafe(32))
+        self.identity_client = identity_client
 
     def open_session(self, request: ViewerRequest) -> ViewerSession:
         token = self._token_factory()
@@ -144,26 +148,39 @@ class AuthenticatedViewer:
 
 _SHELL = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CloudBrowser</title></head>
-<body><main><h1>CloudBrowser</h1><p>Your authenticated browser session is ready.</p><div id="browser-surface" aria-label="browser surface"></div></main></body></html>"""
+<body><main><h1>CloudBrowser</h1><p>Viewer is ready. No interactive browser surface is attached to this instance.</p></main></body></html>"""
 
 
 def create_viewer_server(
     viewer: AuthenticatedViewer,
     *,
     address: tuple[str, int] = ("127.0.0.1", 8082),
+    allow_edge_identity: bool = False,
 ) -> ThreadingHTTPServer:
-    """Create the authenticated viewer shell; no CDP or profile routes exist."""
+    """Create the authenticated viewer shell; no CDP or profile routes exist.
+
+    ``allow_edge_identity`` opts the deployment into trusting the
+    Traefik/TinyAuth forward-auth identity headers (``remote-email`` etc.)
+    that are only present after the edge authenticated the employee. When
+    enabled, ``GET /`` and ``GET /viewer`` are served to an authenticated
+    employee without requiring a separately issued bearer viewer token.
+    The flag must only be set when the host is behind the authenticated
+    proxy (``CB_EDGE_AUTH=traefik-forwardauth``).
+    """
+
+    if not isinstance(allow_edge_identity, bool):
+        raise TypeError("allow_edge_identity must be a bool")
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - stdlib HTTP handler contract
             if self.path == "/health":
                 self._json(200, {"status": "ok", "component": "viewer"})
                 return
-            if self.path != "/viewer":
+            if self.path not in ("/", "/viewer"):
                 self.send_error(404)
                 return
             token = _bearer(self.headers.get("Authorization"))
-            if viewer._store.get(token) is None:
+            if viewer._store.get(token) is None and not self._edge_authenticated():
                 self.send_error(401)
                 return
             body = _SHELL.encode("utf-8")
@@ -173,6 +190,20 @@ def create_viewer_server(
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
+
+        def _edge_authenticated(self) -> bool:
+            if not allow_edge_identity:
+                return False
+            from cloudbrowser.edge_auth import parse_edge_identity
+
+            identity = parse_edge_identity(dict(self.headers.items()))
+            resolver = viewer.identity_client
+            if identity is None or not isinstance(resolver, IdentityLinkClient):
+                return False
+            try:
+                return resolver.resolve(identity) is not None
+            except IdentityLinkClientError:
+                return False
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib HTTP handler contract
             if self.path != "/viewer/session":

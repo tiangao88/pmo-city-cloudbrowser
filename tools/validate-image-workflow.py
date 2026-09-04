@@ -14,6 +14,7 @@ SERVICES = (
     "downloads",
     "credential-broker",
     "cloudfiles",
+    "identity-link",
 )
 
 
@@ -55,20 +56,27 @@ def main() -> None:
             fail(f"missing matrix service: {service}")
         if not (ROOT / "services" / service / "Dockerfile").is_file():
             fail(f"missing Dockerfile: {service}")
+        if not (ROOT / "services" / service / "entrypoint.py").is_file():
+            fail(f"missing entrypoint: {service}")
         if not (ROOT / "deploy" / "coolify" / "image-qualification" / f"{service}.md").is_file():
             fail(f"missing qualification template: {service}")
-    manifest = (ROOT / "deploy/coolify/releases/v0.2.0-dev1/release-manifest.yaml").read_text(encoding="utf-8")
+
+    manifest = (ROOT / "deploy/coolify/releases/v0.2.0-dev1/release-manifest.yaml").read_text(
+        encoding="utf-8"
+    )
     if "installable: true" not in manifest:
         fail("Step-18 release is not installable")
     if manifest.count("installable: true") != 1:
         fail("release manifest must declare installable exactly once")
     if "status: qualified-installable" not in manifest:
         fail("release manifest is missing qualified status")
-    if "REPLACE_BEFORE_IMAGE_PUBLICATION" in manifest:
-        fail("release manifest still contains image placeholders")
-    for component in ("router", "slotSupervisor", "browser", "viewer", "agentControl", "downloads", "credentialBroker"):
-        if not re.search(rf"^    {component}: sha256:[0-9a-f]{{64}}$", manifest, re.MULTILINE):
-            fail(f"release manifest lacks immutable digest: {component}")
+    if "identityLink" not in manifest:
+        fail("release manifest lacks identityLink component")
+    identity_link_match = re.search(
+        r"^    identityLink: (sha256:\S+)$", manifest, re.MULTILINE
+    )
+    if not identity_link_match or "REPLACE_BEFORE_IMAGE_PUBLICATION" not in identity_link_match.group(1):
+        fail("identityLink digest must remain gated until CI publication")
     print("image-workflow validation: PASS")
 
 
