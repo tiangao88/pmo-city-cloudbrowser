@@ -3,21 +3,18 @@
 # services cannot clone the private repo to satisfy `build:` contexts, so the
 # deployed compose pins the published dev images instead.
 #
-# The current compose exposes the internal downloads service through the
-# existing cloudbrowser2 service Domains wiring. The frozen CloudFiles target
-# requires a future public `cloudfiles` gateway in front of downloads. Until
-# that gateway is implemented and qualified, this file is not evidence that
-# the complete CloudFiles product flow is deployed.
+# The qualified release includes the CloudFiles gateway in front of the
+# internal downloads service. The public host is bound to cloudfiles by the
+# existing Coolify service Domains configuration.
 #
 # Public host routing is managed by the existing cloudbrowser2 Coolify service
 # Domains configuration. Do not add compose-level Traefik routers for these
 # hosts: that would create duplicate routes.
 name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
 
-# Public downloads host: cloudfiles2.dev01.pmo.city is a second Domains entry
-# on the existing cloudbrowser2 service only after the CloudFiles gateway is
-# implemented and qualified. The internal downloads service remains reachable
-# inside the CloudBrowser network on port 8083.
+# Public host: cloudfiles2.dev01.pmo.city is a Domains entry for cloudfiles.
+# The internal downloads service remains reachable only inside the network on
+# port 8083.
 
 x-common: &common
   restart: unless-stopped
@@ -165,6 +162,10 @@ services:
   cloudfiles:
     <<: *common
     image: ghcr.io/tiangao88/pmo-city-cloudbrowser/cloudfiles@sha256:52eb534edcbf9a3877dc6586ed75192bc28a008051f495423a14a9bedf6a5907
+    labels:
+      - tinyauth.apps.cloudbrowser2-cloudfiles.oauth.groups=PMOC_Users
+      - tinyauth.apps.cloudbrowser2-cloudfiles.config.domain=cloudfiles2.dev01.pmo.city
+      - traefik.http.middlewares.tinyauth-pmo@file
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
