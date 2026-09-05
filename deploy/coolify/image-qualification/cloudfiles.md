@@ -1,7 +1,7 @@
 # Image qualification — cloudfiles
 
-- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/cloudfiles@sha256:52eb534edcbf9a3877dc6586ed75192bc28a008051f495423a14a9bedf6a5907`
-- digest: `sha256:52eb534edcbf9a3877dc6586ed75192bc28a008051f495423a14a9bedf6a5907`
+- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/cloudfiles@sha256:9542907dbd806c252f5fae0764577fa4344f71bb647fd78f06b9239906b65b63`
+- digest: `sha256:9542907dbd806c252f5fae0764577fa4344f71bb647fd78f06b9239906b65b63`
 - status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/cloudfiles/Dockerfile`
@@ -13,11 +13,10 @@
 - provenance/SBOM metadata: present in registry manifest
 - CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33827177104`
 - source commit `1d9ea90750d6ee4a3e39071fd14650891f06115e`
-
 ## Qualification evidence
 
 The immutable digest was resolved from the GHCR manifest for the image built
-from source commit `1d9ea90750d6ee4a3e39071fd14650891f06115e` in CI run `33933615971`, after every matrix job
+from the published image build for the release commit in CI run `33960506702`, after every matrix job
 completed successfully. The CI job verified the non-root user, image
 healthcheck, provenance/SBOM metadata, container health, runtime UID, and the
 service health endpoint. No credentials, cookies, tokens, passwords, or OTPs

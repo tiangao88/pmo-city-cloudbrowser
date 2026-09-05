@@ -29,15 +29,15 @@ spec:
     cloudfiles: 0.2.0-dev1
     identityLink: 0.2.0-dev1
   imageDigests:
-    router: sha256:f2e7ec3c3a4e9330eaf6f1c53da557e5d9a24f16793ad5e64e5aee370c56b9fb
-    slotSupervisor: sha256:06dd26276c4390c4ede5aebfe40ab8c808312e7072b1ca608691e3043a3a4702
-    browser: sha256:cf524b1fe3cf406b88fe032cd442b69043d2c62df2c2aab8eabfbb39747f098a
-    viewer: sha256:0b022e4c350f6f6467c669cef9f0964c0d948c38505269c2565d6c807edf5ccf
-    agentControl: sha256:fcee04906c97f151e5b438067ff87a1aff9b502e5cf38392b0397f365892d26a
-    downloads: sha256:5abf5256504525b7fd95a472e641ff8fe0b713f65595b1aff499b31b017e8309
-    credentialBroker: sha256:799f80993b0064de319e9e4043fb2afd08c2055649d1337e1b6605ff1637cfc3
-    cloudfiles: sha256:52eb534edcbf9a3877dc6586ed75192bc28a008051f495423a14a9bedf6a5907
-    identityLink: sha256:4cbab4aceaa48edb39bb8500d2249614040dfc5b5622322949379050fca59dcd
+    router: sha256:677bea6ce7b43e0db871210880cd1b7e3eb8ff642e72d286fa031a3f2ac00338
+    slotSupervisor: sha256:25f5b26643f5b77a79d8294cd517552a96c93e813299e219884b3c4a73991a07
+    browser: sha256:d7ec278c0d2625876a80db880834186f52ede66ed3cdb0c6e6785039e3648ebd
+    viewer: sha256:23f9a92b8cef78ac0b182d9a6ab9278e0dc3b66f10d1c9027c6111b33bc17149
+    agentControl: sha256:38bbc6e6d924753c35b2a35c06e736dd00872f75a2e4ba7e573505c25397f61c
+    downloads: sha256:a1141f91d6a4cffa2db6befe4909aa77eb7f961ffec3360e7cc13138753a281d
+    credentialBroker: sha256:df15d96c2b1400fa3d1adeacb0f6db4ae0a8989e6e6d98c9314161250f44621e
+    cloudfiles: sha256:9542907dbd806c252f5fae0764577fa4344f71bb647fd78f06b9239906b65b63
+    identityLink: sha256:241294ba56d019c19dec359c7dd8244193d0809f42594b42d3499f89b1e49c38
   instance:
     id: CB_INSTANCE_ID_REQUIRED
     network: CB_INSTANCE_ID_REQUIRED-network
