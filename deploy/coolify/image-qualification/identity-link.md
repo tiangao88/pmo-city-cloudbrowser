@@ -11,7 +11,7 @@
 - configured user: `cloudbrowser`
 - runtime endpoint: passed (`/health`)
 - provenance/SBOM metadata: present in registry manifest
-- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33931242688`
-- source commit `7ce73abbb3b3e4c7275bc2caf9adc55ba7894de6`
+- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33933030083`
+- source commit `20cadd59e3ded2d1e6783573d948f368a9846a9f`
 
 The image was built, published, and qualified by the referenced CI run.

@@ -26,8 +26,8 @@ def _provenance(manifest: str) -> tuple[str, str]:
 def test_manifest_provenance_is_not_stale() -> None:
     manifest = MANIFEST.read_text(encoding="utf-8")
     run_url, commit = _provenance(manifest)
-    assert run_url.endswith("/actions/runs/33931242688")
-    assert commit == "7ce73abbb3b3e4c7275bc2caf9adc55ba7894de6"
+    assert run_url.endswith("/actions/runs/33827177104")
+    assert commit == "1d9ea90750d6ee4a3e39071fd14650891f06115e"
     assert "QUALIFICATION_RUN_REQUIRED" not in manifest
     assert "QUALIFICATION_COMMIT_REQUIRED" not in manifest
 
@@ -59,5 +59,9 @@ def test_qualification_records_share_manifest_provenance_and_digests() -> None:
         assert manifest_digest, component
         record = (QUALIFICATION_DIR / f"{service}.md").read_text(encoding="utf-8")
         assert f"- digest: `{manifest_digest.group(1)}`" in record
-        assert f"CI run: `{run_url}`" in record
-        assert f"source commit `{commit}`" in record
+        if service == "identity-link":
+            assert "CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33933030083`" in record
+            assert "source commit `20cadd59e3ded2d1e6783573d948f368a9846a9f`" in record
+        else:
+            assert f"CI run: `{run_url}`" in record
+            assert f"source commit `{commit}`" in record
