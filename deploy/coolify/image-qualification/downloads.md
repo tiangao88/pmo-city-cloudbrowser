@@ -11,12 +11,12 @@
 - configured user: `cloudbrowser`
 - runtime endpoint: passed (`/health`)
 - provenance/SBOM metadata: present in registry manifest
-- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33827177104`
-- source commit `1d9ea90750d6ee4a3e39071fd14650891f06115e`
+- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33933615971`
+- source commit `5b38ec3138dea52dbcbc9fb69f793f06f449636c`
 ## Qualification evidence
 
 The immutable digest was resolved from the GHCR manifest for the image built
-from the published image build for the release commit in CI run `33960506702`, after every matrix job
+from the published image build for the release commit in CI run `33933615971`, after every matrix job
 completed successfully. The CI job verified the non-root user, image
 healthcheck, provenance/SBOM metadata, container health, runtime UID, and the
 service health endpoint. No credentials, cookies, tokens, passwords, or OTPs

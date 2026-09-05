@@ -9,8 +9,8 @@ spec:
   installable: true
   qualification:
     workflow: .github/workflows/build-images.yml
-    run: https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33827177104
-    commit: 1d9ea90750d6ee4a3e39071fd14650891f06115e
+    run: https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33933615971
+    commit: 5b38ec3138dea52dbcbc9fb69f793f06f449636c
     records: deploy/coolify/image-qualification/<service>.md
   contracts:
     controlApi: v1
