@@ -37,7 +37,7 @@ spec:
     downloads: sha256:5abf5256504525b7fd95a472e641ff8fe0b713f65595b1aff499b31b017e8309
     credentialBroker: sha256:799f80993b0064de319e9e4043fb2afd08c2055649d1337e1b6605ff1637cfc3
     cloudfiles: sha256:52eb534edcbf9a3877dc6586ed75192bc28a008051f495423a14a9bedf6a5907
-    identityLink: sha256:4c393fa4e10f9e5dd55918d55e3f51407c1b141bb70d7dbaa79c4ecfa4cee727
+    identityLink: sha256:4cbab4aceaa48edb39bb8500d2249614040dfc5b5622322949379050fca59dcd
   instance:
     id: CB_INSTANCE_ID_REQUIRED
     network: CB_INSTANCE_ID_REQUIRED-network

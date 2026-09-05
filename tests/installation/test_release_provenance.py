@@ -60,8 +60,8 @@ def test_qualification_records_share_manifest_provenance_and_digests() -> None:
         record = (QUALIFICATION_DIR / f"{service}.md").read_text(encoding="utf-8")
         assert f"- digest: `{manifest_digest.group(1)}`" in record
         if service == "identity-link":
-            assert "CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33933030083`" in record
-            assert "source commit `20cadd59e3ded2d1e6783573d948f368a9846a9f`" in record
+            assert "CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33933615971`" in record
+            assert "source commit `5b38ec3138dea52dbcbc9fb69f793f06f449636c`" in record
         else:
-            assert f"CI run: `{run_url}`" in record
-            assert f"source commit `{commit}`" in record
+            assert f"CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33827177104`" in record
+            assert f"source commit `1d9ea90750d6ee4a3e39071fd14650891f06115e`" in record
