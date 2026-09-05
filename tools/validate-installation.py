@@ -97,10 +97,9 @@ def main() -> None:
         match = re.search(rf"^    {component}: (sha256:\S+)$", manifest, re.MULTILINE)
         if not match or not DIGEST.fullmatch(match.group(1)):
             fail(f"{component} does not have a valid immutable digest")
-    if "identityLink" in manifest:
-        match = re.search(r"^    identityLink: (sha256:\S+)$", manifest, re.MULTILINE)
-        if not match or "REPLACE_BEFORE_IMAGE_PUBLICATION" not in match.group(1):
-            fail("identityLink qualification must be completed before installation")
+    identity_match = re.search(r"^    identityLink: (sha256:\S+)$", manifest, re.MULTILINE)
+    if not identity_match or not DIGEST.fullmatch(identity_match.group(1)):
+        fail("identityLink does not have a valid immutable digest")
     print("installation validation: PASS")
 
 

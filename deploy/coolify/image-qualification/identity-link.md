@@ -1,19 +1,17 @@
 # Image qualification — identity-link
 
-- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/identity-link@sha256:REPLACE_BEFORE_IMAGE_PUBLICATION`
-- digest: `sha256:REPLACE_BEFORE_IMAGE_PUBLICATION`
-- status: pending
+- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/identity-link@sha256:4c393fa4e10f9e5dd55918d55e3f51407c1b141bb70d7dbaa79c4ecfa4cee727`
+- digest: `sha256:4c393fa4e10f9e5dd55918d55e3f51407c1b141bb70d7dbaa79c4ecfa4cee727`
+- status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/identity-link/Dockerfile`
 - runtime port: `8091`
 - non-root: passed (`cloudbrowser`, uid 10001)
-- healthcheck: pending (requires published image)
+- healthcheck: passed (container status: healthy)
 - configured user: `cloudbrowser`
-- runtime endpoint: pending (requires published image)
-- provenance/SBOM metadata: pending registry publication
-- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33827177104`
-- source commit `1d9ea90750d6ee4a3e39071fd14650891f06115e`
+- runtime endpoint: passed (`/health`)
+- provenance/SBOM metadata: present in registry manifest
+- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/33931242688`
+- source commit `7ce73abbb3b3e4c7275bc2caf9adc55ba7894de6`
 
-This record is a qualification placeholder. Replace the digest and evidence
-with the actual CI-published image result before treating the release as
-installable.
+The image was built, published, and qualified by the referenced CI run.

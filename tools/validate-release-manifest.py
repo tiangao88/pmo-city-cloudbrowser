@@ -46,7 +46,7 @@ for component in (
         print(f"release component lacks an immutable digest: {component}")
         raise SystemExit(1)
 identity_link = re.search(r"^    identityLink: (sha256:\S+)$", release_text, re.MULTILINE)
-if not identity_link or "REPLACE_BEFORE_IMAGE_PUBLICATION" not in identity_link.group(1):
-    print("identityLink publication is still gated")
+if not identity_link or not re.fullmatch(r"sha256:[0-9a-f]{64}", identity_link.group(1)):
+    print("release component lacks an immutable digest: identityLink")
     raise SystemExit(1)
 print("release-manifest validation: PASS")

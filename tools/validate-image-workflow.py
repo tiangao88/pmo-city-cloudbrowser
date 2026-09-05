@@ -75,8 +75,8 @@ def main() -> None:
     identity_link_match = re.search(
         r"^    identityLink: (sha256:\S+)$", manifest, re.MULTILINE
     )
-    if not identity_link_match or "REPLACE_BEFORE_IMAGE_PUBLICATION" not in identity_link_match.group(1):
-        fail("identityLink digest must remain gated until CI publication")
+    if not identity_link_match or not re.fullmatch(r"sha256:[0-9a-f]{64}", identity_link_match.group(1)):
+        fail("identityLink must have a published immutable digest")
     print("image-workflow validation: PASS")
 
 

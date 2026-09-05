@@ -29,7 +29,7 @@ def test_health_payload_contains_only_non_sensitive_installation_metadata():
 def test_manifest_components_include_identity_link_when_present() -> None:
     manifest = (ROOT / "deploy/coolify/releases/v0.2.0-dev1/release-manifest.yaml").read_text(encoding="utf-8")
     assert "identityLink: 0.2.0-dev1" in manifest
-    assert "identityLink: sha256:REPLACE_BEFORE_IMAGE_PUBLICATION" in manifest
+    assert "identityLink: sha256:" in manifest
 
 
 def test_every_service_runtime_module_compiles():

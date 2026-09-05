@@ -26,16 +26,16 @@ def _provenance(manifest: str) -> tuple[str, str]:
 def test_manifest_provenance_is_not_stale() -> None:
     manifest = MANIFEST.read_text(encoding="utf-8")
     run_url, commit = _provenance(manifest)
-    assert run_url.endswith("/actions/runs/33827177104")
-    assert commit == "1d9ea90750d6ee4a3e39071fd14650891f06115e"
+    assert run_url.endswith("/actions/runs/33931242688")
+    assert commit == "7ce73abbb3b3e4c7275bc2caf9adc55ba7894de6"
     assert "QUALIFICATION_RUN_REQUIRED" not in manifest
     assert "QUALIFICATION_COMMIT_REQUIRED" not in manifest
 
 
-def test_identity_link_qualification_record_is_explicitly_pending() -> None:
+def test_identity_link_qualification_record_is_published() -> None:
     record = (QUALIFICATION_DIR / "identity-link.md").read_text(encoding="utf-8")
-    assert "- status: pending" in record
-    assert "REPLACE_BEFORE_IMAGE_PUBLICATION" in record
+    assert "status: passed" in record
+    assert re.search(r"identity-link@sha256:[0-9a-f]{64}", record)
 
 
 def test_qualification_records_share_manifest_provenance_and_digests() -> None:
