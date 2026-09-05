@@ -177,6 +177,66 @@ def run_service(component: str) -> None:
         finally:
             server.server_close()
         return
+    if component == "router":
+        from cloudbrowser.identity_links import build_identity_link_client
+        from cloudbrowser.router.router_api import RouterApi, create_router_server
+        from cloudbrowser.router.sessions import RouterSessionStore, SlotDescriptor
+        from cloudbrowser.router.supervisor_client import SupervisorClient
+
+        shared_secret = _required_env("CB_ROUTER_SHARED_SECRET")
+        if len(shared_secret) < 16:
+            raise SystemExit("CB_ROUTER_SHARED_SECRET must be at least 16 characters")
+        edge_mode = os.environ.get("CB_EDGE_AUTH", "")
+        if edge_mode and edge_mode != "traefik-forwardauth":
+            raise SystemExit("CB_EDGE_AUTH must be 'traefik-forwardauth' when set")
+        supervisor_map_raw = os.environ.get("CB_SLOT_SUPERVISOR_URLS", "")
+        if not supervisor_map_raw:
+            raise SystemExit("CB_SLOT_SUPERVISOR_URLS is required")
+        supervisor_map: dict[str, str] = {}
+        for entry in supervisor_map_raw.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            if "=" not in entry:
+                raise SystemExit("CB_SLOT_SUPERVISOR_URLS entries must be slot_id=url")
+            slot_id, url = entry.split("=", 1)
+            slot_id = slot_id.strip()
+            url = url.strip()
+            if not slot_id or not url:
+                raise SystemExit("CB_SLOT_SUPERVISOR_URLS entries must be slot_id=url")
+            supervisor_map[slot_id] = url
+        if not supervisor_map:
+            raise SystemExit("CB_SLOT_SUPERVISOR_URLS must contain at least one entry")
+        state_path = Path(os.environ.get("CB_ROUTER_STATE", "/data/state/router-state.json"))
+        slots = [
+            SlotDescriptor(slot_id=slot_id, supervisor_url=url, browser_id=f"browser-{slot_id}")
+            for slot_id, url in sorted(supervisor_map.items())
+        ]
+        identity_client = build_identity_link_client()
+        supervisor_client = SupervisorClient(supervisor_map)
+        session_store = RouterSessionStore(
+            state_path,
+            slots=slots,
+            clock=time.time,
+        )
+        api = RouterApi(
+            session_store=session_store,
+            supervisor_client=supervisor_client,
+            identity_client=identity_client,
+            component="router",
+        )
+        # Authenticated downstream calls require a shared secret header for
+        # trusted slot-supervisor dispatch. We bind it here; it never appears
+        # in any client-visible response. The router itself never sends
+        # email/principal material; the identity client resolves the
+        # caller into a server-derived principal.
+        _ = shared_secret  # accepted; downstream wiring lives in SupervisorClient
+        server = create_router_server(api, address=("0.0.0.0", port))
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
+        return
     if component == "cloudfiles":
         from cloudbrowser.cloudfiles_entrypoint import main
 

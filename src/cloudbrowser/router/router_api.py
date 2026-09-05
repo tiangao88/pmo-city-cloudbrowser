@@ -114,6 +114,22 @@ def _envelope(request_id: str, **fields: object) -> dict[str, object]:
     return payload
 
 
+def _coerce_str(value: object, *, default: str) -> str:
+    """Return ``value`` only when it is a bounded string; otherwise ``default``."""
+    if isinstance(value, str) and value and len(value) <= 64:
+        return value
+    return default
+
+
+def _coerce_int(value: object, *, default: int) -> int:
+    """Return ``value`` only when it is a non-negative integer; otherwise ``default``."""
+    if isinstance(value, bool):  # bool is a subclass of int — exclude it
+        return default
+    if isinstance(value, int) and value >= 0:
+        return value
+    return default
+
+
 class RouterApi:
     """Route the owner-bound router control plane to a session store + supervisor client."""
 
@@ -152,9 +168,11 @@ class RouterApi:
             session = self._store.enqueue(resolved.principal_id, request_id=request_id)
         except Exception:
             return 200, _envelope(request_id, status="failed", error_code="enqueue_failed")
-        return 200, _session_payload(
-            session, now=self._store_clock(), request_id=request_id
-        )
+        try:
+            now = self._store_clock()
+        except Exception:
+            return 200, _envelope(request_id, status="failed", error_code="store_unavailable")
+        return 200, _session_payload(session, now=now, request_id=request_id)
 
     def get_session(
         self, *, headers: Mapping[str, object], request_id: str
@@ -168,7 +186,11 @@ class RouterApi:
             return 200, _envelope(request_id, status="failed", error_code="lookup_failed")
         if session is None:
             return 200, _envelope(request_id, status="waiting")
-        return 200, _session_payload(session, now=self._store_clock(), request_id=request_id)
+        try:
+            now = self._store_clock()
+        except Exception:
+            return 200, _envelope(request_id, status="failed", error_code="store_unavailable")
+        return 200, _session_payload(session, now=now, request_id=request_id)
 
     def leave_session(
         self, *, headers: Mapping[str, object], request_id: str
@@ -222,9 +244,9 @@ class RouterApi:
             return 200, _envelope(request_id, status="failed", error_code="operation_failed")
         return 200, _envelope(
             request_id,
-            status=result.get("status", "unknown"),
-            state=result.get("state", "unknown"),
-            restored_count=result.get("restored_count", 0),
+            status=_coerce_str(result.get("status"), default="unknown"),
+            state=_coerce_str(result.get("state"), default="unknown"),
+            restored_count=_coerce_int(result.get("restored_count"), default=0),
         )
 
     # ---- helpers --------------------------------------------------------

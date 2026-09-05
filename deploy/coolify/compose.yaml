@@ -22,6 +22,22 @@ services:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
       CB_PORT: 8080
+      # Fail-closed control plane: the router dispatches slot lifecycle
+      # commands to private slot supervisors and authenticates downstream
+      # with its trusted secret; refuse to boot without either.
+      CB_ROUTER_SHARED_SECRET: ${CB_ROUTER_SHARED_SECRET:?CB_ROUTER_SHARED_SECRET is required}
+      CB_SLOT_SUPERVISOR_URLS: ${CB_SLOT_SUPERVISOR_URLS:?CB_SLOT_SUPERVISOR_URLS is required}
+      # Opt into trusting the Traefik/TinyAuth forward-auth identity headers
+      # ONLY when running behind the authenticated proxy (deployed variant).
+      # Unset here so local/CI runs keep the health-only posture.
+      CB_EDGE_AUTH: ${CB_EDGE_AUTH:-}
+      CB_IDENTITY_LINK_BASE_URL: http://identity-link:8091
+      CB_IDENTITY_LINK_SHARED_SECRET: ${CB_IDENTITY_LINK_SHARED_SECRET:-}
+      CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:-}
+      CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:-}
+    depends_on:
+      identity-link:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
       interval: 10s
