@@ -308,8 +308,6 @@ class RouterSessionStore:
             elif record.status is SessionStatus.BACKED_OFF and record.backoff_until is not None and now >= record.backoff_until:
                 self._sessions[record.session_id] = replace(record, status=SessionStatus.WAITING, backoff_until=None)
                 changed = True
-        if changed:
-            self._assign_waiters_locked()
         return changed
 
     def _new_id_locked(self) -> str:
