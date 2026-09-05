@@ -1,7 +1,7 @@
 # Image qualification — cloudfiles
 
-- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/cloudfiles@sha256:9542907dbd806c252f5fae0764577fa4344f71bb647fd78f06b9239906b65b63`
-- digest: `sha256:9542907dbd806c252f5fae0764577fa4344f71bb647fd78f06b9239906b65b63`
+- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/cloudfiles@sha256:1309185502b266bdff34cb6088544c90c6e76f25939e5481cafa4fdd42116297`
+- digest: `sha256:1309185502b266bdff34cb6088544c90c6e76f25939e5481cafa4fdd42116297`
 - status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/cloudfiles/Dockerfile`

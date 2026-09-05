@@ -1,7 +1,7 @@
 # Image qualification — downloads
 
-- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/downloads@sha256:a1141f91d6a4cffa2db6befe4909aa77eb7f961ffec3360e7cc13138753a281d`
-- digest: `sha256:a1141f91d6a4cffa2db6befe4909aa77eb7f961ffec3360e7cc13138753a281d`
+- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/downloads@sha256:936717a8dee5cbbdb5eef2a26e5ad40d859c813115839625fca9247118c1c6a7`
+- digest: `sha256:936717a8dee5cbbdb5eef2a26e5ad40d859c813115839625fca9247118c1c6a7`
 - status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/downloads/Dockerfile`

@@ -1,7 +1,7 @@
 # Image qualification — agent-control
 
-- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/agent-control@sha256:38bbc6e6d924753c35b2a35c06e736dd00872f75a2e4ba7e573505c25397f61c`
-- digest: `sha256:38bbc6e6d924753c35b2a35c06e736dd00872f75a2e4ba7e573505c25397f61c`
+- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/agent-control@sha256:6654db4f771680b15f905985be0ab2f0caa520b8f3110a3723173def8e3d4265`
+- digest: `sha256:6654db4f771680b15f905985be0ab2f0caa520b8f3110a3723173def8e3d4265`
 - status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/agent-control/Dockerfile`

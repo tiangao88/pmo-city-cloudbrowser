@@ -1,7 +1,7 @@
 # Image qualification — viewer
 
-- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/viewer@sha256:23f9a92b8cef78ac0b182d9a6ab9278e0dc3b66f10d1c9027c6111b33bc17149`
-- digest: `sha256:23f9a92b8cef78ac0b182d9a6ab9278e0dc3b66f10d1c9027c6111b33bc17149`
+- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/viewer@sha256:8f4c85684b332c84f83dc26aa01058e3d13076a4585957d87d7e745b43f67a9f`
+- digest: `sha256:8f4c85684b332c84f83dc26aa01058e3d13076a4585957d87d7e745b43f67a9f`
 - status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/viewer/Dockerfile`

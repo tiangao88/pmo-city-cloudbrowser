@@ -1,7 +1,7 @@
 # Image qualification — router
 
-- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/router@sha256:677bea6ce7b43e0db871210880cd1b7e3eb8ff642e72d286fa031a3f2ac00338`
-- digest: `sha256:677bea6ce7b43e0db871210880cd1b7e3eb8ff642e72d286fa031a3f2ac00338`
+- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/router@sha256:1115f3616a485edd0b1059e916472374b6ea4ff0152c5057c2d5aced865aed01`
+- digest: `sha256:1115f3616a485edd0b1059e916472374b6ea4ff0152c5057c2d5aced865aed01`
 - status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/router/Dockerfile`

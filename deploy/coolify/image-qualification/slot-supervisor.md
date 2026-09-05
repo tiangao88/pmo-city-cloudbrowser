@@ -1,7 +1,7 @@
 # Image qualification — slot-supervisor
 
-- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/slot-supervisor@sha256:25f5b26643f5b77a79d8294cd517552a96c93e813299e219884b3c4a73991a07`
-- digest: `sha256:25f5b26643f5b77a79d8294cd517552a96c93e813299e219884b3c4a73991a07`
+- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/slot-supervisor@sha256:77ea3e01495e2ea9fd726be37cc34537d59b695ffd118fe905b65928219caf86`
+- digest: `sha256:77ea3e01495e2ea9fd726be37cc34537d59b695ffd118fe905b65928219caf86`
 - status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/slot-supervisor/Dockerfile`

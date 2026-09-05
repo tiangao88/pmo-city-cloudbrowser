@@ -1,7 +1,7 @@
 # Image qualification — identity-link
 
-- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/identity-link@sha256:241294ba56d019c19dec359c7dd8244193d0809f42594b42d3499f89b1e49c38`
-- digest: `sha256:241294ba56d019c19dec359c7dd8244193d0809f42594b42d3499f89b1e49c38`
+- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/identity-link@sha256:20d0dbf7bf3855c03e496af7efc13cdf35d6e805604b9ee531e1870e5f02c011`
+- digest: `sha256:20d0dbf7bf3855c03e496af7efc13cdf35d6e805604b9ee531e1870e5f02c011`
 - status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/identity-link/Dockerfile`
