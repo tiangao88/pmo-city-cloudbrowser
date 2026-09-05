@@ -114,7 +114,7 @@ services:
 
   viewer:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/viewer@sha256:0b022e4c350f6f6467c669cef9f0964c0d948c38505269c2565d6c807edf5ccf
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/viewer@sha256:c11d533ac7e02b5eb23b340f8097c4a24b22776ec1e2abd91447e69093183840
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
@@ -170,7 +170,7 @@ services:
 
   cloudfiles:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/cloudfiles@sha256:52eb534edcbf9a3877dc6586ed75192bc28a008051f495423a14a9bedf6a5907
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/cloudfiles@sha256:cf85b18a393ffb40b47e2534e71ca767bd538b10b445c18a01c380cbe3a85aca
     labels:
       - tinyauth.apps.cloudbrowser2-cloudfiles.oauth.groups=PMOC_Users
       - tinyauth.apps.cloudbrowser2-cloudfiles.config.domain=cloudfiles2.dev01.pmo.city
@@ -206,7 +206,7 @@ services:
 
   identity-link:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/identity-link@sha256:4cbab4aceaa48edb39bb8500d2249614040dfc5b5622322949379050fca59dcd
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/identity-link@sha256:8493effdbad94dcfcd2cef60b54a3d2584bc08495ab28cc6782f8b17b663af42
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
