@@ -21,8 +21,15 @@ def create_browser_server(
     instance_id: str,
     release_version: str,
     address: tuple[str, int] = ("127.0.0.1", 9230),
+    binding_listener: Callable[[Any], None] | None = None,
 ) -> ThreadingHTTPServer:
-    """Create the restricted browser API consumed by supervisor and agent control."""
+    """Create the restricted browser API consumed by supervisor and agent control.
+
+    ``binding_listener`` (optional) is invoked with the parsed
+    ``BrowserBinding`` after a successful trusted-secret-gated binding push;
+    the browser service uses it to rotate download attribution to the
+    newly adopted identity.
+    """
     if not instance_id or not release_version:
         raise ValueError("instance_id and release_version are required")
 
@@ -44,14 +51,24 @@ def create_browser_server(
                     return
                 if self.path == "/browser/health":
                     healthy = process.readiness()
+                    state = process.state
+                    if state == "stopped":
+                        # Boot-stopped mode (CB_BROWSER_AUTOSTART=0): the
+                        # container is intentionally Chrome-less until the
+                        # slot supervisor adopts a binding and wakes it, so
+                        # the deployment healthcheck must pass here.
+                        status_code, service_status = 200, "ok"
+                    else:
+                        status_code = 200 if healthy else 503
+                        service_status = "ok" if healthy else "degraded"
                     self._send_json(
-                        200 if healthy else 503,
+                        status_code,
                         {
-                            "status": "ok" if healthy else "degraded",
+                            "status": service_status,
                             "component": "browser",
                             "instance_id": instance_id,
                             "release_version": release_version,
-                            "browser_state": process.state,
+                            "browser_state": state,
                         },
                     )
                     return
@@ -118,6 +135,12 @@ def create_browser_server(
             try:
                 payload = json.loads(self._read_text())
                 binding = parse_binding_push(payload, provided_secret=provided)
+            except PermissionError:
+                # parse_binding_push gates the trusted secret before payload
+                # inspection; a mismatch must be a bounded 403, never a dead
+                # handler thread.
+                self._send_json(403, {"ok": False, "error_code": "binding_not_authorized"})
+                return
             except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
                 self._send_json(400, {"ok": False, "error_code": "invalid_binding"})
                 return
@@ -126,6 +149,8 @@ def create_browser_server(
                 return
             process.rebind(binding.principal_id, binding.generation)
             adapter.rebind(binding.principal_id, binding.generation)
+            if binding_listener is not None:
+                binding_listener(binding)
             self._send_json(200, {"ok": True})
 
         def _read_text(self) -> str:

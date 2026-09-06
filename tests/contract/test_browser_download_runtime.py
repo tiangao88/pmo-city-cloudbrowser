@@ -44,9 +44,23 @@ class FakeServer:
         self.closed = True
 
 
+class FakeRegistry:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def attach_stop_event(self, stop_event) -> None:
+        pass
+
+    def on_binding(self, binding) -> None:
+        pass
+
+    def close(self) -> None:
+        self.closed = True
+
+
 def _install_fakes(monkeypatch):
     process, server, stop_event = FakeProcess(), FakeServer(), threading.Event()
-    monkeypatch.setattr(browser_service, "build_browser_service", lambda: (process, server, stop_event))
+    monkeypatch.setattr(browser_service, "build_browser_service", lambda: (process, server, stop_event, FakeRegistry()))
     return process, server, stop_event
 
 

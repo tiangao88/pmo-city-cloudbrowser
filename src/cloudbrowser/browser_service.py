@@ -52,23 +52,27 @@ def build_browser_service() -> tuple[BrowserProcess, object, threading.Event]:
         start_callback=process.start,
         stop_callback=process.stop,
     )
+    registry = DownloadWatcherRegistry()
     server = create_browser_server(
         adapter,
         process,
         instance_id=instance_id,
         release_version=release_version,
         address=("0.0.0.0", service_port),
+        binding_listener=registry.on_binding,
     )
-    return process, server, threading.Event()
+    return process, server, threading.Event(), registry
 
 
-def build_download_watcher():
+def build_download_watcher(binding: "PrincipalBinding | None" = None):
     """Construct the production download emitter from server configuration.
 
     The download directory, the internal CloudFiles ingest receiver URL, and
     the shared secret are all server-configured; the owner binding is the
-    browser's own server identity. Returns ``None`` when the transport is not
-    configured, so the browser service behaves exactly as before.
+    browser's own server identity (the boot env binding, or an explicitly
+    adopted binding passed by the registry after a binding push). Returns
+    ``None`` when the transport is not configured, so the browser service
+    behaves exactly as before.
     """
     download_dir = os.environ.get("CB_BROWSER_DOWNLOAD_DIR")
     ingest_url = os.environ.get("CB_DOWNLOADS_INGEST_URL")
@@ -109,15 +113,20 @@ def build_download_watcher():
     from cloudbrowser.cloudfiles.contracts import PrincipalBinding
     from cloudbrowser.cloudfiles.ingest_client import IngestClient
 
+    if binding is None:
+        principal_id = os.environ.get("CB_PRINCIPAL_ID", "principal-unassigned")
+        binding = PrincipalBinding(
+            principal_id=principal_id,
+            profile_id=os.environ.get("CB_PROFILE_ID", "profile-unassigned"),
+            browser_id=os.environ.get("CB_BROWSER_ID", "browser-unassigned"),
+            generation=os.environ.get("CB_BINDING_GENERATION", "generation-0"),
+        )
+    else:
+        principal_id = binding.principal_id
     try:
         config = DownloadWatchConfig(
             download_dir=Path(download_dir),
-            binding=PrincipalBinding(
-                principal_id=principal_id,
-                profile_id=os.environ.get("CB_PROFILE_ID", "profile-unassigned"),
-                browser_id=os.environ.get("CB_BROWSER_ID", "browser-unassigned"),
-                generation=os.environ.get("CB_BINDING_GENERATION", "generation-0"),
-            ),
+            binding=binding,
             max_bytes=max_bytes,
         )
     except ValueError as exc:
@@ -181,12 +190,81 @@ def parse_binding_push(payload: object, *, provided_secret: str | None) -> "Brow
     )
 
 
+class DownloadWatcherRegistry:
+    """Owns the browser service's download watcher across binding pushes.
+
+    In eager-start mode the watcher is built at boot from the env binding and
+    the registry only rotates its attribution binding on rebinds. In
+    boot-stopped mode (CB_BROWSER_AUTOSTART=0) the boot env binding is a
+    placeholder, so the watcher is built lazily on the first adopted
+    server-minted binding and then rotated on every subsequent push.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._watcher = None
+        self._stop_event: threading.Event | None = None
+
+    def attach_stop_event(self, stop_event: threading.Event) -> None:
+        self._stop_event = stop_event
+
+    def close(self) -> None:
+        with self._lock:
+            if self._watcher is not None:
+                self._watcher.close()
+                self._watcher = None
+
+    def on_binding(self, binding) -> None:
+        """Binding-push callback: build or rotate the download watcher."""
+
+        from cloudbrowser.cloudfiles.browser_downloads import BrowserDownloadWatcher
+        from cloudbrowser.cloudfiles.contracts import PrincipalBinding
+
+        principal = PrincipalBinding(
+            principal_id=binding.principal_id,
+            profile_id=binding.profile_id,
+            browser_id=binding.browser_id,
+            generation=binding.generation,
+        )
+        with self._lock:
+            if self._watcher is not None:
+                self._watcher.update_binding(principal)
+                return
+            watcher = build_download_watcher(binding=principal)
+            if watcher is None:
+                # Transport not configured (dev profiles): attribution is
+                # inert, nothing to maintain.
+                return
+            self._watcher = watcher
+            if self._stop_event is not None:
+                threading.Thread(
+                    target=watcher.run,
+                    args=(self._stop_event,),
+                    daemon=True,
+                ).start()
+
+
+def _autostart_enabled() -> bool:
+    """Return whether Chrome should start eagerly at service boot.
+
+    Defaults to true (the historical eager-start contract). Set
+    ``CB_BROWSER_AUTOSTART=0`` for activation-driven slots: the browser
+    boots stopped so the supervisor can adopt a server-minted binding
+    (adoption is stopped-only) and Chrome starts on the first wake.
+    """
+
+    return os.environ.get("CB_BROWSER_AUTOSTART", "1") not in ("0", "false", "no")
+
+
 def run_browser_service() -> None:
-    process, server, stop_event = build_browser_service()
-    process.start()
+    process, server, stop_event, registry = build_browser_service()
+    registry.attach_stop_event(stop_event)
+    autostart = _autostart_enabled()
+    if autostart:
+        process.start()
     watcher = threading.Thread(target=process.watch, args=(stop_event,), daemon=True)
     watcher.start()
-    download_watcher = build_download_watcher()
+    download_watcher = build_download_watcher() if autostart else None
     download_thread = None
     if download_watcher is not None:
         download_thread = threading.Thread(
@@ -203,3 +281,4 @@ def run_browser_service() -> None:
         server.server_close()
         if download_watcher is not None:
             download_watcher.close()
+        registry.close()

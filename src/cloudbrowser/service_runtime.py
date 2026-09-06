@@ -152,6 +152,7 @@ def run_service(component: str) -> None:
             generation=generation,
             shared_secret=trusted_secret,
             address=("0.0.0.0", port),
+            binding_rotators=[transport, agent_transport],
         )
         try:
             server.serve_forever()

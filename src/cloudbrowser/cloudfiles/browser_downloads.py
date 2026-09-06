@@ -138,6 +138,18 @@ class BrowserDownloadWatcher:
         self._submit = submit
         self._closed = False
 
+    def update_binding(self, binding: PrincipalBinding) -> None:
+        """Rotate the attribution binding after a browser rebind.
+
+        The download directory is server-owned and unchanged; only the
+        owner identity follows the adopted server-minted binding, so
+        downloads are never attributed to a stale principal.
+        """
+
+        if not isinstance(binding, PrincipalBinding):
+            raise ValueError("binding must be a PrincipalBinding")
+        self._config = replace(self._config, binding=binding)
+
     def emit_once(self) -> list[IngestReceipt]:
         """Scan once; emit and consume every completed candidate.
 

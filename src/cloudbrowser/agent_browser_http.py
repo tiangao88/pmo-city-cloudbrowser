@@ -47,6 +47,16 @@ class HttpAgentBrowserTransport:
     expected_owner: str
     expected_generation: str
 
+    def rotate_binding(self, principal_id: str, generation: str) -> None:
+        """Adopt a server-minted owner/generation for later readiness checks."""
+
+        if not isinstance(principal_id, str) or not principal_id or len(principal_id) > 256:
+            raise ValueError("principal_id is invalid")
+        if not isinstance(generation, str) or not generation or len(generation) > 256:
+            raise ValueError("generation is invalid")
+        self.expected_owner = principal_id
+        self.expected_generation = generation
+
     def readiness(self) -> BrowserReadiness:
         raw = self.client.request("GET", "/agent/readiness")
         if not isinstance(raw, dict):

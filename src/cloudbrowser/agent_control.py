@@ -187,6 +187,19 @@ class AgentControlService:
         self._browser_id = _bounded_identity(browser_id, "browser_id")
         self._generation = _bounded_identity(generation, "generation")
         self._lease_lock = __import__("threading").Lock()
+        # Optional rotatable transports behind the restricted browser facade;
+        # when present, a lease rotation also rotates their readiness
+        # expectations so post-activation probes match the adopted binding.
+        self._binding_rotators: list = []
+
+    def attach_binding_rotator(self, rotator) -> None:
+        """Register a transport whose owner/generation follow the lease."""
+
+        rotate = getattr(rotator, "rotate_binding", None)
+        if not callable(rotate):
+            raise TypeError("rotator must provide rotate_binding(principal, generation)")
+        with self._lease_lock:
+            self._binding_rotators.append(rotate)
 
     def rotate_lease(self, binding: object) -> None:
         """Adopt a server-minted binding (principal/browser/generation).
@@ -206,6 +219,9 @@ class AgentControlService:
             self._principal_id = principal_id
             self._browser_id = browser_id
             self._generation = generation
+            rotators = list(self._binding_rotators)
+        for rotate in rotators:
+            rotate(principal_id, generation)
 
     def handle(self, request: AgentControlRequest) -> dict[str, object]:
         request_id = request.request_id if isinstance(request.request_id, str) else ""
@@ -292,9 +308,12 @@ class AgentControlService:
         generation: str,
         shared_secret: str | None = None,
         address: tuple[str, int] = ("127.0.0.1", 8090),
+        binding_rotators: list | None = None,
     ) -> ThreadingHTTPServer:
         """Create POST /agent-control/v1 and GET /health."""
         service = cls(browser, principal_id=principal_id, browser_id=browser_id, generation=generation)
+        for rotator in binding_rotators or []:
+            service.attach_binding_rotator(rotator)
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802 - stdlib HTTP handler contract

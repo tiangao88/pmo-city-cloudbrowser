@@ -62,8 +62,10 @@ services:
       CB_PORT: 8081
       CB_BROWSER_API_URL: http://browser:9230
       CB_PROFILE_ID: ${CB_PROFILE_ID:-profile-unassigned}
+      # Placeholder binding matches the boot-stopped browser; the router's
+      # wake adopts the server-minted binding (browser-{slot_id}).
       CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
-      CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-unassigned}
+      CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-slot-1}
       CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
       CB_ROUTER_SHARED_SECRET: ${CB_ROUTER_SHARED_SECRET:?CB_ROUTER_SHARED_SECRET is required}
     depends_on:
@@ -91,8 +93,14 @@ services:
       CB_CHROME_HTTP_PORT: 9222
       CB_CHROME_EXECUTABLE: ${CB_CHROME_EXECUTABLE:-/usr/bin/chromium}
       CB_PROFILE_DIR: /data/profile
+      # Activation-driven slot: boot stopped under the placeholder binding
+      # whose browser_id matches the router minting rule browser-{slot_id}.
+      CB_BROWSER_AUTOSTART: ${CB_BROWSER_AUTOSTART:-0}
       CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
       CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
+      CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-slot-1}
+      # Trusted-secret gate for supervisor binding pushes.
+      CB_ROUTER_SHARED_SECRET: ${CB_ROUTER_SHARED_SECRET:?CB_ROUTER_SHARED_SECRET is required}
       CB_BROWSER_DOWNLOAD_DIR: /data/downloads-browser
       CB_DOWNLOADS_INGEST_URL: http://cloudfiles:8086
       CB_DOWNLOADS_INGEST_SECRET: ${CB_DOWNLOADS_INGEST_SECRET:?CB_DOWNLOADS_INGEST_SECRET is required}
@@ -116,9 +124,8 @@ services:
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
       CB_PORT: 8090
       CB_BROWSER_API_URL: http://browser:9230
-      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:?CB_PRINCIPAL_ID is required}
-      CB_BROWSER_ID: ${CB_BROWSER_ID:?CB_BROWSER_ID is required}
-      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:?CB_BINDING_GENERATION is required}
+      # The lease rotates to the server-minted session binding via
+      # POST /agent-control/lease; no static binding pin here.
       CB_AGENT_CONTROL_SHARED_SECRET: ${CB_AGENT_CONTROL_SHARED_SECRET:?CB_AGENT_CONTROL_SHARED_SECRET is required}
     depends_on:
       browser:

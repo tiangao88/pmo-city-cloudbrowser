@@ -109,6 +109,28 @@ class _HttpJsonRequester:
         self._timeout_s = float(timeout_s)
         self._trusted_secret = trusted_secret
 
+    def post_lease(self, body: Mapping[str, object]) -> tuple[int, bytes]:
+        """POST the trusted lease rotation to ``/agent-control/lease``."""
+
+        payload = json.dumps(body, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        request = Request(
+            self._origin + self._base_path + "/agent-control/lease",
+            data=payload,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": str(len(payload)),
+                "X-CB-Trusted-Secret": self._trusted_secret,
+            },
+        )
+        try:
+            with urlopen(request, timeout=self._timeout_s) as response:
+                return response.status, response.read(_MAX_RESPONSE_BYTES + 1)
+        except HTTPError as exc:
+            return exc.code, exc.read(_MAX_RESPONSE_BYTES + 1)
+        except (OSError, URLError) as exc:
+            raise AgentControlUnavailable("agent control is unreachable") from exc
+
     def post(
         self,
         body: Mapping[str, object],
@@ -200,12 +222,32 @@ class AgentControlForwarder:
             "operation": operation,
             "params": dict(params),
         }
+        headers_binding = {
+            "principal_id": serialized["principal_id"],
+            "browser_id": serialized["browser_id"],
+            "generation": serialized["generation"],
+        }
         status, raw = requester.post(
             body,
-            principal_id=serialized["principal_id"],
-            browser_id=serialized["browser_id"],
-            generation=serialized["generation"],
+            principal_id=headers_binding["principal_id"],
+            browser_id=headers_binding["browser_id"],
+            generation=headers_binding["generation"],
         )
+        if status == 401:
+            # Statically pinned lease: rotate it to the server-derived
+            # session binding (trusted-secret gated) and retry once. The
+            # binding never comes from caller input.
+            lease_status, _lease_raw = requester.post_lease(
+                {"binding": serialized}
+            )
+            if lease_status != 200:
+                raise AgentControlUnavailable("agent-control refused the lease rotation")
+            status, raw = requester.post(
+                body,
+                principal_id=headers_binding["principal_id"],
+                browser_id=headers_binding["browser_id"],
+                generation=headers_binding["generation"],
+            )
         if len(raw) > _MAX_RESPONSE_BYTES:
             raise AgentControlUnavailable("agent-control response is too large")
         try:

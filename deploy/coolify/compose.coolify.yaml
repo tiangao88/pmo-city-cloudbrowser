@@ -80,9 +80,11 @@ services:
       CB_PORT: 8081
       CB_BROWSER_API_URL: http://browser:9230
       CB_PROFILE_ID: ${CB_PROFILE_ID:-profile-dev01}
-      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-dev01}
-      CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-dev01}
-      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-dev01-g1}
+      # Placeholder binding matches the boot-stopped browser; the router's
+      # wake adopts the server-minted binding (browser-{slot_id}).
+      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
+      CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-slot-1}
+      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
       CB_ROUTER_SHARED_SECRET: ${SERVICE_PASSWORD_64_ROUTERSECRET}
     depends_on:
       browser:
@@ -108,8 +110,15 @@ services:
       CB_CHROME_EXECUTABLE: ${CB_CHROME_EXECUTABLE:-/usr/bin/chromium}
       CB_CHROME_EXTRA_ARGS: ${CB_CHROME_EXTRA_ARGS:---headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage}
       CB_PROFILE_DIR: /data/profile
-      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-dev01}
-      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-dev01-g1}
+      # Activation-driven slot: boot stopped under the placeholder binding
+      # whose browser_id matches the router minting rule browser-{slot_id};
+      # the supervisor adopts the server-minted binding on wake.
+      CB_BROWSER_AUTOSTART: ${CB_BROWSER_AUTOSTART:-0}
+      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
+      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
+      CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-slot-1}
+      # Trusted-secret gate for supervisor binding pushes.
+      CB_ROUTER_SHARED_SECRET: ${SERVICE_PASSWORD_64_ROUTERSECRET}
       CB_BROWSER_DOWNLOAD_DIR: /data/downloads-browser
       CB_DOWNLOADS_INGEST_URL: http://cloudfiles:8086
       CB_DOWNLOADS_INGEST_SECRET: ${SERVICE_PASSWORD_64_INGESTSECRET}
@@ -131,9 +140,8 @@ services:
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
       CB_PORT: 8090
       CB_BROWSER_API_URL: http://browser:9230
-      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-dev01}
-      CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-dev01}
-      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-dev01-g1}
+      # The lease rotates to the server-minted session binding via
+      # POST /agent-control/lease; no static binding pin here.
       CB_AGENT_CONTROL_SHARED_SECRET: ${SERVICE_PASSWORD_64_AGENTCTRLSECRET}
     depends_on:
       browser:

@@ -1,4 +1,9 @@
-"""Auto-start contract for the browser service boot path."""
+"""Boot-stopped contract for the browser service (CB_BROWSER_AUTOSTART=0).
+
+Session activation requires the browser container to boot with Chrome NOT
+running so the slot supervisor can adopt a server-minted binding (adoption
+is stopped-only). The default remains eager auto-start.
+"""
 
 from __future__ import annotations
 
@@ -49,11 +54,22 @@ class FakeServer:
         self.closed = True
 
 
-def test_browser_service_autostarts_chrome_before_serving(monkeypatch) -> None:
+def test_browser_service_boot_stopped_skips_eager_start(monkeypatch) -> None:
     process, server, stop_event = FakeProcess(), FakeServer(), threading.Event()
     monkeypatch.setattr(browser_service, "build_browser_service", lambda: (process, server, stop_event, _FakeRegistry()))
+    monkeypatch.setattr(browser_service, "build_download_watcher", lambda: None)
+    monkeypatch.setenv("CB_BROWSER_AUTOSTART", "0")
     browser_service.run_browser_service()
-    assert process.started is True
+    assert process.started is False
     assert server.served is True
     assert process.stopped is True
     assert server.closed is True
+
+
+def test_browser_service_default_remains_autostart(monkeypatch) -> None:
+    process, server, stop_event = FakeProcess(), FakeServer(), threading.Event()
+    monkeypatch.setattr(browser_service, "build_browser_service", lambda: (process, server, stop_event, _FakeRegistry()))
+    monkeypatch.setattr(browser_service, "build_download_watcher", lambda: None)
+    monkeypatch.delenv("CB_BROWSER_AUTOSTART", raising=False)
+    browser_service.run_browser_service()
+    assert process.started is True

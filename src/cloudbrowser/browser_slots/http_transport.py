@@ -34,6 +34,29 @@ class HttpBrowserTransport:
         """Return the configured narrow HTTP client for adapter composition."""
         return self._client
 
+    @property
+    def expected_owner(self) -> str:
+        return self._expected_owner
+
+    @property
+    def expected_generation(self) -> str:
+        return self._expected_generation
+
+    def rotate_binding(self, principal_id: str, generation: str) -> None:
+        """Adopt a server-minted owner/generation for later readiness checks.
+
+        Used by the agent-control lease rotation: after the browser itself
+        was rebound, subsequent readiness probes must expect the new binding
+        instead of the statically configured boot identity.
+        """
+
+        if not isinstance(principal_id, str) or not principal_id or len(principal_id) > 256:
+            raise ValueError("principal_id is invalid")
+        if not isinstance(generation, str) or not generation or len(generation) > 256:
+            raise ValueError("generation is invalid")
+        self._expected_owner = principal_id
+        self._expected_generation = generation
+
     def start(self) -> None:
         self._expect_ok(self._client.request("POST", "/browser/start"))
 
