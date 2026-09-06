@@ -70,6 +70,7 @@ services:
       CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
       CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-unassigned}
       CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
+      CB_ROUTER_SHARED_SECRET: ${CB_ROUTER_SHARED_SECRET:?CB_ROUTER_SHARED_SECRET is required}
     depends_on:
       browser:
         condition: service_started

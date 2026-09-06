@@ -24,7 +24,7 @@ def test_slot_supervisor_uses_browser_sidecar_port_by_default(monkeypatch):
 
     class FakeControlApi:
         def __init__(self, *args, **kwargs):
-            pass
+            captured["control_api_kwargs"] = kwargs
 
     class FakeServer:
         def serve_forever(self):
@@ -41,6 +41,7 @@ def test_slot_supervisor_uses_browser_sidecar_port_by_default(monkeypatch):
     monkeypatch.setenv("CB_PRINCIPAL_ID", "owner@example.test")
     monkeypatch.setenv("CB_BROWSER_ID", "browser-1")
     monkeypatch.setenv("CB_BINDING_GENERATION", "generation-1")
+    monkeypatch.setenv("CB_ROUTER_SHARED_SECRET", "slot-supervisor-test-secret-012345")
     monkeypatch.delenv("CB_BROWSER_API_URL", raising=False)
 
     import cloudbrowser.browser_slots.http_transport as http_transport
@@ -57,6 +58,7 @@ def test_slot_supervisor_uses_browser_sidecar_port_by_default(monkeypatch):
     assert captured["browser_base_url"] == "http://browser:9230"
     assert captured["expected_owner"] == "owner@example.test"
     assert captured["expected_generation"] == "generation-1"
+    assert captured["control_api_kwargs"]["trusted_secret"] == "slot-supervisor-test-secret-012345"
 
 
 def test_router_wires_supervisor_urls_and_identity_link_env(monkeypatch):

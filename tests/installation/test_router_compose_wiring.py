@@ -53,6 +53,17 @@ def test_compose_router_requires_control_plane_secrets_and_supervisor_map() -> N
         )
 
 
+def test_compose_slot_supervisor_receives_router_trusted_secret() -> None:
+    for filename in ("compose.yaml", "compose.coolify.yaml"):
+        block = (COMPOSE_DIR / filename).read_text(encoding="utf-8").split(
+            "  slot-supervisor:", 1
+        )[1].split("  browser:", 1)[0]
+        assert (
+            "CB_ROUTER_SHARED_SECRET: ${CB_ROUTER_SHARED_SECRET:?CB_ROUTER_SHARED_SECRET is required}"
+            in block
+        )
+
+
 def test_compose_router_waits_for_identity_link_and_keeps_state_volume() -> None:
     # Depends-on mirrors the cloudfiles ordering (identity-link must be
     # healthy before the resolver client is used) and the state volume stays

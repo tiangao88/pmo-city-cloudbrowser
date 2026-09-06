@@ -20,6 +20,7 @@ _MAX_URL = 2048
 _MAX_TABS = 32
 _MAX_BODY = 8192
 _MAX_RESPONSE = 64 * 1024
+_BINDING_HEADERS = ("X-CB-Principal", "X-CB-Browser", "X-CB-Generation")
 
 ALLOWED_AGENT_OPERATIONS = frozenset({"navigate", "click", "type", "page_info", "tabs_list"})
 FORBIDDEN_AGENT_OPERATIONS = frozenset(
@@ -282,6 +283,14 @@ class AgentControlService:
                 ):
                     self._send_json(401, {"status": "failed", "error_code": "unauthorized"})
                     return
+                if not _matches_binding_headers(
+                    self.headers,
+                    principal_id=principal_id,
+                    browser_id=browser_id,
+                    generation=generation,
+                ):
+                    self._send_json(401, {"status": "failed", "error_code": "unauthorized"})
+                    return
                 try:
                     length = int(self.headers.get("Content-Length", "0"))
                     if length <= 0 or length > _MAX_BODY:
@@ -323,6 +332,31 @@ def _bounded_identity(value: str, name: str) -> str:
     if not isinstance(value, str) or not value or len(value) > _MAX_IDENTITY:
         raise ValueError(f"{name} is invalid")
     return value
+
+
+def _matches_binding_headers(
+    headers: Mapping[str, str],
+    *,
+    principal_id: str,
+    browser_id: str,
+    generation: str,
+) -> bool:
+    """Return True only when every binding header is present, well-formed, and exact.
+
+    The envelope is accepted only alongside the trusted secret; a caller that
+    already holds the secret cannot steer the binding away from the
+    server-owned one, and a caller without the secret cannot forge it.
+    """
+    expected = (("X-CB-Principal", principal_id), ("X-CB-Browser", browser_id), ("X-CB-Generation", generation))
+    for name, expected_value in expected:
+        value = headers.get(name, "")
+        if not isinstance(value, str) or not value or len(value) > _MAX_IDENTITY:
+            return False
+        if any(ord(char) < 0x20 or ord(char) == 0x7F for char in value):
+            return False
+        if not hmac.compare_digest(value.encode("utf-8"), expected_value.encode("utf-8")):
+            return False
+    return True
 
 
 def _matches(readiness: BrowserReadiness, principal_id: str, generation: str) -> bool:

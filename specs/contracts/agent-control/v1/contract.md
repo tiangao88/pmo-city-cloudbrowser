@@ -18,6 +18,19 @@ The caller does not supply an authoritative principal, profile, slot, browser,
 or generation. Those values are derived by the authenticated router and bound to
 the selected owner's browser before the request reaches this service.
 
+## Binding lease (authenticated router forwarding seam)
+
+Every request to `POST /agent-control/v1` must carry the trusted router shared
+secret (`X-CB-Trusted-Secret`) **and** a per-request server-derived binding
+envelope: `X-CB-Principal`, `X-CB-Browser`, and `X-CB-Generation`. The service
+accepts the envelope only alongside the trusted secret, and accepts the secret
+only when the envelope matches the server-owned binding exactly. Missing,
+malformed (empty, oversized, or control-character-bearing), or mismatched
+envelope values yield `401 unauthorized` and the request is never dispatched.
+The envelope is a seam for future authenticated router-to-agent-control
+forwarding; the router-side forwarder is not enabled by this contract. Health
+(`GET /health`) remains unauthenticated.
+
 ## Allowed operations
 
 The baseline surface may expose:

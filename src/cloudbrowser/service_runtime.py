@@ -62,6 +62,7 @@ def run_service(component: str) -> None:
             browser_id=os.environ.get("CB_BROWSER_ID", "browser-unassigned"),
             generation=os.environ.get("CB_BINDING_GENERATION", "generation-0"),
         )
+        trusted_secret = _required_env("CB_ROUTER_SHARED_SECRET")
         browser_api_url = os.environ.get("CB_BROWSER_API_URL", "http://browser:9230")
         transport = HttpBrowserTransport(
             HttpJsonClient(browser_api_url),
@@ -72,7 +73,11 @@ def run_service(component: str) -> None:
             binding, Path(os.environ.get("CB_SNAPSHOT_PATH", "/data/state/tabs.json"))
         )
         server = create_control_server(
-            ControlApi(SlotSupervisor(lifecycle, transport), binding),
+            ControlApi(
+                SlotSupervisor(lifecycle, transport),
+                binding,
+                trusted_secret=trusted_secret,
+            ),
             address=("0.0.0.0", port),
         )
         try:
@@ -213,7 +218,7 @@ def run_service(component: str) -> None:
             for slot_id, url in sorted(supervisor_map.items())
         ]
         identity_client = build_identity_link_client()
-        supervisor_client = SupervisorClient(supervisor_map)
+        supervisor_client = SupervisorClient(supervisor_map, trusted_secret=shared_secret)
         session_store = RouterSessionStore(
             state_path,
             slots=slots,
@@ -225,12 +230,7 @@ def run_service(component: str) -> None:
             identity_client=identity_client,
             component="router",
         )
-        # Authenticated downstream calls require a shared secret header for
-        # trusted slot-supervisor dispatch. We bind it here; it never appears
-        # in any client-visible response. The router itself never sends
-        # email/principal material; the identity client resolves the
-        # caller into a server-derived principal.
-        _ = shared_secret  # accepted; downstream wiring lives in SupervisorClient
+        _ = shared_secret
         server = create_router_server(api, address=("0.0.0.0", port))
         try:
             server.serve_forever()

@@ -12,6 +12,7 @@ emails, or page values.
 
 from __future__ import annotations
 
+import hmac
 import json
 from typing import Callable, Mapping
 from urllib.error import HTTPError, URLError
@@ -22,6 +23,7 @@ _ALLOWED_OPERATIONS = frozenset({"wake", "suspend", "recreate"})
 _MAX_REQUEST_ID = 128
 _MAX_SLOT_ID = 64
 _MAX_RESPONSE_BYTES = 16 * 1024
+_MIN_TRUSTED_SECRET_LENGTH = 16
 
 
 class SupervisorClientError(ValueError):
@@ -35,7 +37,7 @@ class SupervisorUnavailable(RuntimeError):
 class _HttpJsonRequester:
     """Minimal stdlib HTTP POST helper with bounded URL/path validation."""
 
-    def __init__(self, base_url: str, *, timeout_s: float) -> None:
+    def __init__(self, base_url: str, *, timeout_s: float, trusted_secret: str) -> None:
         parsed = urlsplit(base_url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username:
             raise ValueError("supervisor base_url must be an HTTP(S) origin without userinfo")
@@ -46,9 +48,11 @@ class _HttpJsonRequester:
             raise ValueError("supervisor base_url path must be a simple absolute prefix")
         if not isinstance(timeout_s, (int, float)) or timeout_s <= 0 or timeout_s > 30:
             raise ValueError("supervisor timeout_s must be positive and <= 30s")
+        _validate_trusted_secret(trusted_secret)
         self._origin = f"{parsed.scheme}://{parsed.netloc}"
         self._base_path = path.rstrip("/")
         self._timeout_s = float(timeout_s)
+        self._trusted_secret = trusted_secret
 
     def post(self, body: Mapping[str, object]) -> tuple[int, bytes]:
         payload = json.dumps(body, separators=(",", ":"), sort_keys=True).encode("utf-8")
@@ -59,6 +63,7 @@ class _HttpJsonRequester:
             headers={
                 "Content-Type": "application/json",
                 "Content-Length": str(len(payload)),
+                "X-CB-Trusted-Secret": self._trusted_secret,
             },
         )
         try:
@@ -95,6 +100,15 @@ def _validate_operation(operation: str) -> None:
         raise SupervisorClientError("operation is not supported")
 
 
+def _validate_trusted_secret(trusted_secret: str) -> None:
+    if (
+        not isinstance(trusted_secret, str)
+        or len(trusted_secret) < _MIN_TRUSTED_SECRET_LENGTH
+        or any(ord(char) < 0x20 or ord(char) == 0x7F for char in trusted_secret)
+    ):
+        raise ValueError("trusted_secret must be at least 16 printable characters")
+
+
 class SupervisorClient:
     """Resolve ``slot_id`` to a base URL and dispatch ``POST /control``."""
 
@@ -102,13 +116,19 @@ class SupervisorClient:
         self,
         slot_url_map: Mapping[str, str],
         *,
+        trusted_secret: str,
         timeout_s: float = 3.0,
         requester_factory: Callable[[str, float], _HttpJsonRequester] | None = None,
     ) -> None:
         if not slot_url_map:
             raise ValueError("slot_url_map must contain at least one entry")
+        _validate_trusted_secret(trusted_secret)
         requesters: dict[str, _HttpJsonRequester] = {}
-        factory = requester_factory or (lambda origin, timeout: _HttpJsonRequester(origin, timeout_s=timeout))
+        factory = requester_factory or (
+            lambda origin, timeout: _HttpJsonRequester(
+                origin, timeout_s=timeout, trusted_secret=trusted_secret
+            )
+        )
         for slot_id, base_url in slot_url_map.items():
             _validate_slot_id(slot_id)
             requesters[slot_id] = factory(base_url, timeout_s)

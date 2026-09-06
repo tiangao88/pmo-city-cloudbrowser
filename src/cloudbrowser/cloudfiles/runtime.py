@@ -1,10 +1,94 @@
-"""Phase 3 gateway configuration and service wiring."""
+"""Phase 3 gateway configuration and Phase 4 operational service wiring.
+
+Production assembly: ``create_cloudfiles_runtime`` constructs the public
+gateway app (page actions unchanged and fail-closed) together with the
+operational components the Phase 4 plan requires:
+
+- ``ClamAvScanner`` with fail-closed production defaults (clamd INSTREAM
+  over TCP on 127.0.0.1:3310, 10 s timeout, 1 GiB cap, 64 KiB chunks);
+- ``RetentionJanitor`` with the 90-day default;
+- bounded ``Metrics`` (never identity or filenames);
+- an erasure hook bound to the durable store root (redacted audit events);
+- a redacted quarantine notification hook (threat T14) that never raises;
+- idempotent lifecycle cleanup (``close``).
+
+No janitor loop, scheduler, or background lifecycle is started here: the
+retention sweep and erasure are operator-invoked (see the lifecycle runbook),
+and page actions remain exactly the gateway surface.
+"""
 
 from __future__ import annotations
 
+import logging
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
+
 from .api import create_cloudfiles_app
+from .audit import redact_event
 from .downloads_client import DownloadsClient
+from .erasure import erase_principal as _erase_principal
 from .identity_adapter import resolve_tinyauth_session
+from .metrics import Metrics
+from .retention import RetentionJanitor
+from .scanner import ClamAvScanner
+
+DEFAULT_DOWNLOADS_ROOT = "/data/downloads"
+DEFAULT_RETENTION_DAYS = 90
+DEFAULT_CLAMAV_HOST = "127.0.0.1"
+DEFAULT_CLAMAV_PORT = 3310
+DEFAULT_CLAMAV_TIMEOUT_S = 10.0
+DEFAULT_MAX_FILE_BYTES = 1024 * 1024 * 1024  # 1 GiB single-file cap
+DEFAULT_CHUNK_BYTES = 64 * 1024
+
+
+class RedactedQuarantineNotifier:
+    """Production quarantine notification: log only bounded, redacted fields.
+
+    Applies ``audit.redact_event`` before emission (threat T14) and never
+    raises into the ingest pipeline.
+    """
+
+    def __init__(self, *, logger=None) -> None:
+        self._logger = logger or logging.getLogger("cloudbrowser.cloudfiles")
+
+    def notify_quarantine(self, *, event: dict[str, object]) -> None:
+        try:
+            self._logger.warning(
+                "cloudfiles quarantine event: %s",
+                json_dumps_redacted(event),
+            )
+        except Exception:  # noqa: BLE001 - notification must never break ingest
+            return
+
+
+def json_dumps_redacted(event: dict[str, object]) -> str:
+    """Render a redacted event deterministically and bounded."""
+    import json
+
+    return json.dumps(redact_event(event), sort_keys=True, separators=(",", ":"))
+
+
+@dataclass
+class CloudFilesRuntime:
+    """The assembled production runtime.
+
+    ``app`` is the WSGI gateway (fail-closed page actions). The remaining
+    fields are the wired operational components and hooks.
+    """
+
+    app: object
+    scanner: ClamAvScanner
+    janitor: RetentionJanitor
+    metrics: Metrics
+    erase: Callable[..., dict[str, object]]
+    notifier: RedactedQuarantineNotifier
+    store_root: Path
+    _closed: bool = False
+
+    def close(self) -> None:
+        """Release runtime resources. Idempotent; safe to call repeatedly."""
+        self._closed = True
 
 
 def build_app(
@@ -22,4 +106,67 @@ def build_app(
     )
 
 
-__all__ = ["build_app"]
+def create_cloudfiles_runtime(
+    *,
+    downloads_base_url: str,
+    shared_secret: str,
+    instance_id: str,
+    release_version: str,
+    store_root: str | Path = DEFAULT_DOWNLOADS_ROOT,
+    scanner_host: str = DEFAULT_CLAMAV_HOST,
+    scanner_port: int = DEFAULT_CLAMAV_PORT,
+    scanner_timeout_s: float = DEFAULT_CLAMAV_TIMEOUT_S,
+    scanner_max_bytes: int = DEFAULT_MAX_FILE_BYTES,
+    scanner_chunk_bytes: int = DEFAULT_CHUNK_BYTES,
+    retention_days: int = DEFAULT_RETENTION_DAYS,
+    notifier_logger=None,
+) -> CloudFilesRuntime:
+    """Assemble the production CloudFiles runtime object graph.
+
+    The gateway ``app`` is identical to ``build_app``; operational components
+    are constructed with fail-closed safe defaults. The erasure hook is bound
+    to ``store_root`` so no caller can point it at another location.
+    """
+
+    if retention_days <= 0:
+        raise ValueError("retention_days must be positive")
+    root = Path(store_root)
+
+    def erase(*, principal: str, request_id: str = "ops-erasure") -> dict[str, object]:
+        return _erase_principal(principal=principal, store_root=root, request_id=request_id)
+
+    return CloudFilesRuntime(
+        app=build_app(
+            downloads_base_url=downloads_base_url,
+            shared_secret=shared_secret,
+            instance_id=instance_id,
+            release_version=release_version,
+        ),
+        scanner=ClamAvScanner(
+            host=scanner_host,
+            port=scanner_port,
+            timeout_s=scanner_timeout_s,
+            max_bytes=scanner_max_bytes,
+            chunk_bytes=scanner_chunk_bytes,
+        ),
+        janitor=RetentionJanitor(retention_days=retention_days),
+        metrics=Metrics(),
+        erase=erase,
+        notifier=RedactedQuarantineNotifier(logger=notifier_logger),
+        store_root=root,
+    )
+
+
+__all__ = [
+    "CloudFilesRuntime",
+    "DEFAULT_CHUNK_BYTES",
+    "DEFAULT_CLAMAV_HOST",
+    "DEFAULT_CLAMAV_PORT",
+    "DEFAULT_CLAMAV_TIMEOUT_S",
+    "DEFAULT_DOWNLOADS_ROOT",
+    "DEFAULT_MAX_FILE_BYTES",
+    "DEFAULT_RETENTION_DAYS",
+    "RedactedQuarantineNotifier",
+    "build_app",
+    "create_cloudfiles_runtime",
+]

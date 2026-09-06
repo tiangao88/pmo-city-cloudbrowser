@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import hmac
 import json
 from typing import Any, Mapping
 
 from cloudbrowser.browser_slots import BrowserBinding, BrowserOwnershipChanged, SlotSupervisor
+
+_MIN_TRUSTED_SECRET_LENGTH = 16
+_MAX_CONTROL_BODY = 4096
 
 
 @dataclass(frozen=True)
@@ -21,9 +25,18 @@ class ControlRequest:
 class ControlApi:
     """Route only bounded lifecycle commands to a server-bound supervisor."""
 
-    def __init__(self, supervisor: SlotSupervisor, binding: BrowserBinding) -> None:
+    def __init__(
+        self,
+        supervisor: SlotSupervisor,
+        binding: BrowserBinding,
+        *,
+        trusted_secret: str | None = None,
+    ) -> None:
+        if trusted_secret is not None:
+            _validate_trusted_secret(trusted_secret)
         self._supervisor = supervisor
         self._binding = binding
+        self._trusted_secret = trusted_secret
 
     def handle(self, request: ControlRequest) -> dict[str, object]:
         if not request.request_id or len(request.request_id) > 128:
@@ -67,12 +80,28 @@ class ControlApi:
         }
 
 
+def _validate_trusted_secret(trusted_secret: str) -> None:
+    if (
+        not isinstance(trusted_secret, str)
+        or len(trusted_secret) < _MIN_TRUSTED_SECRET_LENGTH
+        or any(ord(char) < 0x20 or ord(char) == 0x7F for char in trusted_secret)
+    ):
+        raise ValueError("trusted_secret must be at least 16 printable characters")
+
+
 def create_control_server(
     api: ControlApi,
     *,
+    trusted_secret: str | None = None,
     address: tuple[str, int] = ("127.0.0.1", 8080),
 ) -> ThreadingHTTPServer:
     """Create a dependency-free server for POST /control and GET /health."""
+    if trusted_secret is not None:
+        _validate_trusted_secret(trusted_secret)
+        if api._trusted_secret is None:
+            api._trusted_secret = trusted_secret
+        elif not hmac.compare_digest(api._trusted_secret, trusted_secret):
+            raise ValueError("trusted_secret does not match ControlApi")
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - stdlib HTTP handler contract
@@ -85,10 +114,15 @@ def create_control_server(
             if self.path != "/control":
                 self.send_error(404)
                 return
+            if api._trusted_secret is None or not hmac.compare_digest(
+                self.headers.get("X-CB-Trusted-Secret", ""), api._trusted_secret
+            ):
+                self._send_json(401, {"status": "failed", "error_code": "unauthorized"})
+                return
             result: Mapping[str, object]
             try:
                 length = int(self.headers.get("Content-Length", "0"))
-                if length <= 0 or length > 4096:
+                if length <= 0 or length > _MAX_CONTROL_BODY:
                     raise ValueError("invalid body length")
                 raw = json.loads(self.rfile.read(length))
                 if not isinstance(raw, dict):
@@ -110,11 +144,12 @@ def create_control_server(
             body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
 
-        def log_message(self, format: str, *args: Any) -> None:
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 - stdlib contract
             return
 
     return ThreadingHTTPServer(address, Handler)

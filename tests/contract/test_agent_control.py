@@ -132,7 +132,20 @@ def test_agent_http_server_never_exposes_raw_cdp_or_sensitive_page_fields() -> N
     try:
         url = f"http://127.0.0.1:{server.server_port}/agent-control/v1"
         body = json.dumps({"request_id": "request-1", "operation": "page_info", "params": {}}).encode()
-        response = urlopen(Request(url, data=body, method="POST", headers={"X-CB-Trusted-Secret": "test-trusted-secret"}), timeout=2)
+        response = urlopen(
+            Request(
+                url,
+                data=body,
+                method="POST",
+                headers={
+                    "X-CB-Trusted-Secret": "test-trusted-secret",
+                    "X-CB-Principal": "owner@example.test",
+                    "X-CB-Browser": "browser-1",
+                    "X-CB-Generation": "generation-1",
+                },
+            ),
+            timeout=2,
+        )
         payload = json.loads(response.read())
         assert payload["status"] == "ok"
         assert "cookies" not in json.dumps(payload).lower()

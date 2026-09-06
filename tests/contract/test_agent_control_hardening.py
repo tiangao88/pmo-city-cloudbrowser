@@ -84,7 +84,12 @@ def test_agent_control_requires_trusted_router_header() -> None:
             f"http://127.0.0.1:{server.server_port}/agent-control/v1",
             data=body,
             method="POST",
-            headers={"X-CB-Trusted-Secret": "trusted-secret-value"},
+            headers={
+                "X-CB-Trusted-Secret": "trusted-secret-value",
+                "X-CB-Principal": "owner@example.test",
+                "X-CB-Browser": "browser-1",
+                "X-CB-Generation": "generation-1",
+            },
         )
         response = urlopen(request, timeout=2)
         assert json.loads(response.read())["status"] == "ok"
