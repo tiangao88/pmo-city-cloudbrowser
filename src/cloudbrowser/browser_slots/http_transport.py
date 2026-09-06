@@ -11,7 +11,9 @@ from .transport import BrowserReadiness, BrowserUnavailable
 class HttpClient(Protocol):
     """Internal request contract; callers never receive raw browser control."""
 
-    def request(self, method: str, path: str, *, body: str | None = None) -> object: ...
+    def request(
+        self, method: str, path: str, *, body: str | None = None, headers: "dict[str, str] | None" = None
+    ) -> object: ...
 
 
 class HttpBrowserTransport:
@@ -70,6 +72,31 @@ class HttpBrowserTransport:
 
     def close_empty_pages(self) -> None:
         self._expect_ok(self._client.request("POST", "/browser/pages/close-empty"))
+
+    def push_binding(self, binding: "BrowserBinding") -> None:
+        """Push a server-minted binding to the browser service (secret-gated)."""
+
+        import json as _json
+
+        payload = _json.dumps(
+            {
+                "principal_id": binding.principal_id,
+                "profile_id": binding.profile_id,
+                "browser_id": binding.browser_id,
+                "generation": binding.generation,
+            }
+        )
+        import os as _os
+
+        secret = _os.environ.get("CB_ROUTER_SHARED_SECRET", "")
+        self._expect_ok(
+            self._client.request(
+                "POST",
+                "/browser/binding",
+                body=payload,
+                headers={"X-CB-Trusted-Secret": secret},
+            )
+        )
 
     @staticmethod
     def _validate_page_url(url: str) -> None:

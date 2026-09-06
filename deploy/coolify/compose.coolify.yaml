@@ -97,6 +97,9 @@ services:
       CB_PROFILE_DIR: /data/profile
       CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
       CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
+      CB_BROWSER_DOWNLOAD_DIR: /data/downloads-browser
+      CB_DOWNLOADS_INGEST_URL: http://cloudfiles:8086
+      CB_DOWNLOADS_INGEST_SECRET: ${CB_DOWNLOADS_INGEST_SECRET:?CB_DOWNLOADS_INGEST_SECRET is required}
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9230/browser/health', timeout=3)"]
       interval: 10s
@@ -105,6 +108,7 @@ services:
       start_period: 10s
     volumes:
       - browser-profile:/data/profile
+      - browser-downloads:/data/downloads-browser
 
   agent-control:
     <<: *common
@@ -209,6 +213,8 @@ services:
       CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:?CB_OIDC_ISSUER is required}
       CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:?CB_TINYAUTH_REALM is required}
       CB_CLAMAV_HOST: clamav
+      CB_DOWNLOADS_INGEST_SECRET: ${CB_DOWNLOADS_INGEST_SECRET:?CB_DOWNLOADS_INGEST_SECRET is required}
+      CB_DOWNLOADS_INGEST_PORT: 8086
     depends_on:
       downloads:
         condition: service_started
@@ -224,6 +230,9 @@ services:
       start_period: 5s
     expose:
       - "8085"
+      - "8086"
+    volumes:
+      - downloads:/data/downloads:ro
 
   clamav:
     <<: *common
@@ -287,6 +296,8 @@ volumes:
     name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-browser-profile
   downloads:
     name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-downloads
+  browser-downloads:
+    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-browser-downloads
   broker-state:
     name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-broker-state
   identity-link-state:

@@ -26,6 +26,21 @@ _MAX_RESPONSE_BYTES = 16 * 1024
 _MIN_TRUSTED_SECRET_LENGTH = 16
 
 
+def _serialize_binding(binding: object) -> dict[str, str]:
+    """Bind the wake payload to the allowlisted BrowserBinding shape."""
+
+    from cloudbrowser.browser_slots import BrowserBinding
+
+    if not isinstance(binding, BrowserBinding):
+        raise SupervisorClientError("binding must be a BrowserBinding")
+    return {
+        "principal_id": binding.principal_id,
+        "profile_id": binding.profile_id,
+        "browser_id": binding.browser_id,
+        "generation": binding.generation,
+    }
+
+
 class SupervisorClientError(ValueError):
     """Caller supplied an argument this client refuses locally."""
 
@@ -139,15 +154,30 @@ class SupervisorClient:
     def known_slots(self) -> frozenset[str]:
         return self._known_slots
 
-    def post_control(self, slot_id: str, *, operation: str, request_id: str) -> dict[str, object]:
-        """POST ``/control`` on the supervisor backing ``slot_id``."""
+    def post_control(
+        self,
+        slot_id: str,
+        *,
+        operation: str,
+        request_id: str,
+        binding: object | None = None,
+    ) -> dict[str, object]:
+        """POST ``/control`` on the supervisor backing ``slot_id``.
+
+        ``binding`` carries the server-minted session binding on ``wake`` so
+        the slot supervisor can adopt it before starting the browser; it is
+        omitted entirely when absent so existing callers stay unchanged.
+        """
         _validate_slot_id(slot_id)
         _validate_operation(operation)
         _validate_request_id(request_id)
         requester = self._requesters.get(slot_id)
         if requester is None:
             raise SupervisorClientError("slot is not configured")
-        status, raw = requester.post({"operation": operation, "request_id": request_id})
+        body: dict[str, object] = {"operation": operation, "request_id": request_id}
+        if binding is not None:
+            body["binding"] = _serialize_binding(binding)
+        status, raw = requester.post(body)
         if len(raw) > _MAX_RESPONSE_BYTES:
             raise SupervisorUnavailable("supervisor response is too large")
         try:

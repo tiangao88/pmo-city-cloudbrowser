@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import os
 from pathlib import Path
 import signal
@@ -28,6 +28,7 @@ class BrowserProcessConfig:
     owner: str
     generation: str
     extra_args: tuple[str, ...] = field(default_factory=tuple)
+    download_dir: Path | None = None
     startup_timeout_s: float = 30.0
     stop_timeout_s: float = 5.0
 
@@ -53,6 +54,11 @@ class BrowserProcessConfig:
         )
         if any(argument.startswith(forbidden_prefixes) for argument in self.extra_args):
             raise ValueError("debugging endpoint and profile are service-owned")
+        if self.download_dir is not None:
+            if not isinstance(self.download_dir, Path) or not self.download_dir.is_absolute():
+                raise ValueError("download_dir must be an absolute path")
+            if any(argument.startswith("--download-dir=") for argument in self.extra_args):
+                raise ValueError("download_dir is service-owned")
 
     def command(self) -> list[str]:
         """Build a private, profile-isolated Chromium command."""
@@ -64,6 +70,9 @@ class BrowserProcessConfig:
             "--no-first-run",
             "--no-default-browser-check",
             "--disable-background-networking",
+            *(
+                (f"--download-dir={self.download_dir}",) if self.download_dir is not None else ()
+            ),
             *self.extra_args,
         ]
 
@@ -104,6 +113,20 @@ class BrowserProcess:
     def pid(self) -> int | None:
         value = getattr(self._process, "pid", None)
         return value if isinstance(value, int) else None
+
+    def rebind(self, owner: str, generation: str) -> None:
+        """Adopt a server-minted owner/generation while the browser is stopped.
+
+        ``BrowserProcessConfig`` is frozen, so a new instance is built with
+        the same service-owned paths and flags but the new identity.
+        """
+
+        if self.state != "stopped":
+            raise BrowserProcessError("browser must be stopped to rebind")
+        for value in (owner, generation):
+            if not isinstance(value, str) or not value or len(value) > 256:
+                raise ValueError("owner and generation must be bounded strings")
+        self.config = replace(self.config, owner=owner, generation=generation)
 
     def start(self, *, owner: str | None = None, generation: str | None = None) -> bool:
         if owner is not None and owner != self.config.owner:

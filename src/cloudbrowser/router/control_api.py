@@ -16,10 +16,17 @@ _MAX_CONTROL_BODY = 4096
 
 @dataclass(frozen=True)
 class ControlRequest:
-    """Caller input accepted by the control API; binding is server-derived."""
+    """Caller input accepted by the control API; binding is server-derived.
+
+    ``binding`` is optional and only honored for ``wake``: the router passes
+    the session-minted binding so the supervisor adopts it before starting
+    the browser. A binding naming a different ``browser_id`` is rejected
+    with ``slot_mismatch`` and never reaches the supervisor.
+    """
 
     operation: str
     request_id: str
+    binding: BrowserBinding | None = None
 
 
 class ControlApi:
@@ -45,9 +52,25 @@ class ControlApi:
                 "status": "failed",
                 "error_code": "invalid_request",
             }
+        binding = self._binding
+        if request.binding is not None:
+            if not isinstance(request.binding, BrowserBinding):
+                return {
+                    "request_id": request.request_id,
+                    "status": "failed",
+                    "error_code": "invalid_request",
+                }
+            if request.binding.browser_id != self._binding.browser_id:
+                return {
+                    "request_id": request.request_id,
+                    "status": "failed",
+                    "error_code": "slot_mismatch",
+                }
+            if request.operation == "wake":
+                binding = request.binding
         try:
             if request.operation == "wake":
-                result = self._supervisor.wake(self._binding)
+                result = self._supervisor.wake(binding)
             elif request.operation == "suspend":
                 result = self._supervisor.suspend(self._binding)
             elif request.operation == "stop":
@@ -131,7 +154,22 @@ def create_control_server(
                 request_id = raw.get("request_id")
                 if not isinstance(operation, str) or not isinstance(request_id, str):
                     raise ValueError("request fields are invalid")
-                result = api.handle(ControlRequest(operation, request_id))
+                binding_payload = raw.get("binding")
+                if binding_payload is None:
+                    binding = None
+                else:
+                    if not isinstance(binding_payload, dict):
+                        raise ValueError("binding must be an object")
+                    binding_fields = ("principal_id", "profile_id", "browser_id", "generation")
+                    if any(not isinstance(binding_payload.get(f), str) for f in binding_fields):
+                        raise ValueError("binding fields are invalid")
+                    binding = BrowserBinding(
+                        principal_id=binding_payload["principal_id"],
+                        profile_id=binding_payload["profile_id"],
+                        browser_id=binding_payload["browser_id"],
+                        generation=binding_payload["generation"],
+                    )
+                result = api.handle(ControlRequest(operation, request_id, binding))
             except (ValueError, TypeError, json.JSONDecodeError):
                 result = {
                     "request_id": "",

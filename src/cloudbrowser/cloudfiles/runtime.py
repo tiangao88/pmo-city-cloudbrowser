@@ -20,6 +20,7 @@ and page actions remain exactly the gateway surface.
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -75,10 +76,14 @@ def json_dumps_redacted(event: dict[str, object]) -> str:
 
 @dataclass
 class CloudFilesRuntime:
-    """The assembled production runtime.
+    """The assembled production CloudFiles runtime object graph.
 
     ``app`` is the WSGI gateway (fail-closed page actions). The remaining
     fields are the wired operational components and hooks.
+    ``ingest_server`` is the internal browser-download ingest receiver
+    bound on ``CB_DOWNLOADS_INGEST_PORT`` (default 8086) when
+    ``CB_DOWNLOADS_INGEST_SECRET`` is configured; it is served on a
+    daemon thread owned by the runtime and shut down by ``close()``.
     """
 
     app: object
@@ -91,6 +96,7 @@ class CloudFilesRuntime:
     pipeline: IngestPipeline
     store: object
     _downloads_service: DownloadsService
+    ingest_server: object | None = None
     _closed: bool = False
 
     def purge(self, *, principal: str) -> dict[str, object]:
@@ -109,6 +115,17 @@ class CloudFilesRuntime:
 
     def close(self) -> None:
         """Release runtime resources. Idempotent; safe to call repeatedly."""
+        server = self.ingest_server
+        if server is not None:
+            try:
+                server.shutdown()
+            except Exception:  # noqa: BLE001 - close must never raise
+                pass
+            try:
+                server.server_close()
+            except Exception:  # noqa: BLE001 - close must never raise
+                pass
+            self.ingest_server = None
         self._closed = True
 
 
@@ -145,6 +162,8 @@ def create_cloudfiles_runtime(
     scanner=None,
     notifier=None,
     clock=None,
+    ingest_secret: str | None = None,
+    ingest_port: int = 8086,
 ) -> CloudFilesRuntime:
     """Assemble the production CloudFiles runtime object graph.
 
@@ -205,7 +224,7 @@ def create_cloudfiles_runtime(
         metrics.record_erasure()
         return result
 
-    return CloudFilesRuntime(
+    runtime = CloudFilesRuntime(
         app=build_app(
             downloads_base_url=downloads_base_url,
             shared_secret=shared_secret,
@@ -222,6 +241,53 @@ def create_cloudfiles_runtime(
         store=downloads_service.store,
         _downloads_service=downloads_service,
     )
+    _bind_ingest_server(
+        runtime,
+        instance_id=instance_id,
+        ingest_secret=ingest_secret,
+        ingest_port=ingest_port,
+    )
+    return runtime
+
+
+def _bind_ingest_server(
+    runtime: CloudFilesRuntime,
+    *,
+    instance_id: str,
+    ingest_secret: str | None,
+    ingest_port: int,
+) -> None:
+    """Bind and serve the internal ingest receiver when configured.
+
+    The receiver is internal-only (never exposed at the edge): the browser
+    service reaches it over the compose network on
+    ``CB_DOWNLOADS_INGEST_PORT`` (default 8086). It is started only when
+    ``ingest_secret`` is set, so deployments without the transport keep the
+    exact prior surface. The serve thread is a daemon owned by the runtime
+    and shut down by ``close()``.
+    """
+
+    secret = ingest_secret
+    if not secret:
+        return
+    if not 0 <= ingest_port <= 65535:
+        raise ValueError("ingest_port must be between 0 (ephemeral) and 65535")
+    from .ingest_api import create_ingest_server
+    from cloudbrowser.downloads.contracts import ServerIdentity
+
+    server = create_ingest_server(
+        runtime.pipeline,
+        server_identity=ServerIdentity(component="cloudfiles", instance_id=instance_id),
+        trusted_secret=secret.encode("utf-8"),
+        address=("0.0.0.0", ingest_port),
+    )
+    thread = threading.Thread(
+        target=server.serve_forever,
+        name="cloudfiles-ingest-receiver",
+        daemon=True,
+    )
+    thread.start()
+    runtime.ingest_server = server
 
 
 __all__ = [

@@ -74,6 +74,9 @@ def create_browser_server(
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib HTTP handler contract
             try:
+                if self.path == "/browser/binding":
+                    self._handle_binding_push()
+                    return
                 if self.path == "/browser/start":
                     adapter.start()
                 elif self.path == "/browser/stop":
@@ -95,6 +98,35 @@ def create_browser_server(
                 self._send_json(200, {"ok": True})
             except (BrowserUnavailable, ValueError, UnicodeDecodeError):
                 self._send_json(503, {"ok": False, "error_code": "browser_operation_failed"})
+
+        def _handle_binding_push(self) -> None:
+            """Adopt a server-minted binding (trusted-secret gated).
+
+            Only a stopped browser may be rebound, mirroring the lifecycle
+            rule; the adapter and process are rebuilt for the new identity.
+            """
+
+            import os
+
+            from cloudbrowser.browser_service import parse_binding_push
+
+            expected = os.environ.get("CB_ROUTER_SHARED_SECRET")
+            provided = self.headers.get("X-CB-Trusted-Secret")
+            if not expected or not provided:
+                self._send_json(403, {"ok": False, "error_code": "binding_not_authorized"})
+                return
+            try:
+                payload = json.loads(self._read_text())
+                binding = parse_binding_push(payload, provided_secret=provided)
+            except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                self._send_json(400, {"ok": False, "error_code": "invalid_binding"})
+                return
+            if process.state != "stopped":
+                self._send_json(409, {"ok": False, "error_code": "browser_not_stopped"})
+                return
+            process.rebind(binding.principal_id, binding.generation)
+            adapter.rebind(binding.principal_id, binding.generation)
+            self._send_json(200, {"ok": True})
 
         def _read_text(self) -> str:
             try:

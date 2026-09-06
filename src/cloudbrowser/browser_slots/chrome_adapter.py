@@ -92,6 +92,15 @@ class ChromeBrowserAdapter:
     stop_callback: Callable[[], None] | None = None
     page_actions: PageActionAdapter | None = None
 
+    def rebind(self, owner: str, generation: str) -> None:
+        """Point the adapter's identity at a newly adopted binding."""
+
+        for value in (owner, generation):
+            if not isinstance(value, str) or not value or len(value) > 256:
+                raise ValueError("owner and generation must be bounded strings")
+        self.owner = owner
+        self.generation = generation
+
     def start(self) -> None:
         if self.start_callback is None:
             raise BrowserUnavailable("browser start is not configured")

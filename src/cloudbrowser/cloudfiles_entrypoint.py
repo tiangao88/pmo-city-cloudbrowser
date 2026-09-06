@@ -38,6 +38,14 @@ def _port() -> int:
     return value
 
 
+def _ingest_port() -> int:
+    value = os.environ.get("CB_DOWNLOADS_INGEST_PORT", "8086")
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise SystemExit("CB_DOWNLOADS_INGEST_PORT must be an integer") from exc
+
+
 def _edge_auth_mode() -> str | None:
     """Validate and return the configured edge authentication mode."""
     mode = os.environ.get("CB_EDGE_AUTH")
@@ -56,6 +64,8 @@ def main() -> None:
         instance_id=_required("CB_INSTANCE_ID"),
         release_version=_required("CB_RELEASE_VERSION"),
         scanner_host=os.environ.get("CB_CLAMAV_HOST", "127.0.0.1"),
+        ingest_secret=os.environ.get("CB_DOWNLOADS_INGEST_SECRET") or None,
+        ingest_port=_ingest_port(),
     )
     app = runtime.app
     if edge_mode == _EDGE_AUTH_TRAEFIK_FORWARDAUTH:

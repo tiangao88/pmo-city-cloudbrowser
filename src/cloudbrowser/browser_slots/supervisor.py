@@ -85,6 +85,32 @@ class SlotSupervisor:
         snapshot = self._lifecycle.stop(binding)
         return OrchestrationResult("stopped", snapshot.state)
 
+    def adopt_binding(self, binding: BrowserBinding) -> OrchestrationResult:
+        """Rebind a stopped slot to a new server-minted binding.
+
+        The browser is pushed the new identity first; only after that push
+        succeeds is the lifecycle rebound, so a failed push leaves the slot's
+        owner untouched. Refusing to rebind a running browser is the
+        guarantee that one generation's downloads can never be attributed to
+        another owner.
+        """
+
+        if not isinstance(binding, BrowserBinding):
+            raise ValueError("binding must be a BrowserBinding")
+        current = self._lifecycle.binding
+        if binding.browser_id != current.browser_id:
+            raise ValueError("binding names a different browser slot")
+        if self._lifecycle.state is not BrowserState.STOPPED:
+            raise ValueError("cannot adopt a new binding while the slot is not stopped")
+        push = getattr(self._transport, "push_binding", None)
+        if push is not None:
+            push(binding)
+        try:
+            snapshot = self._lifecycle.adopt_binding(binding)
+        except LifecycleError as exc:
+            raise ValueError(str(exc)) from exc
+        return OrchestrationResult("adopted", snapshot.state)
+
     def recreate(
         self,
         binding: BrowserBinding,

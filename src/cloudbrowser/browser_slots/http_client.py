@@ -24,7 +24,9 @@ class HttpJsonClient:
         self._base_url = f"{parsed.scheme}://{parsed.netloc}"
         self._timeout_s = timeout_s
 
-    def request(self, method: str, path: str, *, body: str | None = None) -> object:
+    def request(
+        self, method: str, path: str, *, body: str | None = None, headers: dict[str, str] | None = None
+    ) -> object:
         if method not in {"GET", "POST"}:
             raise ValueError("method is not allowed")
         if not isinstance(path, str) or not path.startswith("/") or path.startswith("//"):
@@ -33,11 +35,14 @@ class HttpJsonClient:
         if parsed.scheme or parsed.netloc or ".." in parsed.path or parsed.query or parsed.fragment:
             raise ValueError("path must be a simple relative API path")
         data = body.encode("utf-8") if body is not None else None
+        merged = {"Content-Type": "text/plain; charset=utf-8"} if data is not None else {}
+        if headers:
+            merged.update(headers)
         request = Request(
             self._base_url + parsed.path,
             data=data,
             method=method,
-            headers={"Content-Type": "text/plain; charset=utf-8"} if data is not None else {},
+            headers=merged,
         )
         try:
             with urlopen(request, timeout=self._timeout_s) as response:

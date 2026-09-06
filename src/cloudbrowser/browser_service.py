@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import os
 import shlex
 import threading
@@ -38,6 +39,9 @@ def build_browser_service() -> tuple[BrowserProcess, object, threading.Event]:
             owner=owner,
             generation=generation,
             extra_args=tuple(shlex.split(os.environ.get("CB_CHROME_EXTRA_ARGS", ""))),
+            download_dir=(
+                Path(download_dir) if (download_dir := os.environ.get("CB_BROWSER_DOWNLOAD_DIR")) else None
+            ),
         ),
         probe=lambda: chrome_version_is_ready(chrome.json_request("/json/version")),
     )
@@ -75,6 +79,27 @@ def build_download_watcher():
         max_bytes = int(os.environ.get("CB_BROWSER_DOWNLOAD_MAX_BYTES", str(1024 * 1024 * 1024)))
     except ValueError as exc:
         raise SystemExit("CB_BROWSER_DOWNLOAD_MAX_BYTES must be an integer") from exc
+    principal_id = os.environ.get("CB_PRINCIPAL_ID", "principal-unassigned")
+    unassigned = {
+        "principal-unassigned",
+        "profile-unassigned",
+        "browser-unassigned",
+        "generation-0",
+    }
+    if principal_id in unassigned or any(
+        os.environ.get(key, default) in unassigned
+        for key, default in (
+            ("CB_PROFILE_ID", "profile-unassigned"),
+            ("CB_BROWSER_ID", "browser-unassigned"),
+            ("CB_BINDING_GENERATION", "generation-0"),
+        )
+    ):
+        # A download watcher with a placeholder binding would attribute
+        # files to a non-identity; refuse to start the transport.
+        raise SystemExit(
+            "download watcher requires a real server binding "
+            "(CB_PRINCIPAL_ID/CB_PROFILE_ID/CB_BROWSER_ID/CB_BINDING_GENERATION)"
+        )
     from cloudbrowser.cloudfiles.browser_downloads import (
         BrowserDownloadCompleted,
         BrowserDownloadWatcher,
@@ -88,7 +113,7 @@ def build_download_watcher():
         config = DownloadWatchConfig(
             download_dir=Path(download_dir),
             binding=PrincipalBinding(
-                principal_id=os.environ.get("CB_PRINCIPAL_ID", "principal-unassigned"),
+                principal_id=principal_id,
                 profile_id=os.environ.get("CB_PROFILE_ID", "profile-unassigned"),
                 browser_id=os.environ.get("CB_BROWSER_ID", "browser-unassigned"),
                 generation=os.environ.get("CB_BINDING_GENERATION", "generation-0"),
@@ -109,6 +134,51 @@ def build_download_watcher():
         )
 
     return BrowserDownloadWatcher(config, submit=submit)
+
+
+_MAX_BINDING_FIELD = 256
+
+
+def parse_binding_push(payload: object, *, provided_secret: str | None) -> "BrowserBinding":
+    """Validate a trusted-secret-gated binding push from the slot supervisor.
+
+    The secret gate runs before any payload inspection: without a configured
+    ``CB_ROUTER_SHARED_SECRET`` (or with a mismatching value) the push is
+    refused regardless of contents. Only the allowlisted ``BrowserBinding``
+    fields are accepted — no free-form keys.
+    """
+
+    from cloudbrowser.browser_slots import BrowserBinding
+
+    expected = os.environ.get("CB_ROUTER_SHARED_SECRET")
+    if not expected or not provided_secret or not hmac.compare_digest(expected, provided_secret):
+        raise PermissionError("binding push rejected: trusted secret mismatch")
+    if not isinstance(payload, dict):
+        raise ValueError("binding push payload must be an object")
+    allowed = {"principal_id", "profile_id", "browser_id", "generation"}
+    unknown = set(payload) - allowed
+    if unknown:
+        raise ValueError(f"binding push has unexpected fields: {sorted(unknown)}")
+    missing = allowed - set(payload)
+    if missing:
+        raise ValueError(f"binding push is missing fields: {sorted(missing)}")
+    values: dict[str, str] = {}
+    for field in sorted(allowed):
+        value = payload[field]
+        if (
+            not isinstance(value, str)
+            or not value
+            or len(value) > _MAX_BINDING_FIELD
+            or any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value)
+        ):
+            raise ValueError(f"binding push field {field!r} is invalid")
+        values[field] = value
+    return BrowserBinding(
+        profile_id=values["profile_id"],
+        principal_id=values["principal_id"],
+        browser_id=values["browser_id"],
+        generation=values["generation"],
+    )
 
 
 def run_browser_service() -> None:

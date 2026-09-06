@@ -71,6 +71,23 @@ class OwnerBoundLifecycle:
     def binding(self) -> BrowserBinding:
         return self._binding
 
+    def adopt_binding(self, binding: BrowserBinding) -> LifecycleSnapshot:
+        """Rebind the lifecycle to a new server-minted binding.
+
+        Only permitted from STOPPED (a stopped slot may be handed to a new
+        owner with a fresh generation); refusing in every other state keeps
+        the binding and the runtime state machine coherent.
+        """
+
+        if not isinstance(binding, BrowserBinding):
+            raise ValueError("binding must be a BrowserBinding")
+        if self._state is not BrowserState.STOPPED:
+            raise LifecycleError(
+                f"cannot adopt a new binding from {self._state.value}; stop first"
+            )
+        self._binding = binding
+        return self.snapshot()
+
     @property
     def state(self) -> BrowserState:
         return self._state
