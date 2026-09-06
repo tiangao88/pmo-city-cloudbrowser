@@ -97,6 +97,11 @@ class HttpBrowserTransport:
                 headers={"X-CB-Trusted-Secret": secret},
             )
         )
+        # The browser acknowledged the rebind, so every later readiness probe
+        # reports the new identity; keep the transport's expectations in step
+        # or adopt-then-wake would fail closed against the previous owner.
+        self._expected_owner = binding.principal_id
+        self._expected_generation = binding.generation
 
     @staticmethod
     def _validate_page_url(url: str) -> None:
