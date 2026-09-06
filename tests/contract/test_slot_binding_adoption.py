@@ -203,6 +203,10 @@ class _RecordingSupervisor:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict]] = []
 
+    def adopt_binding(self, binding):
+        self.calls.append(("adopt", {"binding": binding}))
+        return binding
+
     def wake(self, binding):
         self.calls.append(("wake", {"binding": binding}))
         from cloudbrowser.browser_slots.supervisor import OrchestrationResult

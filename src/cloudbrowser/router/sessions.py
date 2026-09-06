@@ -137,6 +137,10 @@ class RouterSessionStore:
     def activate(self, session_id: str) -> RouterSession:
         with self._lock:
             record = self._require_locked(session_id)
+            if record.status is SessionStatus.ACTIVE:
+                # Idempotent re-activation: an active session stays active
+                # (its expiry keeps running; use leave to end it).
+                return record
             if record.status is not SessionStatus.OFFERED:
                 raise ValueError("only offered sessions can activate")
             record = replace(

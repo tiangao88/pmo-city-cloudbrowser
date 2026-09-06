@@ -25,10 +25,20 @@ or process control.
   unknown operations return `operation_not_supported`. See
   `../agent-control/v1/contract.md` for the downstream seam.
 
+- `POST /v1/session/activate` — wake the caller's own assigned slot under the
+  server-minted session binding and flip the session `offered -> active`
+  (`active -> active` is an idempotent no-op re-wake). The binding, slot, and
+  browser are derived exclusively from the caller's own session; the request
+  carries no identity or binding material. On supervisor failure the session
+  stays `offered` and the supervisor's bounded error code
+  (`slot_mismatch`, `owner_mismatch`, `operation_failed`) is surfaced; on
+  success the response is the active session payload with `session_ttl_s`.
+
 Failures are bounded envelopes `{"request_id", "status": "failed",
 "error_code"}` with stable codes (`unauthorized`, `session_not_found`,
 `no_binding`, `unknown_slot`, `capability_denied`, `operation_not_supported`,
-`invalid_request`, `agent_unavailable`, `supervisor_unavailable`); they never
+`invalid_request`, `agent_unavailable`, `supervisor_unavailable`,
+`slot_mismatch`, `owner_mismatch`); they never
 include principal IDs, binding values, page text, or raw exception text.
 
 ## Slot supervisor endpoints (implemented in `cloudbrowser.router.control_api`)
@@ -39,6 +49,16 @@ include principal IDs, binding values, page text, or raw exception text.
 The allowed operations are `wake`, `suspend`, `stop`, and `recreate`. The
 server resolves the profile, principal, browser, tab, and generation binding;
 request fields cannot override that binding.
+
+A `wake` may additionally carry the router's server-minted
+`binding` object (`principal_id`, `profile_id`, `browser_id`, `generation`).
+A binding naming a different `browser_id` is rejected with `slot_mismatch`
+and never reaches the supervisor. A binding for the same `browser_id` but a
+new owner/generation is adopted first (allowed only while the slot is
+`stopped`; refusal while running is a bounded `operation_failed` that leaves
+the current owner untouched), then the browser starts under the adopted
+binding. A re-wake of the currently bound, already-ready browser is an
+idempotent no-op that returns `ready` without restarting.
 
 The response contains only `request_id`, `status`, `state`, `restored_count`,
 and a bounded non-sensitive `error_code`. It never contains page values,

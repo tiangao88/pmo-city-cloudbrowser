@@ -45,6 +45,13 @@ class ControlApi:
         self._binding = binding
         self._trusted_secret = trusted_secret
 
+    def _current_binding(self) -> BrowserBinding:
+        """The supervisor's live binding; a recording test double may not expose it."""
+        lifecycle_binding = getattr(self._supervisor, "lifecycle", None)
+        if lifecycle_binding is not None:
+            return lifecycle_binding.binding
+        return self._binding
+
     def handle(self, request: ControlRequest) -> dict[str, object]:
         if not request.request_id or len(request.request_id) > 128:
             return {
@@ -68,6 +75,19 @@ class ControlApi:
                 }
             if request.operation == "wake":
                 binding = request.binding
+        if request.operation == "wake" and binding != self._current_binding():
+            # Server-minted activation: adopt the new owner while the slot is
+            # stopped, then start under the adopted binding. Refusal while the
+            # slot is not stopped is surfaced as a bounded failure and the
+            # current owner stays untouched.
+            try:
+                self._supervisor.adopt_binding(binding)
+            except ValueError:
+                return {
+                    "request_id": request.request_id,
+                    "status": "failed",
+                    "error_code": "operation_failed",
+                }
         try:
             if request.operation == "wake":
                 result = self._supervisor.wake(binding)

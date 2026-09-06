@@ -50,8 +50,20 @@ class SlotSupervisor:
         timeout_s: float = 30.0,
         poll_s: float = 0.1,
     ) -> OrchestrationResult:
-        """Start the browser, wait for matching readiness, and restore tabs."""
+        """Start the browser, wait for matching readiness, and restore tabs.
+
+        Idempotent for the currently bound, already-ready browser: a re-wake
+        of the same binding converges to ``ready`` without restarting, so
+        router retries and activate-after-wake never bounce a live session.
+        """
         self._require_positive_timeout(timeout_s, poll_s)
+        if (
+            self._lifecycle.state is BrowserState.READY
+            and self._lifecycle.binding == binding
+        ):
+            self._wait_ready(binding, timeout_s=timeout_s, poll_s=poll_s)
+            urls = self._lifecycle.load_tabs(binding)
+            return OrchestrationResult("ready", self._lifecycle.state, urls)
         self._lifecycle.start(binding)
         try:
             self._transport.start()

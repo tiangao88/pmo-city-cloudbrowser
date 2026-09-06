@@ -250,6 +250,67 @@ class RouterApi:
             return 200, _envelope(request_id, status="failed", error_code="leave_failed")
         return 200, _envelope(request_id, session_id=left.session_id, status=left.status.value)
 
+    def activate_session(
+        self,
+        *,
+        headers: Mapping[str, object],
+        request_id: str,
+    ) -> tuple[int, dict[str, object]]:
+        """Wake the caller's assigned slot and flip OFFERED -> ACTIVE.
+
+        The supervisor receives the server-minted session binding on
+        ``wake``; slot, binding, and browser are derived exclusively from
+        the caller's own session. On supervisor failure the session stays
+        ``OFFERED`` and the supervisor's bounded error code is surfaced.
+        """
+        resolved = _resolve_identity(headers=headers, client=self._identity)
+        if resolved is None:
+            return 401, _envelope(request_id, status="failed", error_code="unauthorized")
+        try:
+            session = self._store.for_principal(resolved.principal_id)
+        except Exception:
+            return 200, _envelope(request_id, status="failed", error_code="lookup_failed")
+        if session is None:
+            return 200, _envelope(request_id, status="failed", error_code="session_not_found")
+        if session.status not in {SessionStatus.OFFERED, SessionStatus.ACTIVE}:
+            return 200, _envelope(request_id, status="failed", error_code="session_not_found")
+        if session.binding is None or session.slot_id is None:
+            return 200, _envelope(request_id, status="failed", error_code="no_binding")
+        if session.slot_id not in self._supervisor.known_slots:
+            return 200, _envelope(request_id, status="failed", error_code="unknown_slot")
+        try:
+            result = self._supervisor.post_control(
+                session.slot_id,
+                operation="wake",
+                request_id=request_id,
+                binding=session.binding,
+            )
+        except SupervisorUnavailable:
+            return 200, _envelope(request_id, status="failed", error_code="supervisor_unavailable")
+        except SupervisorClientError:
+            return 200, _envelope(request_id, status="failed", error_code="invalid_request")
+        except Exception:
+            return 200, _envelope(request_id, status="failed", error_code="operation_failed")
+        if not isinstance(result, dict) or result.get("status") not in {"ready", "ok", "adopted"}:
+            error_code = "operation_failed"
+            raw_code = result.get("error_code") if isinstance(result, dict) else None
+            if isinstance(raw_code, str) and raw_code in {
+                "slot_mismatch",
+                "owner_mismatch",
+                "operation_failed",
+            }:
+                error_code = raw_code
+            return 200, _envelope(request_id, status="failed", error_code=error_code)
+        try:
+            activated = self._store.activate(session.session_id)
+        except Exception:
+            return 200, _envelope(request_id, status="failed", error_code="activate_failed")
+        try:
+            now = self._store_clock()
+        except Exception:
+            return 200, _envelope(request_id, status="failed", error_code="store_unavailable")
+        return 200, _session_payload(activated, now=now, request_id=request_id)
+
     # ---- agent page-action relay (§3.1) ----------------------------------
 
     def agent_action(
@@ -453,6 +514,12 @@ def create_router_server(
                     return
                 if path == "/v1/session/leave":
                     status, payload = api.leave_session(
+                        headers=self.headers, request_id="req-1"
+                    )
+                    self._send_json(status, payload)
+                    return
+                if path == "/v1/session/activate":
+                    status, payload = api.activate_session(
                         headers=self.headers, request_id="req-1"
                     )
                     self._send_json(status, payload)
