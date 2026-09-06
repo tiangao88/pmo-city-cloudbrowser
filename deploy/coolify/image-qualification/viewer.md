@@ -1,7 +1,7 @@
 # Image qualification — viewer
 
-- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/viewer@sha256:95fc903cb81fd3ddc1df1ee9ac2ae6f15c239ecfa7fea064803b6fe59ed93b3d`
-- digest: `sha256:95fc903cb81fd3ddc1df1ee9ac2ae6f15c239ecfa7fea064803b6fe59ed93b3d`
+- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/viewer@sha256:8c3837885c51999cc96cf0542f48a1fff6b585ddca3b75818d485e0b4778b87c`
+- digest: `sha256:8c3837885c51999cc96cf0542f48a1fff6b585ddca3b75818d485e0b4778b87c`
 - status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/viewer/Dockerfile`
@@ -11,12 +11,12 @@
 - configured user: `cloudbrowser`
 - runtime endpoint: passed (`/health`)
 - provenance/SBOM metadata: present in registry manifest
-- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/34004823087`
-- source commit `0a55001bf905d2441dee4580f9593643e1fa2236`
+- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/34043783268`
+- source commit `ad61d9e`
 ## Qualification evidence
 
 The immutable digest was resolved from the GHCR manifest for the image built
-from the published image build for the release commit in CI run `34004823087`, after every matrix job
+from the published image build for the release commit in CI run `34043783268`, after every matrix job
 completed successfully. The CI job verified the non-root user, image
 healthcheck, provenance/SBOM metadata, container health, runtime UID, and the
 service health endpoint. No credentials, cookies, tokens, passwords, or OTPs

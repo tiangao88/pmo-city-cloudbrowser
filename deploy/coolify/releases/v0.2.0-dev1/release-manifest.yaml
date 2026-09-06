@@ -9,8 +9,8 @@ spec:
   installable: true
   qualification:
     workflow: .github/workflows/build-images.yml
-    run: https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/34004823087
-    commit: 0a55001bf905d2441dee4580f9593643e1fa2236
+    run: https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/34043783268
+    commit: ad61d9ee2899771c24dda4c4d7cb2438c6445e56
     records: deploy/coolify/image-qualification/<service>.md
   contracts:
     controlApi: v1
@@ -29,15 +29,15 @@ spec:
     cloudfiles: 0.2.0-dev1
     identityLink: 0.2.0-dev1
   imageDigests:
-    router: sha256:626ebd0c6fc77fdca0fc64b18d94fe360200d4ed3da34a4a77a7dce3754e5aa3
-    slotSupervisor: sha256:c7909c9b6295186e4a4690e498e4582d89bec0e06edbd0a7acbe6571b7d2cc85
-    browser: sha256:b9406369d0ba660f785a24c6d0034719c382aa6be465a870a142a3b07d5ee7d4
-    viewer: sha256:95fc903cb81fd3ddc1df1ee9ac2ae6f15c239ecfa7fea064803b6fe59ed93b3d
-    agentControl: sha256:f630567ba8be5393fd44d9d28bc7132eb71f3df0b5f7a3f866553cf90ff1e466
-    downloads: sha256:f6eba84ce3fe270bb4746c2bbf4472df30025c06b017f08a78c5da2547a92bad
-    credentialBroker: sha256:fc59b3cd088599fd75faa75c2aa4420044dea76bd6c42060f26a7c65aac54d99
-    cloudfiles: sha256:580eb3f77664d5d5f92e5d273c907d7a047e4357c6ba4c571151e8e03711ee2a
-    identityLink: sha256:6dbc384b6d28687ef927c685983df22dc3624997e666ee3808d5466d2c82b916
+    router: sha256:ab21240872eab1a43e59f528e789591d8562dc166a3e43b7bc8da46928e151fc
+    slotSupervisor: sha256:d271afd0a3a13f08b0c804950561b3642af749db8b4d79e67a4588e015b2efe1
+    browser: sha256:b150b34b197b1d06a63001bd58b79e9b2a6f630c399454429498b78dadd5d548
+    viewer: sha256:8c3837885c51999cc96cf0542f48a1fff6b585ddca3b75818d485e0b4778b87c
+    agentControl: sha256:8f6bdd1daa87591f6651f03e39ac285f3674fc4fb10ff79fc59fa8f0aa0741ce
+    downloads: sha256:ce31c72faed2ac4d03280e6036c04546880cb8f6ebd1dce2d073fda7a5b46898
+    credentialBroker: sha256:55aadc81291e43de0fee4f3ed7774228dab761626b70a357b9e1e40e2b99671a
+    cloudfiles: sha256:a3bd726cd943d5baae163ed05880aa60204ce5ad12db973fed247a1eeacdaf71
+    identityLink: sha256:63f6718d0dcf3ab41251315f7143b26deadc089844c912497a2fc6ed8d6bc59d
   instance:
     id: CB_INSTANCE_ID_REQUIRED
     network: CB_INSTANCE_ID_REQUIRED-network
