@@ -224,3 +224,153 @@ def test_router_never_falls_back_to_health(monkeypatch):
         pass
     else:
         raise AssertionError("router runtime must not be a bare health server")
+
+def _forbidden_server_factory(api, *, address):
+    raise AssertionError("server must not be created when the config is invalid")
+
+
+def test_router_wires_agent_control_forwarder_from_env(monkeypatch):
+    # §3.1: when CB_AGENT_CONTROL_URLS is configured, the router runtime must
+    # build an AgentControlForwarder with the trusted secret and inject it
+    # into RouterApi so /v1/agent/<op> can relay to session-owned slots.
+    captured = {}
+
+    class FakeNamespace:
+        def __init__(self, instance_id):
+            pass
+
+    class FakeStore:
+        def __init__(self, path, *, slots, clock, **kwargs):
+            pass
+
+    class FakeApi:
+        def __init__(self, *, session_store, supervisor_client, identity_client, **kwargs):
+            captured["forwarder"] = kwargs.get("agent_control_forwarder")
+
+    class FakeServer:
+        def serve_forever(self):
+            pass
+
+        def server_close(self):
+            pass
+
+    monkeypatch.setattr(service_runtime, "InstanceNamespace", FakeNamespace)
+    monkeypatch.setattr("cloudbrowser.router.router_api.RouterApi", FakeApi)
+    monkeypatch.setattr(
+        "cloudbrowser.router.router_api.create_router_server",
+        lambda api, *, address: FakeServer(),
+    )
+    monkeypatch.setenv("CB_INSTANCE_ID", "test-instance")
+    monkeypatch.setenv("CB_RELEASE_VERSION", "test-release")
+    monkeypatch.setenv("CB_PORT", "8080")
+    monkeypatch.setenv("CB_ROUTER_SHARED_SECRET", "router-test-secret-0123456789")
+    monkeypatch.setenv("CB_SLOT_SUPERVISOR_URLS", "slot-1=http://slot-1:8081")
+    monkeypatch.setenv("CB_AGENT_CONTROL_URLS", "slot-1=http://agent-control-1:8087")
+    monkeypatch.setenv("CB_AGENT_CONTROL_SHARED_SECRET", "agent-control-shared-secret-0123456789")
+    monkeypatch.delenv("CB_EDGE_AUTH", raising=False)
+
+    service_runtime.run_service("router")
+
+    forwarder = captured["forwarder"]
+    assert forwarder is not None
+    assert forwarder.known_slots == frozenset({"slot-1"})
+
+
+def test_router_agent_control_urls_require_shared_secret(monkeypatch):
+    # Fail-closed: configuring agent-control URLs without the shared secret
+    # must refuse to boot rather than silently run unauthenticated relay.
+    from cloudbrowser.router.router_api import RouterApi as _RealApi  # noqa: F401
+
+    class FakeNamespace:
+        def __init__(self, instance_id):
+            pass
+
+    monkeypatch.setattr(service_runtime, "InstanceNamespace", FakeNamespace)
+    monkeypatch.setattr(
+        "cloudbrowser.router.router_api.create_router_server",
+        _forbidden_server_factory,
+    )
+    monkeypatch.setenv("CB_INSTANCE_ID", "test-instance")
+    monkeypatch.setenv("CB_RELEASE_VERSION", "test-release")
+    monkeypatch.setenv("CB_PORT", "8080")
+    monkeypatch.setenv("CB_ROUTER_SHARED_SECRET", "router-test-secret-0123456789")
+    monkeypatch.setenv("CB_SLOT_SUPERVISOR_URLS", "slot-1=http://slot-1:8081")
+    monkeypatch.setenv("CB_AGENT_CONTROL_URLS", "slot-1=http://agent-control-1:8087")
+    monkeypatch.delenv("CB_AGENT_CONTROL_SHARED_SECRET", raising=False)
+
+    try:
+        service_runtime.run_service("router")
+    except SystemExit as exc:
+        assert "CB_AGENT_CONTROL_SHARED_SECRET" in str(exc)
+    else:
+        raise AssertionError("missing agent-control secret must SystemExit")
+
+
+def test_router_agent_control_secret_minimum_length(monkeypatch):
+    class FakeNamespace:
+        def __init__(self, instance_id):
+            pass
+
+    monkeypatch.setattr(service_runtime, "InstanceNamespace", FakeNamespace)
+    monkeypatch.setattr(
+        "cloudbrowser.router.router_api.create_router_server",
+        _forbidden_server_factory,
+    )
+    monkeypatch.setenv("CB_INSTANCE_ID", "test-instance")
+    monkeypatch.setenv("CB_RELEASE_VERSION", "test-release")
+    monkeypatch.setenv("CB_PORT", "8080")
+    monkeypatch.setenv("CB_ROUTER_SHARED_SECRET", "router-test-secret-0123456789")
+    monkeypatch.setenv("CB_SLOT_SUPERVISOR_URLS", "slot-1=http://slot-1:8081")
+    monkeypatch.setenv("CB_AGENT_CONTROL_URLS", "slot-1=http://agent-control-1:8087")
+    monkeypatch.setenv("CB_AGENT_CONTROL_SHARED_SECRET", "short")
+
+    try:
+        service_runtime.run_service("router")
+    except SystemExit as exc:
+        assert "CB_AGENT_CONTROL_SHARED_SECRET" in str(exc)
+    else:
+        raise AssertionError("short agent-control secret must SystemExit")
+
+
+def test_router_omits_forwarder_without_agent_urls(monkeypatch):
+    # Health-only boot (CI image qualification) sets no CB_AGENT_CONTROL_URLS:
+    # the forwarder must be absent and the router must still boot.
+    captured = {}
+
+    class FakeNamespace:
+        def __init__(self, instance_id):
+            pass
+
+    class FakeStore:
+        def __init__(self, path, *, slots, clock, **kwargs):
+            pass
+
+    class FakeApi:
+        def __init__(self, *, session_store, supervisor_client, identity_client, **kwargs):
+            captured["forwarder"] = kwargs.get("agent_control_forwarder")
+
+    class FakeServer:
+        def serve_forever(self):
+            pass
+
+        def server_close(self):
+            pass
+
+    monkeypatch.setattr(service_runtime, "InstanceNamespace", FakeNamespace)
+    monkeypatch.setattr("cloudbrowser.router.router_api.RouterApi", FakeApi)
+    monkeypatch.setattr(
+        "cloudbrowser.router.router_api.create_router_server",
+        lambda api, *, address: FakeServer(),
+    )
+    monkeypatch.setenv("CB_INSTANCE_ID", "test-instance")
+    monkeypatch.setenv("CB_RELEASE_VERSION", "test-release")
+    monkeypatch.setenv("CB_PORT", "8080")
+    monkeypatch.setenv("CB_ROUTER_SHARED_SECRET", "router-test-secret-0123456789")
+    monkeypatch.setenv("CB_SLOT_SUPERVISOR_URLS", "slot-1=http://slot-1:8081")
+    monkeypatch.delenv("CB_AGENT_CONTROL_URLS", raising=False)
+    monkeypatch.delenv("CB_AGENT_CONTROL_SHARED_SECRET", raising=False)
+    monkeypatch.delenv("CB_EDGE_AUTH", raising=False)
+
+    service_runtime.run_service("router")
+
+    assert captured["forwarder"] is None

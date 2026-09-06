@@ -165,7 +165,14 @@ class RestrictedAgentBrowser:
 
 
 class AgentControlService:
-    """Authorize each request to one server-owned browser binding."""
+    """Authorize each request to one server-owned browser binding.
+
+    The expected binding starts from the statically pinned identity and can be
+    rotated to the router-minted session lease via ``rotate_lease`` (trusted-
+    secret gated). Every operation still requires the underlying browser
+    readiness to match the request binding; the lease never substitutes for
+    the browser actually holding the binding.
+    """
 
     def __init__(
         self,
@@ -179,15 +186,37 @@ class AgentControlService:
         self._principal_id = _bounded_identity(principal_id, "principal_id")
         self._browser_id = _bounded_identity(browser_id, "browser_id")
         self._generation = _bounded_identity(generation, "generation")
+        self._lease_lock = __import__("threading").Lock()
+
+    def rotate_lease(self, binding: object) -> None:
+        """Adopt a server-minted binding (principal/browser/generation).
+
+        Accepts only the allowlisted ``BrowserBinding`` fields; raises
+        ``ValueError`` on any malformed or injected value.
+        """
+
+        from .browser_slots import BrowserBinding
+
+        if not isinstance(binding, BrowserBinding):
+            raise ValueError("lease binding must be a BrowserBinding")
+        principal_id = _bounded_identity(binding.principal_id, "principal_id")
+        browser_id = _bounded_identity(binding.browser_id, "browser_id")
+        generation = _bounded_identity(binding.generation, "generation")
+        with self._lease_lock:
+            self._principal_id = principal_id
+            self._browser_id = browser_id
+            self._generation = generation
 
     def handle(self, request: AgentControlRequest) -> dict[str, object]:
         request_id = request.request_id if isinstance(request.request_id, str) else ""
         if not request_id or len(request_id) > _MAX_REQUEST_ID:
             return self._failure(request_id, "invalid_request")
+        with self._lease_lock:
+            expected = (self._principal_id, self._browser_id, self._generation)
         if (
-            request.principal_id != self._principal_id
-            or request.browser_id != self._browser_id
-            or request.generation != self._generation
+            request.principal_id != expected[0]
+            or request.browser_id != expected[1]
+            or request.generation != expected[2]
         ):
             return self._failure(request_id, "owner_mismatch")
         if request.operation in FORBIDDEN_AGENT_OPERATIONS:
@@ -274,7 +303,48 @@ class AgentControlService:
                     return
                 self._send_json(200, {"status": "ok", "component": "agent-control"})
 
+            def _handle_lease(self) -> None:
+                """Rotate the expected binding; trusted-secret gated only.
+
+                The router (sole holder of the shared secret) derives the
+                binding from server-side session state; no ``X-CB-*`` binding
+                headers are honored on this route.
+                """
+                if shared_secret is None or not hmac.compare_digest(
+                    self.headers.get("X-CB-Trusted-Secret", ""), shared_secret
+                ):
+                    self._send_json(401, {"status": "failed", "error_code": "unauthorized"})
+                    return
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if length <= 0 or length > 4096:
+                        raise ValueError
+                    raw = json.loads(self.rfile.read(length))
+                    if not isinstance(raw, dict) or not isinstance(raw.get("binding"), dict):
+                        raise ValueError
+                    from .browser_slots import BrowserBinding
+
+                    fields = raw["binding"]
+                    allowed = {"principal_id", "profile_id", "browser_id", "generation"}
+                    if set(fields) - allowed or not allowed <= set(fields):
+                        raise ValueError
+                    service.rotate_lease(
+                        BrowserBinding(
+                            principal_id=fields["principal_id"],
+                            profile_id=fields["profile_id"],
+                            browser_id=fields["browser_id"],
+                            generation=fields["generation"],
+                        )
+                    )
+                except (ValueError, TypeError, json.JSONDecodeError):
+                    self._send_json(400, {"status": "failed", "error_code": "invalid_request"})
+                    return
+                self._send_json(200, {"status": "ok"})
+
             def do_POST(self) -> None:  # noqa: N802 - stdlib HTTP handler contract
+                if self.path == "/agent-control/lease":
+                    self._handle_lease()
+                    return
                 if self.path != "/agent-control/v1":
                     self.send_error(404)
                     return
@@ -283,11 +353,13 @@ class AgentControlService:
                 ):
                     self._send_json(401, {"status": "failed", "error_code": "unauthorized"})
                     return
+                with service._lease_lock:
+                    expected = (service._principal_id, service._browser_id, service._generation)
                 if not _matches_binding_headers(
                     self.headers,
-                    principal_id=principal_id,
-                    browser_id=browser_id,
-                    generation=generation,
+                    principal_id=expected[0],
+                    browser_id=expected[1],
+                    generation=expected[2],
                 ):
                     self._send_json(401, {"status": "failed", "error_code": "unauthorized"})
                     return
@@ -302,9 +374,9 @@ class AgentControlService:
                         raise ValueError
                     request = AgentControlRequest(
                         request_id=raw["request_id"],
-                        principal_id=principal_id,
-                        browser_id=browser_id,
-                        generation=generation,
+                        principal_id=self.headers.get("X-CB-Principal", ""),
+                        browser_id=self.headers.get("X-CB-Browser", ""),
+                        generation=self.headers.get("X-CB-Generation", ""),
                         operation=raw["operation"],
                         params=raw["params"],
                     )
@@ -329,7 +401,12 @@ class AgentControlService:
 
 
 def _bounded_identity(value: str, name: str) -> str:
-    if not isinstance(value, str) or not value or len(value) > _MAX_IDENTITY:
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > _MAX_IDENTITY
+        or any(ord(char) < 0x20 or ord(char) == 0x7F for char in value)
+    ):
         raise ValueError(f"{name} is invalid")
     return value
 

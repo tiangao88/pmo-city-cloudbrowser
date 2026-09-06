@@ -98,3 +98,18 @@ def test_compose_router_is_not_a_public_host() -> None:
         assert "ports:" not in block
         assert "traefik" not in block
         assert "tinyauth.apps" not in block
+
+
+
+def test_compose_router_requires_agent_control_forwarding_env() -> None:
+    # §3.1: the router relays allowlisted page-actions to agent-control over
+    # CB_AGENT_CONTROL_URLS with its own trusted secret. Both compose variants
+    # must require both vars so the deployed router boots fail-closed with
+    # forwarding configured (and the runtime refuses short secrets).
+    for filename in ("compose.yaml", "compose.coolify.yaml"):
+        block = _router_block(filename)
+        assert "CB_AGENT_CONTROL_URLS: ${CB_AGENT_CONTROL_URLS:?CB_AGENT_CONTROL_URLS is required}" in block
+        assert (
+            "CB_AGENT_CONTROL_SHARED_SECRET: "
+            "${CB_AGENT_CONTROL_SHARED_SECRET:?CB_AGENT_CONTROL_SHARED_SECRET is required}"
+        ) in block

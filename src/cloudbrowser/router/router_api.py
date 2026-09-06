@@ -36,6 +36,10 @@ from urllib.parse import urlsplit
 from cloudbrowser.edge_auth import parse_edge_identity
 from cloudbrowser.identity_links import IdentityLinkClient, IdentityLinkClientError
 
+from .agent_control_forwarder import (
+    AgentControlForwarderError,
+    AgentControlUnavailable,
+)
 from .sessions import RouterSession, RouterSessionStore, SessionStatus
 from .supervisor_client import (
     SupervisorClient,
@@ -63,6 +67,38 @@ class _SupervisorPort(Protocol):
     """Subset of ``SupervisorClient`` the router API depends on."""
 
     def post_control(self, slot_id: str, *, operation: str, request_id: str) -> dict[str, object]: ...
+
+
+class _AgentControlPort(Protocol):
+    """Subset of ``AgentControlForwarder`` the router API depends on."""
+
+    known_slots: frozenset[str]
+
+    def forward(
+        self,
+        slot_id: str,
+        *,
+        binding: object,
+        operation: str,
+        params: Mapping[str, object],
+        request_id: str,
+    ) -> dict[str, object]: ...
+
+
+_AGENT_ALLOWED_OPERATIONS = frozenset({"navigate", "click", "type", "page_info", "tabs_list"})
+_AGENT_FORBIDDEN_OPERATIONS = frozenset(
+    {
+        "raw_cdp",
+        "evaluate",
+        "cookies",
+        "storage",
+        "network",
+        "filesystem",
+        "process",
+        "credential_material",
+        "password_values",
+    }
+)
 
 
 def _bounded_text(value: str, *, limit: int) -> bool:
@@ -141,11 +177,13 @@ class RouterApi:
         session_store: RouterSessionStore,
         supervisor_client: _SupervisorPort,
         identity_client: IdentityLinkClient | None,
+        agent_control_forwarder: _AgentControlPort | None = None,
         component: str = "router",
     ) -> None:
         self._store = session_store
         self._supervisor = supervisor_client
         self._identity = identity_client
+        self._agent_forwarder = agent_control_forwarder
         self._component = component
 
     # ---- HTTP handlers (one method per route) ----------------------------
@@ -211,6 +249,79 @@ class RouterApi:
         except Exception:
             return 200, _envelope(request_id, status="failed", error_code="leave_failed")
         return 200, _envelope(request_id, session_id=left.session_id, status=left.status.value)
+
+    # ---- agent page-action relay (§3.1) ----------------------------------
+
+    def agent_action(
+        self,
+        *,
+        headers: Mapping[str, object],
+        operation: str,
+        body: Mapping[str, object],
+    ) -> tuple[int, dict[str, object]]:
+        """Relay one allowlisted page action to the caller's assigned slot.
+
+        Slot, binding, browser, and generation are derived exclusively from
+        the caller's own session; caller input supplies only the operation
+        name and bounded params. Forbidden operations are refused locally.
+        """
+        request_id_value = body.get("request_id")
+        if not _bounded_text(request_id_value, limit=_MAX_REQUEST_ID):  # type: ignore[arg-type]
+            return 200, _envelope("", status="failed", error_code="invalid_request")
+        request_id = request_id_value  # type: ignore[assignment]
+        resolved = _resolve_identity(headers=headers, client=self._identity)
+        if resolved is None:
+            return 401, _envelope(request_id, status="failed", error_code="unauthorized")
+        forwarder = self._agent_forwarder
+        if forwarder is None:
+            return 200, _envelope(request_id, status="failed", error_code="agent_unavailable")
+        if operation in _AGENT_FORBIDDEN_OPERATIONS:
+            return 200, _envelope(request_id, status="failed", error_code="capability_denied")
+        if operation not in _AGENT_ALLOWED_OPERATIONS:
+            return 200, _envelope(request_id, status="failed", error_code="operation_not_supported")
+        params = body.get("params", {})
+        if not isinstance(params, dict):
+            return 200, _envelope(request_id, status="failed", error_code="invalid_request")
+        try:
+            session = self._store.for_principal(resolved.principal_id)
+        except Exception:
+            return 200, _envelope(request_id, status="failed", error_code="lookup_failed")
+        if session is None or session.status is not SessionStatus.ACTIVE:
+            return 200, _envelope(request_id, status="failed", error_code="session_not_found")
+        if session.binding is None:
+            return 200, _envelope(request_id, status="failed", error_code="no_binding")
+        if session.slot_id is None:
+            return 200, _envelope(request_id, status="failed", error_code="no_binding")
+        if session.slot_id not in forwarder.known_slots:
+            return 200, _envelope(request_id, status="failed", error_code="unknown_slot")
+        try:
+            result = forwarder.forward(
+                session.slot_id,
+                binding=session.binding,
+                operation=operation,
+                params=params,
+                request_id=request_id,
+            )
+        except AgentControlForwarderError:
+            return 200, _envelope(request_id, status="failed", error_code="invalid_request")
+        except AgentControlUnavailable:
+            return 200, _envelope(request_id, status="failed", error_code="agent_unavailable")
+        except Exception:
+            return 200, _envelope(request_id, status="failed", error_code="agent_unavailable")
+        if not isinstance(result, dict) or not isinstance(result.get("status"), str):
+            return 200, _envelope(request_id, status="failed", error_code="agent_unavailable")
+        payload: dict[str, object] = {
+            "request_id": request_id,
+            "status": result["status"],
+        }
+        page = result.get("page")
+        if isinstance(page, dict) and all(isinstance(key, str) for key in page):
+            payload["page"] = {
+                key: value
+                for key, value in page.items()
+                if isinstance(key, str) and isinstance(value, str)
+            }
+        return 200, payload
 
     def slot_command(
         self,
@@ -365,6 +476,19 @@ def create_router_server(
                         slot_id=slot_id,
                         operation=operation,
                         request_id="req-1",
+                    )
+                    self._send_json(status, payload)
+                    return
+                if path.startswith("/v1/agent/"):
+                    operation = path[len("/v1/agent/") :]
+                    try:
+                        body = self._read_body()
+                    except ValueError:
+                        body = {}
+                    status, payload = api.agent_action(
+                        headers=self.headers,
+                        operation=operation,
+                        body=body,
                     )
                     self._send_json(status, payload)
                     return

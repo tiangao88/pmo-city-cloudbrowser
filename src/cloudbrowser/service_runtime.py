@@ -224,6 +224,42 @@ def run_service(component: str) -> None:
         if edge_mode == "traefik-forwardauth":
             identity_client = build_identity_link_client()
         supervisor_client = SupervisorClient(supervisor_map, trusted_secret=shared_secret)
+        agent_urls_raw = os.environ.get("CB_AGENT_CONTROL_URLS", "")
+        agent_forwarder = None
+        if agent_urls_raw.strip():
+            agent_secret = _required_env("CB_AGENT_CONTROL_SHARED_SECRET")
+            if len(agent_secret) < 16:
+                raise SystemExit(
+                    "CB_AGENT_CONTROL_SHARED_SECRET must be at least 16 characters"
+                )
+            from cloudbrowser.router.agent_control_forwarder import (
+                AgentControlForwarder,
+            )
+
+            agents_map: dict[str, str] = {}
+            for entry in agent_urls_raw.split(","):
+                entry = entry.strip()
+                if not entry:
+                    continue
+                if "=" not in entry:
+                    raise SystemExit(
+                        "CB_AGENT_CONTROL_URLS entries must be slot_id=url"
+                    )
+                slot_id, url = entry.split("=", 1)
+                slot_id = slot_id.strip()
+                url = url.strip()
+                if not slot_id or not url:
+                    raise SystemExit(
+                        "CB_AGENT_CONTROL_URLS entries must be slot_id=url"
+                    )
+                agents_map[slot_id] = url
+            if not agents_map:
+                raise SystemExit(
+                    "CB_AGENT_CONTROL_URLS must contain at least one entry"
+                )
+            agent_forwarder = AgentControlForwarder(
+                agents_map, trusted_secret=agent_secret
+            )
         session_store = RouterSessionStore(
             state_path,
             slots=slots,
@@ -233,6 +269,7 @@ def run_service(component: str) -> None:
             session_store=session_store,
             supervisor_client=supervisor_client,
             identity_client=identity_client,
+            agent_control_forwarder=agent_forwarder,
             component="router",
         )
         _ = shared_secret
