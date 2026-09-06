@@ -192,10 +192,13 @@ services:
       CB_IDENTITY_LINK_SHARED_SECRET: ${CB_IDENTITY_LINK_SHARED_SECRET:-}
       CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:-}
       CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:-}
+      CB_CLAMAV_HOST: clamav
     depends_on:
       downloads:
         condition: service_started
       identity-link:
+        condition: service_healthy
+      clamav:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8085/health', timeout=3)"]
@@ -205,6 +208,20 @@ services:
       start_period: 5s
     expose:
       - "8085"
+
+  clamav:
+    <<: *common
+    image: clamav/clamav:1.4
+    environment:
+      CLAMAV_HOST: clamav
+    volumes:
+      - clamav-db:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --ping 3 >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   identity-link:
     <<: *common
@@ -261,3 +278,5 @@ volumes:
     name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-broker-state
   identity-link-state:
     name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-identity-link-state
+  clamav-db:
+    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-clamav-db

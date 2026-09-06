@@ -20,10 +20,16 @@ class DownloadsService:
     """Resolve one bounded owner area per server-derived identity."""
 
     def __init__(self, *, store_root: Path, quota_bytes: int | None = None) -> None:
+        self.store_root = Path(store_root).resolve()
         if quota_bytes is None:
-            self._store = DownloadStore(Path(store_root))
+            self._store = DownloadStore(self.store_root)
         else:
-            self._store = DownloadStore(Path(store_root), quota_bytes=quota_bytes)
+            self._store = DownloadStore(self.store_root, quota_bytes=quota_bytes)
+
+    @property
+    def store(self) -> DownloadStore:
+        """Expose the one durable store owned by this service."""
+        return self._store
 
     def list_files(self, identity: PrincipalIdentity) -> DownloadResponse:
         """Return bounded metadata for the requesting owner's area."""

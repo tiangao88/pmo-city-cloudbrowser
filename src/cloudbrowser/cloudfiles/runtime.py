@@ -21,17 +21,21 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
 from .api import create_cloudfiles_app
 from .audit import redact_event
+from .downloads_adapter import DownloadsStoreAdapter
 from .downloads_client import DownloadsClient
 from .erasure import erase_principal as _erase_principal
 from .identity_adapter import resolve_tinyauth_session
+from .ingest import IngestPipeline
 from .metrics import Metrics
 from .retention import RetentionJanitor
 from .scanner import ClamAvScanner
+from cloudbrowser.downloads.service import DownloadsService
 
 DEFAULT_DOWNLOADS_ROOT = "/data/downloads"
 DEFAULT_RETENTION_DAYS = 90
@@ -82,9 +86,26 @@ class CloudFilesRuntime:
     janitor: RetentionJanitor
     metrics: Metrics
     erase: Callable[..., dict[str, object]]
-    notifier: RedactedQuarantineNotifier
+    notifier: object
     store_root: Path
+    pipeline: IngestPipeline
+    store: object
+    _downloads_service: DownloadsService
     _closed: bool = False
+
+    def purge(self, *, principal: str) -> dict[str, object]:
+        """Purge expired published files and return only redacted fields."""
+        cutoff = datetime.fromtimestamp(self.janitor.cutoff_timestamp(), tz=timezone.utc)
+        removed = self._downloads_service.store.purge(
+            principal, older_than_ts=cutoff.timestamp()
+        )
+        self.metrics.record_purged(len(removed))
+        from .identity import hash_principal
+
+        return {
+            "purged_count": len(removed),
+            "principal_hash": hash_principal(principal),
+        }
 
     def close(self) -> None:
         """Release runtime resources. Idempotent; safe to call repeatedly."""
@@ -113,6 +134,7 @@ def create_cloudfiles_runtime(
     instance_id: str,
     release_version: str,
     store_root: str | Path = DEFAULT_DOWNLOADS_ROOT,
+    dev_store: bool = False,
     scanner_host: str = DEFAULT_CLAMAV_HOST,
     scanner_port: int = DEFAULT_CLAMAV_PORT,
     scanner_timeout_s: float = DEFAULT_CLAMAV_TIMEOUT_S,
@@ -120,6 +142,9 @@ def create_cloudfiles_runtime(
     scanner_chunk_bytes: int = DEFAULT_CHUNK_BYTES,
     retention_days: int = DEFAULT_RETENTION_DAYS,
     notifier_logger=None,
+    scanner=None,
+    notifier=None,
+    clock=None,
 ) -> CloudFilesRuntime:
     """Assemble the production CloudFiles runtime object graph.
 
@@ -131,9 +156,54 @@ def create_cloudfiles_runtime(
     if retention_days <= 0:
         raise ValueError("retention_days must be positive")
     root = Path(store_root)
+    if dev_store and root == Path(DEFAULT_DOWNLOADS_ROOT):
+        # Explicit opt-in for local development and test runs: the default
+        # production root (/data/downloads) is not writable outside the
+        # container, so the caller pins a private scratch store under the
+        # working directory. Production entrypoints never set dev_store, and
+        # an explicit store_root always wins over the dev fallback.
+        root = Path.cwd() / ".cloudfiles-data"
+    if not root.is_absolute():
+        root = root.resolve()
+
+    metrics = Metrics()
+    downloads_service = DownloadsService(store_root=root)
+    janitor = RetentionJanitor(retention_days=retention_days, clock=clock)
+    if notifier is None:
+        quarantine_notifier = RedactedQuarantineNotifier(logger=notifier_logger)
+    elif callable(notifier) and not hasattr(notifier, "notify_quarantine"):
+        class _CallableNotifier:
+            def __init__(self, callback):
+                self._callback = callback
+
+            def notify_quarantine(self, *, event):
+                self._callback(event)
+
+        quarantine_notifier = _CallableNotifier(notifier)
+    else:
+        quarantine_notifier = notifier
+    # The durable root is explicit and the staging area is kept beside it.
+    staging_root = root / ".staging"
+    pipeline = IngestPipeline(
+        downloads=DownloadsStoreAdapter(downloads_service),
+        scanner=scanner or ClamAvScanner(
+            host=scanner_host,
+            port=scanner_port,
+            timeout_s=scanner_timeout_s,
+            max_bytes=scanner_max_bytes,
+            chunk_bytes=scanner_chunk_bytes,
+        ),
+        temp_root=staging_root,
+        max_bytes=scanner_max_bytes,
+        chunk_bytes=scanner_chunk_bytes,
+        notifier=quarantine_notifier,  # type: ignore[arg-type]
+        metrics=metrics,
+    )
 
     def erase(*, principal: str, request_id: str = "ops-erasure") -> dict[str, object]:
-        return _erase_principal(principal=principal, store_root=root, request_id=request_id)
+        result = _erase_principal(principal=principal, store_root=root, request_id=request_id)
+        metrics.record_erasure()
+        return result
 
     return CloudFilesRuntime(
         app=build_app(
@@ -142,18 +212,15 @@ def create_cloudfiles_runtime(
             instance_id=instance_id,
             release_version=release_version,
         ),
-        scanner=ClamAvScanner(
-            host=scanner_host,
-            port=scanner_port,
-            timeout_s=scanner_timeout_s,
-            max_bytes=scanner_max_bytes,
-            chunk_bytes=scanner_chunk_bytes,
-        ),
-        janitor=RetentionJanitor(retention_days=retention_days),
-        metrics=Metrics(),
+        scanner=pipeline.scanner,
+        janitor=janitor,
+        metrics=metrics,
         erase=erase,
-        notifier=RedactedQuarantineNotifier(logger=notifier_logger),
+        notifier=quarantine_notifier,
         store_root=root,
+        pipeline=pipeline,
+        store=downloads_service.store,
+        _downloads_service=downloads_service,
     )
 
 

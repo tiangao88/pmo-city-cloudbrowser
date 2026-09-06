@@ -80,6 +80,10 @@ class DownloadStore:
             raise ValueError("principal_id must be bounded non-empty text")
         return self.root / owner_key(principal_id)
 
+    def owner_hash(self, principal_id: str) -> str:
+        """Return the non-sensitive durable owner directory key."""
+        return owner_key(principal_id)
+
     def _prior_owner_root(self, principal_id: str) -> Path:
         if not isinstance(principal_id, str) or not _OWNER_PATTERN.fullmatch(principal_id):
             raise ValueError("principal_id must be bounded non-empty text")

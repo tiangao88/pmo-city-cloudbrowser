@@ -84,6 +84,7 @@ class IngestPipeline:
     max_bytes: int = 1024 * 1024 * 1024
     chunk_bytes: int = 64 * 1024
     notifier: QuarantineNotifier | None = None
+    metrics: object | None = None
 
     def __post_init__(self) -> None:
         self.temp_root = Path(self.temp_root)
@@ -132,6 +133,12 @@ class IngestPipeline:
                 if descriptor >= 0:
                     os.close(descriptor)
             scan_result = self.scanner.scan(temp, request_id=binding.request_id)
+            if self.metrics is not None:
+                self.metrics.record_ingest(
+                    principal=binding.principal_id,
+                    filename=safe_name,
+                    size=size,
+                )
             with temp.open("rb") as staged:
                 if scan_result == "clean":
                     receipt = self.downloads.publish(
@@ -142,6 +149,8 @@ class IngestPipeline:
                         sha256=digest.hexdigest(),
                     )
                     status = "published"
+                    if self.metrics is not None:
+                        self.metrics.record_published()
                 else:
                     receipt = self.downloads.quarantine(
                         binding=binding,
@@ -151,6 +160,8 @@ class IngestPipeline:
                         sha256=digest.hexdigest(),
                     )
                     status = "quarantined"
+                    if self.metrics is not None:
+                        self.metrics.record_quarantine()
                     self._notify_quarantine(
                         principal=binding.principal_id,
                         name=safe_name,
@@ -192,6 +203,7 @@ class IngestPipeline:
         from .identity import hash_principal
 
         event = {
+            "event_code": "quarantine.created",
             "request_id": request_id,
             "principal_hash": hash_principal(principal),
             "name_hash": hashlib.sha256(name.encode("utf-8")).hexdigest(),

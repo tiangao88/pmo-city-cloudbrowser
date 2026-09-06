@@ -23,6 +23,24 @@ entry.
 - `FakeBrowserDownloadSource` models a completion event without allowing the
   browser event to select a different owner.
 
+## Production browser-download ingest transport
+
+See `services/downloads/PHASE2.md`. In short: the browser service's
+`BrowserDownloadWatcher` emits only completed, regular, confined files from
+the server-configured download directory (`CB_BROWSER_DOWNLOAD_DIR`) under its
+own server binding; `IngestClient` streams them over the internal network to
+the CloudFiles ingest receiver (`create_ingest_server`, `POST
+/ingest/complete`, trusted-secret auth, allowlisted `X-CB-*` headers, bounded
+Content-Length, capped responses); the receiver feeds the existing
+scan-before-publish `IngestPipeline`. Public routes and the downloads `v1`
+contract remain unchanged.
+
+> The transport is component-complete and green under contract/integration
+> tests, but the deployment wiring (receiver bound in the CloudFiles service,
+> watcher env + real server binding on the browser service, shared downloads
+> volume, Chrome download directory) is a pending slice — see PHASE2.md. It is
+> not yet active in any deployed configuration.
+
 The implementation does not make live changes and does not expose the
 internal downloads service as a public host. Public HTML and deployment
 wiring remain Phase 3 work.

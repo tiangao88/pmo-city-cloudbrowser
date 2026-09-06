@@ -24,6 +24,8 @@ state/
 volumes/
 coverage.xml
 htmlcov/
+.cloudfiles-data/
+.cloudfiles-staging/
 
 # Preserve executable/source-tree data only; reject generated text artifacts.
 *.bak

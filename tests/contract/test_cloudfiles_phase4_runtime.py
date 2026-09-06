@@ -62,7 +62,7 @@ def _runtime_kwargs(**overrides):
 def test_production_runtime_wires_clamav_scanner_with_safe_defaults():
     from cloudbrowser.cloudfiles.runtime import create_cloudfiles_runtime
 
-    runtime = create_cloudfiles_runtime(**_runtime_kwargs())
+    runtime = create_cloudfiles_runtime(**_runtime_kwargs(dev_store=True))
     scanner = runtime.scanner
     assert type(scanner).__name__ == "ClamAvScanner"
     assert scanner.host == "127.0.0.1"
@@ -75,7 +75,7 @@ def test_production_runtime_wires_clamav_scanner_with_safe_defaults():
 def test_production_runtime_wires_retention_janitor_with_90_day_default():
     from cloudbrowser.cloudfiles.runtime import create_cloudfiles_runtime
 
-    runtime = create_cloudfiles_runtime(**_runtime_kwargs())
+    runtime = create_cloudfiles_runtime(**_runtime_kwargs(dev_store=True))
     assert type(runtime.janitor).__name__ == "RetentionJanitor"
     assert runtime.janitor.retention_days == 90
 
@@ -83,7 +83,7 @@ def test_production_runtime_wires_retention_janitor_with_90_day_default():
 def test_production_runtime_wires_metrics_that_never_store_identity():
     from cloudbrowser.cloudfiles.runtime import create_cloudfiles_runtime
 
-    runtime = create_cloudfiles_runtime(**_runtime_kwargs())
+    runtime = create_cloudfiles_runtime(**_runtime_kwargs(dev_store=True))
     runtime.metrics.record_ingest(
         principal="owner-a@example.test", filename="secret.pdf", size=12
     )
@@ -135,6 +135,7 @@ def test_production_runtime_quarantine_notifier_emits_only_redacted_fields():
     runtime = create_cloudfiles_runtime(
         **_runtime_kwargs(
             notifier_logger=RecordingLogger(),
+            dev_store=True,
         )
     )
     runtime.notifier.notify_quarantine(
@@ -161,6 +162,7 @@ def test_production_runtime_quarantine_notifier_never_raises():
     runtime = create_cloudfiles_runtime(
         **_runtime_kwargs(
             notifier_logger=ExplodingLogger(),
+            dev_store=True,
         )
     )
     runtime.notifier.notify_quarantine(
@@ -177,17 +179,17 @@ def test_production_runtime_refuses_unsafe_configuration():
     from cloudbrowser.cloudfiles.runtime import create_cloudfiles_runtime
 
     with pytest.raises(ValueError):
-        create_cloudfiles_runtime(**_runtime_kwargs(retention_days=0))
+        create_cloudfiles_runtime(**_runtime_kwargs(retention_days=0, dev_store=True))
     with pytest.raises(ValueError):
-        create_cloudfiles_runtime(**_runtime_kwargs(retention_days=-1))
+        create_cloudfiles_runtime(**_runtime_kwargs(retention_days=-1, dev_store=True))
     with pytest.raises(ValueError):
-        create_cloudfiles_runtime(**_runtime_kwargs(scanner_timeout_s=0))
+        create_cloudfiles_runtime(**_runtime_kwargs(scanner_timeout_s=0, dev_store=True))
 
 
 def test_production_runtime_close_is_idempotent_lifecycle_cleanup():
     from cloudbrowser.cloudfiles.runtime import create_cloudfiles_runtime
 
-    runtime = create_cloudfiles_runtime(**_runtime_kwargs())
+    runtime = create_cloudfiles_runtime(**_runtime_kwargs(dev_store=True))
     runtime.close()
     runtime.close()  # second close must be a harmless no-op
 
@@ -195,7 +197,7 @@ def test_production_runtime_close_is_idempotent_lifecycle_cleanup():
 def test_production_runtime_app_page_actions_stay_fail_closed():
     from cloudbrowser.cloudfiles.runtime import create_cloudfiles_runtime
 
-    runtime = create_cloudfiles_runtime(**_runtime_kwargs())
+    runtime = create_cloudfiles_runtime(**_runtime_kwargs(dev_store=True))
     server, thread = _serve(runtime.app)
     try:
         status, headers, body = _request(server, "/health")

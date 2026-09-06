@@ -55,6 +55,7 @@ def main() -> None:
         shared_secret=_required("CB_DOWNLOADS_SHARED_SECRET"),
         instance_id=_required("CB_INSTANCE_ID"),
         release_version=_required("CB_RELEASE_VERSION"),
+        scanner_host=os.environ.get("CB_CLAMAV_HOST", "127.0.0.1"),
     )
     app = runtime.app
     if edge_mode == _EDGE_AUTH_TRAEFIK_FORWARDAUTH:

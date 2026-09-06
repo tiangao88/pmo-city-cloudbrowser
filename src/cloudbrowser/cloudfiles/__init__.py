@@ -32,6 +32,8 @@ __all__ = [
     "downloads_client",
     "downloads_adapter",
     "browser_downloads",
+    "ingest_client",
+    "ingest_api",
     "phase2",
     "scanner",
     "retention",

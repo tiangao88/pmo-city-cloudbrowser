@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import shlex
 import threading
+from pathlib import Path
 
 from cloudbrowser.browser_slots.browser_process import (
     BrowserProcess,
@@ -58,14 +58,78 @@ def build_browser_service() -> tuple[BrowserProcess, object, threading.Event]:
     return process, server, threading.Event()
 
 
+def build_download_watcher():
+    """Construct the production download emitter from server configuration.
+
+    The download directory, the internal CloudFiles ingest receiver URL, and
+    the shared secret are all server-configured; the owner binding is the
+    browser's own server identity. Returns ``None`` when the transport is not
+    configured, so the browser service behaves exactly as before.
+    """
+    download_dir = os.environ.get("CB_BROWSER_DOWNLOAD_DIR")
+    ingest_url = os.environ.get("CB_DOWNLOADS_INGEST_URL")
+    ingest_secret = os.environ.get("CB_DOWNLOADS_INGEST_SECRET")
+    if not download_dir or not ingest_url or not ingest_secret:
+        return None
+    try:
+        max_bytes = int(os.environ.get("CB_BROWSER_DOWNLOAD_MAX_BYTES", str(1024 * 1024 * 1024)))
+    except ValueError as exc:
+        raise SystemExit("CB_BROWSER_DOWNLOAD_MAX_BYTES must be an integer") from exc
+    from cloudbrowser.cloudfiles.browser_downloads import (
+        BrowserDownloadCompleted,
+        BrowserDownloadWatcher,
+        DownloadWatchConfig,
+        IngestReceipt,
+    )
+    from cloudbrowser.cloudfiles.contracts import PrincipalBinding
+    from cloudbrowser.cloudfiles.ingest_client import IngestClient
+
+    try:
+        config = DownloadWatchConfig(
+            download_dir=Path(download_dir),
+            binding=PrincipalBinding(
+                principal_id=os.environ.get("CB_PRINCIPAL_ID", "principal-unassigned"),
+                profile_id=os.environ.get("CB_PROFILE_ID", "profile-unassigned"),
+                browser_id=os.environ.get("CB_BROWSER_ID", "browser-unassigned"),
+                generation=os.environ.get("CB_BINDING_GENERATION", "generation-0"),
+            ),
+            max_bytes=max_bytes,
+        )
+    except ValueError as exc:
+        raise SystemExit(f"download watcher configuration is invalid: {exc}") from exc
+    client = IngestClient(base_url=ingest_url, shared_secret=ingest_secret)
+
+    def submit(event: BrowserDownloadCompleted) -> IngestReceipt:
+        assert event.size is not None, "watcher events always carry the completed size"
+        return client.submit(
+            binding=event.binding,
+            source_name=event.source_name,
+            source=event.source,
+            size=event.size,
+        )
+
+    return BrowserDownloadWatcher(config, submit=submit)
+
+
 def run_browser_service() -> None:
     process, server, stop_event = build_browser_service()
     process.start()
     watcher = threading.Thread(target=process.watch, args=(stop_event,), daemon=True)
     watcher.start()
+    download_watcher = build_download_watcher()
+    download_thread = None
+    if download_watcher is not None:
+        download_thread = threading.Thread(
+            target=download_watcher.run,
+            args=(stop_event,),
+            daemon=True,
+        )
+        download_thread.start()
     try:
         server.serve_forever()
     finally:
         stop_event.set()
         process.stop()
         server.server_close()
+        if download_watcher is not None:
+            download_watcher.close()
