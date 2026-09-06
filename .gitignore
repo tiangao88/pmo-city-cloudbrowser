@@ -30,3 +30,4 @@ htmlcov/
 # Preserve executable/source-tree data only; reject generated text artifacts.
 *.bak
 *.tmp
+.hermes/

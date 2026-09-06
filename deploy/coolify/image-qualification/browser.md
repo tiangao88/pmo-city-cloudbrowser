@@ -12,7 +12,7 @@
 - runtime endpoint: passed (`/browser/health`)
 - provenance/SBOM metadata: present in registry manifest
 - CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/34043783268`
-- source commit `ad61d9e`
+- source commit `ad61d9ee2899771c24dda4c4d7cb2438c6445e56`
 ## Qualification evidence
 
 The immutable digest was resolved from the GHCR manifest for the image built

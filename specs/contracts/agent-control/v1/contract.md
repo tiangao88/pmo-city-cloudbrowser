@@ -27,9 +27,14 @@ accepts the envelope only alongside the trusted secret, and accepts the secret
 only when the envelope matches the server-owned binding exactly. Missing,
 malformed (empty, oversized, or control-character-bearing), or mismatched
 envelope values yield `401 unauthorized` and the request is never dispatched.
-The envelope is a seam for future authenticated router-to-agent-control
-forwarding; the router-side forwarder is not enabled by this contract. Health
-(`GET /health`) remains unauthenticated.
+The envelope is the authenticated router-to-agent-control forwarding seam.
+The router's `AgentControlForwarder` (configured via `CB_AGENT_CONTROL_URLS`
+and `CB_AGENT_CONTROL_SHARED_SECRET`, minimum 16 characters) relays only the
+allowlisted operations below to slots the caller owns; the caller's identity,
+session, slot, browser, and generation are all server-derived. Unknown
+slots, sessions without a binding, or slots outside the configured forwarding
+map fail closed without network egress. Health (`GET /health`) remains
+unauthenticated.
 
 ## Allowed operations
 
