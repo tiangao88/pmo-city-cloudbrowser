@@ -31,11 +31,17 @@ def main() -> None:
     compose = COMPOSE.read_text(encoding="utf-8")
     if "services: {}" in compose:
         fail("Compose bundle is empty")
+    # The Coolify bundle self-provisions: secrets via Coolify magic envs,
+    # configuration via deploy-safe defaults (dev01 values).
     for marker in (
-        "${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}",
-        "name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-network",
-        "name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-router-state",
-        "CB_VIEWER_TOKEN_SECRET: ${CB_VIEWER_TOKEN_SECRET:?CB_VIEWER_TOKEN_SECRET is required}",
+        "name: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}-network",
+        "name: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}-router-state",
+        "CB_VIEWER_TOKEN_SECRET: ${SERVICE_PASSWORD_64_VIEWERSECRET}",
+        "CB_ROUTER_SHARED_SECRET: ${SERVICE_PASSWORD_64_ROUTERSECRET}",
+        "CB_AGENT_CONTROL_SHARED_SECRET: ${SERVICE_PASSWORD_64_AGENTCTRLSECRET}",
+        "CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET}",
+        "CB_DOWNLOADS_SHARED_SECRET: ${SERVICE_PASSWORD_64_DLSECRET}",
+        "CB_DOWNLOADS_INGEST_SECRET: ${SERVICE_PASSWORD_64_INGESTSECRET}",
     ):
         if marker not in compose:
             fail(f"missing installation marker: {marker}")

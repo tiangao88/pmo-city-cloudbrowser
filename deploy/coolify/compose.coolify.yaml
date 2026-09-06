@@ -1,4 +1,13 @@
 # Deployed CloudBrowser dev staging compose (Coolify).
+#
+# Coolify provisioning contract (v4):
+#   - The six service secrets use Coolify magic env variables
+#     (${SERVICE_PASSWORD_64_<IDENTIFIER>}); Coolify auto-creates them in the
+#     service env list with a random 64-char alphanumeric value on first parse
+#     and keeps the value stable across redeploys (editable in the UI).
+#   - Configuration values carry deploy-safe defaults (${CB_X:-default}) so a
+#     fresh service deploy provisions itself with zero manual env setup; the
+#     defaults match dev01 and can be overridden per environment in the UI.
 # Image-based variant of deploy/coolify/compose.yaml: Coolify API-created
 # services cannot clone the private repo to satisfy `build:` contexts, so the
 # deployed compose pins the published dev images instead.
@@ -10,7 +19,7 @@
 # Public host routing is managed by the existing cloudbrowser2 Coolify service
 # Domains configuration. Do not add compose-level Traefik routers for these
 # hosts: that would create duplicate routes.
-name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
+name: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
 
 # Public host: cloudfiles2.dev01.pmo.city is a Domains entry for cloudfiles.
 # The internal downloads service remains reachable only inside the network on
@@ -19,8 +28,8 @@ name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
 x-common: &common
   restart: unless-stopped
   environment:
-    CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
-    CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+    CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
+    CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
   networks:
     - cloudbrowser
 
@@ -29,27 +38,27 @@ services:
     <<: *common
     image: ghcr.io/tiangao88/pmo-city-cloudbrowser/router@sha256:ab21240872eab1a43e59f528e789591d8562dc166a3e43b7bc8da46928e151fc
     environment:
-      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
-      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
       CB_PORT: 8080
       # Fail-closed control plane: the router dispatches slot lifecycle
       # commands to private slot supervisors and authenticates downstream
       # with its trusted secret; refuse to boot without either.
-      CB_ROUTER_SHARED_SECRET: ${CB_ROUTER_SHARED_SECRET:?CB_ROUTER_SHARED_SECRET is required}
-      CB_SLOT_SUPERVISOR_URLS: ${CB_SLOT_SUPERVISOR_URLS:?CB_SLOT_SUPERVISOR_URLS is required}
+      CB_ROUTER_SHARED_SECRET: ${SERVICE_PASSWORD_64_ROUTERSECRET}
+      CB_SLOT_SUPERVISOR_URLS: ${CB_SLOT_SUPERVISOR_URLS:-slot-1=http://slot-supervisor:8081}
       # §3.1: trusted forwarding targets for agent page-actions; the router
       # relays only allowlisted operations to slots the caller owns.
-      CB_AGENT_CONTROL_URLS: ${CB_AGENT_CONTROL_URLS:?CB_AGENT_CONTROL_URLS is required}
-      CB_AGENT_CONTROL_SHARED_SECRET: ${CB_AGENT_CONTROL_SHARED_SECRET:?CB_AGENT_CONTROL_SHARED_SECRET is required}
+      CB_AGENT_CONTROL_URLS: ${CB_AGENT_CONTROL_URLS:-slot-1=http://agent-control:8090}
+      CB_AGENT_CONTROL_SHARED_SECRET: ${SERVICE_PASSWORD_64_AGENTCTRLSECRET}
       # Trust the Traefik/TinyAuth forward-auth identity headers
       # (remote-user/email/name/groups, copied by tinyauth-pmo@file) for the
       # authenticated edge. Must only be set behind the authenticated proxy;
       # unset keeps the bearer-token-only behavior.
-      CB_EDGE_AUTH: ${CB_EDGE_AUTH:?CB_EDGE_AUTH is required for the deployed authenticated edge}
+      CB_EDGE_AUTH: ${CB_EDGE_AUTH:-traefik-forwardauth}
       CB_IDENTITY_LINK_BASE_URL: http://identity-link:8091
-      CB_IDENTITY_LINK_SHARED_SECRET: ${CB_IDENTITY_LINK_SHARED_SECRET:?CB_IDENTITY_LINK_SHARED_SECRET is required}
-      CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:?CB_OIDC_ISSUER is required}
-      CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:?CB_TINYAUTH_REALM is required}
+      CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET}
+      CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:-https://auth.aikumi.app/application/o/pmoc-sso/}
+      CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:-tinyauth-pmo}
     depends_on:
       identity-link:
         condition: service_healthy
@@ -66,15 +75,15 @@ services:
     <<: *common
     image: ghcr.io/tiangao88/pmo-city-cloudbrowser/slot-supervisor@sha256:d271afd0a3a13f08b0c804950561b3642af749db8b4d79e67a4588e015b2efe1
     environment:
-      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
-      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
       CB_PORT: 8081
       CB_BROWSER_API_URL: http://browser:9230
-      CB_PROFILE_ID: ${CB_PROFILE_ID:-profile-unassigned}
-      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
-      CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-unassigned}
-      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
-      CB_ROUTER_SHARED_SECRET: ${CB_ROUTER_SHARED_SECRET:?CB_ROUTER_SHARED_SECRET is required}
+      CB_PROFILE_ID: ${CB_PROFILE_ID:-profile-dev01}
+      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-dev01}
+      CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-dev01}
+      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-dev01-g1}
+      CB_ROUTER_SHARED_SECRET: ${SERVICE_PASSWORD_64_ROUTERSECRET}
     depends_on:
       browser:
         condition: service_started
@@ -91,19 +100,19 @@ services:
     <<: *common
     image: ghcr.io/tiangao88/pmo-city-cloudbrowser/browser@sha256:b150b34b197b1d06a63001bd58b79e9b2a6f630c399454429498b78dadd5d548
     environment:
-      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
-      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
       CB_PORT: 9230
       CB_CHROME_HTTP_URL: http://127.0.0.1:9222
       CB_CHROME_HTTP_PORT: 9222
       CB_CHROME_EXECUTABLE: ${CB_CHROME_EXECUTABLE:-/usr/bin/chromium}
       CB_CHROME_EXTRA_ARGS: ${CB_CHROME_EXTRA_ARGS:---headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage}
       CB_PROFILE_DIR: /data/profile
-      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
-      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
+      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-dev01}
+      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-dev01-g1}
       CB_BROWSER_DOWNLOAD_DIR: /data/downloads-browser
       CB_DOWNLOADS_INGEST_URL: http://cloudfiles:8086
-      CB_DOWNLOADS_INGEST_SECRET: ${CB_DOWNLOADS_INGEST_SECRET:?CB_DOWNLOADS_INGEST_SECRET is required}
+      CB_DOWNLOADS_INGEST_SECRET: ${SERVICE_PASSWORD_64_INGESTSECRET}
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9230/browser/health', timeout=3)"]
       interval: 10s
@@ -118,14 +127,14 @@ services:
     <<: *common
     image: ghcr.io/tiangao88/pmo-city-cloudbrowser/agent-control@sha256:8f6bdd1daa87591f6651f03e39ac285f3674fc4fb10ff79fc59fa8f0aa0741ce
     environment:
-      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
-      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
       CB_PORT: 8090
       CB_BROWSER_API_URL: http://browser:9230
-      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:?CB_PRINCIPAL_ID is required}
-      CB_BROWSER_ID: ${CB_BROWSER_ID:?CB_BROWSER_ID is required}
-      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:?CB_BINDING_GENERATION is required}
-      CB_AGENT_CONTROL_SHARED_SECRET: ${CB_AGENT_CONTROL_SHARED_SECRET:?CB_AGENT_CONTROL_SHARED_SECRET is required}
+      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-dev01}
+      CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-dev01}
+      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-dev01-g1}
+      CB_AGENT_CONTROL_SHARED_SECRET: ${SERVICE_PASSWORD_64_AGENTCTRLSECRET}
     depends_on:
       browser:
         condition: service_started
@@ -142,19 +151,19 @@ services:
     <<: *common
     image: ghcr.io/tiangao88/pmo-city-cloudbrowser/viewer@sha256:8c3837885c51999cc96cf0542f48a1fff6b585ddca3b75818d485e0b4778b87c
     environment:
-      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
-      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
       CB_PORT: 8082
-      CB_VIEWER_TOKEN_SECRET: ${CB_VIEWER_TOKEN_SECRET:?CB_VIEWER_TOKEN_SECRET is required}
+      CB_VIEWER_TOKEN_SECRET: ${SERVICE_PASSWORD_64_VIEWERSECRET}
       # Trust the Traefik/TinyAuth forward-auth identity headers
       # (remote-user/email/name/groups, copied by tinyauth-pmo@file) for the
       # public employee surface. Must only be set behind the authenticated
       # proxy; unset keeps the bearer-token-only behavior.
-      CB_EDGE_AUTH: ${CB_EDGE_AUTH:?CB_EDGE_AUTH is required for the deployed authenticated edge}
+      CB_EDGE_AUTH: ${CB_EDGE_AUTH:-traefik-forwardauth}
       CB_IDENTITY_LINK_BASE_URL: http://identity-link:8091
-      CB_IDENTITY_LINK_SHARED_SECRET: ${CB_IDENTITY_LINK_SHARED_SECRET:?CB_IDENTITY_LINK_SHARED_SECRET is required}
-      CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:?CB_OIDC_ISSUER is required}
-      CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:?CB_TINYAUTH_REALM is required}
+      CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET}
+      CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:-https://auth.aikumi.app/application/o/pmoc-sso/}
+      CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:-tinyauth-pmo}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8082/health', timeout=3)"]
       interval: 10s
@@ -175,13 +184,13 @@ services:
     <<: *common
     image: ghcr.io/tiangao88/pmo-city-cloudbrowser/downloads@sha256:ce31c72faed2ac4d03280e6036c04546880cb8f6ebd1dce2d073fda7a5b46898
     environment:
-      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
-      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
       CB_PORT: 8083
-      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:?CB_PRINCIPAL_ID is required}
-      CB_BROWSER_ID: ${CB_BROWSER_ID:?CB_BROWSER_ID is required}
-      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:?CB_BINDING_GENERATION is required}
-      CB_DOWNLOADS_SHARED_SECRET: ${CB_DOWNLOADS_SHARED_SECRET:?CB_DOWNLOADS_SHARED_SECRET is required}
+      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-dev01}
+      CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-dev01}
+      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-dev01-g1}
+      CB_DOWNLOADS_SHARED_SECRET: ${SERVICE_PASSWORD_64_DLSECRET}
       CB_DOWNLOADS_ROOT: /data/downloads
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3)"]
@@ -202,22 +211,22 @@ services:
       - tinyauth.apps.cloudbrowser2-cloudfiles.config.domain=cloudfiles2.dev01.pmo.city
       - traefik.http.middlewares.tinyauth-pmo@file
     environment:
-      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
-      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
       CB_PORT: 8085
       CB_DOWNLOADS_BASE_URL: http://downloads:8083
-      CB_DOWNLOADS_SHARED_SECRET: ${CB_DOWNLOADS_SHARED_SECRET:?CB_DOWNLOADS_SHARED_SECRET is required}
+      CB_DOWNLOADS_SHARED_SECRET: ${SERVICE_PASSWORD_64_DLSECRET}
       # Translate the Traefik/TinyAuth forward-auth identity headers into the
       # validated gateway session. Must only be set behind the authenticated
       # proxy (tinyauth-pmo@file + PMOC_Users gate on this host); unset keeps
       # the gateway fail-closed for every protected route.
-      CB_EDGE_AUTH: ${CB_EDGE_AUTH:?CB_EDGE_AUTH is required for the deployed authenticated edge}
+      CB_EDGE_AUTH: ${CB_EDGE_AUTH:-traefik-forwardauth}
       CB_IDENTITY_LINK_BASE_URL: http://identity-link:8091
-      CB_IDENTITY_LINK_SHARED_SECRET: ${CB_IDENTITY_LINK_SHARED_SECRET:?CB_IDENTITY_LINK_SHARED_SECRET is required}
-      CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:?CB_OIDC_ISSUER is required}
-      CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:?CB_TINYAUTH_REALM is required}
+      CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET}
+      CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:-https://auth.aikumi.app/application/o/pmoc-sso/}
+      CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:-tinyauth-pmo}
       CB_CLAMAV_HOST: clamav
-      CB_DOWNLOADS_INGEST_SECRET: ${CB_DOWNLOADS_INGEST_SECRET:?CB_DOWNLOADS_INGEST_SECRET is required}
+      CB_DOWNLOADS_INGEST_SECRET: ${SERVICE_PASSWORD_64_INGESTSECRET}
       CB_DOWNLOADS_INGEST_PORT: 8086
     depends_on:
       downloads:
@@ -256,12 +265,12 @@ services:
     <<: *common
     image: ghcr.io/tiangao88/pmo-city-cloudbrowser/identity-link@sha256:63f6718d0dcf3ab41251315f7143b26deadc089844c912497a2fc6ed8d6bc59d
     environment:
-      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
-      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
       CB_PORT: 8091
-      CB_IDENTITY_LINK_SHARED_SECRET: ${CB_IDENTITY_LINK_SHARED_SECRET:?CB_IDENTITY_LINK_SHARED_SECRET is required}
-      CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:?CB_OIDC_ISSUER is required}
-      CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:?CB_TINYAUTH_REALM is required}
+      CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET}
+      CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:-https://auth.aikumi.app/application/o/pmoc-sso/}
+      CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:-tinyauth-pmo}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health', timeout=3)"]
       interval: 10s
@@ -275,8 +284,8 @@ services:
     <<: *common
     image: ghcr.io/tiangao88/pmo-city-cloudbrowser/credential-broker@sha256:55aadc81291e43de0fee4f3ed7774228dab761626b70a357b9e1e40e2b99671a
     environment:
-      CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
-      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
+      CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
+      CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
       CB_PORT: 8084
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8084/health', timeout=3)"]
@@ -289,22 +298,22 @@ services:
 
 networks:
   cloudbrowser:
-    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-network
+    name: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}-network
 
 volumes:
   router-state:
-    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-router-state
+    name: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}-router-state
   slot-state:
-    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-slot-state
+    name: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}-slot-state
   browser-profile:
-    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-browser-profile
+    name: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}-browser-profile
   downloads:
-    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-downloads
+    name: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}-downloads
   browser-downloads:
-    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-browser-downloads
+    name: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}-browser-downloads
   broker-state:
-    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-broker-state
+    name: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}-broker-state
   identity-link-state:
-    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-identity-link-state
+    name: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}-identity-link-state
   clamav-db:
-    name: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}-clamav-db
+    name: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}-clamav-db

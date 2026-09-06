@@ -68,8 +68,12 @@ def test_qualification_records_are_present_and_match_manifest() -> None:
 
 
 def test_both_compose_variants_require_the_viewer_secret() -> None:
-    marker = "CB_VIEWER_TOKEN_SECRET: ${CB_VIEWER_TOKEN_SECRET:?CB_VIEWER_TOKEN_SECRET is required}"
-    for relative_path in ("deploy/coolify/compose.yaml", "deploy/coolify/compose.coolify.yaml"):
+    # Source-build variant requires an explicit secret; the Coolify variant
+    # provisions it via a Coolify magic env (auto-generated, stable value).
+    for relative_path, marker in (
+        ("deploy/coolify/compose.yaml", "CB_VIEWER_TOKEN_SECRET: ${CB_VIEWER_TOKEN_SECRET:?CB_VIEWER_TOKEN_SECRET is required}"),
+        ("deploy/coolify/compose.coolify.yaml", "CB_VIEWER_TOKEN_SECRET: ${SERVICE_PASSWORD_64_VIEWERSECRET}"),
+    ):
         compose = (ROOT / relative_path).read_text(encoding="utf-8")
         viewer_section = compose.split("  viewer:\n", 1)[1].split("\n  downloads:", 1)[0]
         assert marker in viewer_section

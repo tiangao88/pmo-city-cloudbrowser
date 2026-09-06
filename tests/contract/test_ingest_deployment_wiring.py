@@ -240,7 +240,12 @@ def _block(filename: str, service: str, nxt: str) -> str:
 @pytest.mark.parametrize("filename", ["compose.yaml", "compose.coolify.yaml"])
 def test_compose_cloudfiles_declares_ingest_secret_and_port(filename):
     block = _block(filename, "cloudfiles:", "clamav:")
-    assert "CB_DOWNLOADS_INGEST_SECRET: ${CB_DOWNLOADS_INGEST_SECRET" in block
+    marker = (
+        "CB_DOWNLOADS_INGEST_SECRET: ${SERVICE_PASSWORD_64_INGESTSECRET}"
+        if filename == "compose.coolify.yaml"
+        else "CB_DOWNLOADS_INGEST_SECRET: ${CB_DOWNLOADS_INGEST_SECRET"
+    )
+    assert marker in block
     assert "CB_DOWNLOADS_INGEST_PORT: 8086" in block
     assert "expose:" in block and "8086" in block
 
@@ -254,10 +259,14 @@ def test_compose_shares_downloads_volume_with_cloudfiles(filename):
 @pytest.mark.parametrize("filename", ["compose.yaml", "compose.coolify.yaml"])
 def test_compose_browser_wires_watcher_envs(filename):
     block = _block(filename, "browser:", "agent-control:")
+    marker = (
+        "CB_DOWNLOADS_INGEST_SECRET: ${SERVICE_PASSWORD_64_INGESTSECRET}"
+        if filename == "compose.coolify.yaml"
+        else "CB_DOWNLOADS_INGEST_SECRET: ${CB_DOWNLOADS_INGEST_SECRET"
+    )
     assert "CB_BROWSER_DOWNLOAD_DIR: /data/downloads-browser" in block
     assert "CB_DOWNLOADS_INGEST_URL: http://cloudfiles:8086" in block
-    assert "CB_DOWNLOADS_INGEST_SECRET: ${CB_DOWNLOADS_INGEST_SECRET" in block
-    assert "CB_BROWSER_DOWNLOAD_DIR: /data/downloads-browser" in block
+    assert marker in block
 
 
 @pytest.mark.parametrize("filename", ["compose.yaml", "compose.coolify.yaml"])
