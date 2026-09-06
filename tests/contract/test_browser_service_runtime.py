@@ -140,6 +140,69 @@ def test_router_wires_supervisor_urls_and_identity_link_env(monkeypatch):
     assert callable(captured["clock"])
 
 
+def test_router_runtime_skips_identity_client_without_edge_mode(monkeypatch):
+    # Mirror the viewer: without CB_EDGE_AUTH the router must boot health-only
+    # and must NOT construct the identity-link client (which requires four
+    # identity envs). CI image qualification boots the router without the edge
+    # switch, so an unconditional build_identity_link_client() call would
+    # SystemExit and the container would never become healthy.
+    captured = {}
+
+    class FakeNamespace:
+        def __init__(self, instance_id):
+            pass
+
+    class FakeStore:
+        def __init__(self, path, *, slots, clock, **kwargs):
+            pass
+
+    class FakeApi:
+        def __init__(self, *, session_store, supervisor_client, identity_client, **kwargs):
+            captured["identity_client"] = identity_client
+
+    class FakeServer:
+        def serve_forever(self):
+            captured["served"] = True
+
+        def server_close(self):
+            captured["closed"] = True
+
+    def _unexpected_identity_client_build():
+        raise AssertionError("identity client must not be built without the edge switch")
+
+    monkeypatch.setattr(service_runtime, "InstanceNamespace", FakeNamespace)
+    monkeypatch.setenv("CB_INSTANCE_ID", "test-instance")
+    monkeypatch.setenv("CB_RELEASE_VERSION", "test-release")
+    monkeypatch.setenv("CB_PORT", "8080")
+    monkeypatch.setenv("CB_ROUTER_SHARED_SECRET", "router-test-secret-0123456789")
+    monkeypatch.setenv("CB_SLOT_SUPERVISOR_URLS", "slot-1=http://slot-1:8081")
+    monkeypatch.delenv("CB_EDGE_AUTH", raising=False)
+    for name in (
+        "CB_IDENTITY_LINK_BASE_URL",
+        "CB_IDENTITY_LINK_SHARED_SECRET",
+        "CB_OIDC_ISSUER",
+        "CB_TINYAUTH_REALM",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    monkeypatch.setattr("cloudbrowser.router.sessions.RouterSessionStore", FakeStore)
+    monkeypatch.setattr(
+        "cloudbrowser.identity_links.build_identity_link_client",
+        _unexpected_identity_client_build,
+    )
+    monkeypatch.setattr("cloudbrowser.router.router_api.RouterApi", FakeApi)
+    monkeypatch.setattr(
+        "cloudbrowser.router.router_api.create_router_server",
+        lambda api, *, address: FakeServer(),
+    )
+
+    service_runtime.run_service("router")
+
+    assert captured["identity_client"] is None
+    assert captured["served"] is True
+    assert captured["closed"] is True
+
+
 def test_router_never_falls_back_to_health(monkeypatch):
     class FakeNamespace:
         def __init__(self, instance_id):

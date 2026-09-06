@@ -217,7 +217,12 @@ def run_service(component: str) -> None:
             SlotDescriptor(slot_id=slot_id, supervisor_url=url, browser_id=f"browser-{slot_id}")
             for slot_id, url in sorted(supervisor_map.items())
         ]
-        identity_client = build_identity_link_client()
+        # Like the viewer/cloudfiles branches, the identity-link resolver is
+        # built only behind the authenticated edge; without CB_EDGE_AUTH the
+        # router boots health-only and every protected route fails closed.
+        identity_client = None
+        if edge_mode == "traefik-forwardauth":
+            identity_client = build_identity_link_client()
         supervisor_client = SupervisorClient(supervisor_map, trusted_secret=shared_secret)
         session_store = RouterSessionStore(
             state_path,

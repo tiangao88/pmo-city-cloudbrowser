@@ -175,6 +175,37 @@ def test_ready_endpoint_returns_bounded_payload(server_stack):
     assert payload["status"] == "ok"
 
 
+def test_session_post_fails_closed_when_identity_client_is_absent(server_stack):
+    # A router booted without the authenticated edge (no CB_EDGE_AUTH) has no
+    # identity resolver; every protected route must fail closed with 401
+    # instead of raising into the connection handler.
+    store = server_stack["store"]
+    api = RouterApi(
+        session_store=store,
+        supervisor_client=server_stack["supervisor"],  # type: ignore[arg-type]
+        identity_client=None,
+    )
+    status, payload = api.open_session(
+        headers=_identity_headers(),
+        body={"request_id": "req-no-client"},
+    )
+    assert status == 401
+    assert payload == {
+        "request_id": "req-no-client",
+        "status": "failed",
+        "error_code": "unauthorized",
+    }
+    status, payload = api.get_session(headers=_identity_headers(), request_id="req-no-client")
+    assert status == 401
+    status, payload = api.slot_command(
+        headers=_identity_headers(),
+        slot_id="slot-1",
+        operation="wake",
+        request_id="req-no-client",
+    )
+    assert status == 401
+
+
 def test_session_post_enqueues_offered_session_and_redacts_principal(server_stack):
     server = server_stack["server"]
     status, payload = _request_json(

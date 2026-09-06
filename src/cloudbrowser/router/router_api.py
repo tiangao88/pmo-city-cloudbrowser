@@ -79,8 +79,10 @@ def _request_id_from(payload: Mapping[str, object]) -> str:
 
 
 def _resolve_identity(
-    *, headers: Mapping[str, object], client: IdentityLinkClient
+    *, headers: Mapping[str, object], client: IdentityLinkClient | None
 ) -> _RouterIdentity | None:
+    if client is None:
+        return None
     identity = parse_edge_identity({key: value for key, value in headers.items()})
     if identity is None:
         return None
@@ -138,7 +140,7 @@ class RouterApi:
         *,
         session_store: RouterSessionStore,
         supervisor_client: _SupervisorPort,
-        identity_client: IdentityLinkClient,
+        identity_client: IdentityLinkClient | None,
         component: str = "router",
     ) -> None:
         self._store = session_store
