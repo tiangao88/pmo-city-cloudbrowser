@@ -135,6 +135,8 @@ jobs:
             --env CB_BINDING_GENERATION=qualification-generation \
             --env CB_VIEWER_TOKEN_SECRET=qualification-viewer-secret \
             --env CB_AGENT_CONTROL_SHARED_SECRET=qualification-agent-secret \
+            --env CB_ROUTER_SHARED_SECRET=qualification-router-shared-secret \
+            --env CB_SLOT_SUPERVISOR_URLS=slot-1=http://127.0.0.1:8081 \
             --env CB_DOWNLOADS_SHARED_SECRET=qualification-downloads-secret \
             --env CB_DOWNLOADS_BASE_URL=http://127.0.0.1:8083 \
             --env CB_DOWNLOADS_ROOT=/data/downloads \
