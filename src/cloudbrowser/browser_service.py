@@ -90,16 +90,21 @@ def build_download_watcher(binding: "PrincipalBinding | None" = None):
         "browser-unassigned",
         "generation-0",
     }
-    if principal_id in unassigned or any(
-        os.environ.get(key, default) in unassigned
-        for key, default in (
-            ("CB_PROFILE_ID", "profile-unassigned"),
-            ("CB_BROWSER_ID", "browser-unassigned"),
-            ("CB_BINDING_GENERATION", "generation-0"),
+    if binding is None and (
+        principal_id in unassigned
+        or any(
+            os.environ.get(key, default) in unassigned
+            for key, default in (
+                ("CB_PROFILE_ID", "profile-unassigned"),
+                ("CB_BROWSER_ID", "browser-unassigned"),
+                ("CB_BINDING_GENERATION", "generation-0"),
+            )
         )
     ):
         # A download watcher with a placeholder binding would attribute
-        # files to a non-identity; refuse to start the transport.
+        # files to a non-identity; refuse to start the transport. An
+        # explicitly adopted binding (boot-stopped lazy build) bypasses the
+        # env check — the adopted identity IS the real binding.
         raise SystemExit(
             "download watcher requires a real server binding "
             "(CB_PRINCIPAL_ID/CB_PROFILE_ID/CB_BROWSER_ID/CB_BINDING_GENERATION)"

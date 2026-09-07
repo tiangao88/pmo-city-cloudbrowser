@@ -150,7 +150,13 @@ def create_browser_server(
             process.rebind(binding.principal_id, binding.generation)
             adapter.rebind(binding.principal_id, binding.generation)
             if binding_listener is not None:
-                binding_listener(binding)
+                try:
+                    binding_listener(binding)
+                except Exception:  # noqa: BLE001 - listener must never abort the push
+                    # The identity rebind already happened; a listener fault
+                    # (e.g. download-watcher maintenance) must not turn a
+                    # successful adoption into a dead handler/connection.
+                    self.log_error("binding listener raised; push still accepted")
             self._send_json(200, {"ok": True})
 
         def _read_text(self) -> str:
