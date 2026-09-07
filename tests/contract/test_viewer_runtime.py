@@ -42,12 +42,13 @@ def test_viewer_wiring_uses_token_secret_and_shared_identity_client(monkeypatch)
     monkeypatch.setenv("CB_VIEWER_TOKEN_SECRET", "viewer-secret-value")
     monkeypatch.setenv("CB_VIEWER_SESSION_TTL_S", "300")
     monkeypatch.setenv("CB_EDGE_AUTH", "traefik-forwardauth")
+    monkeypatch.setenv("CB_ROUTER_BASE_URL", "http://router:8080")
     monkeypatch.setattr("cloudbrowser.viewer.ViewerSessionStore", FakeStore)
     monkeypatch.setattr("cloudbrowser.viewer.AuthenticatedViewer", FakeViewer)
     monkeypatch.setattr("cloudbrowser.identity_links.build_identity_link_client", lambda: FakeResolver())
     monkeypatch.setattr(
         "cloudbrowser.viewer.create_viewer_server",
-        lambda viewer, *, address, allow_edge_identity=False: FakeServer(),
+        lambda viewer, *, address, allow_edge_identity=False, session_surface=None: FakeServer(),
     )
 
     service_runtime.run_service("viewer")
@@ -113,7 +114,7 @@ def test_viewer_treats_empty_edge_auth_env_as_unset(monkeypatch) -> None:
     monkeypatch.setattr("cloudbrowser.viewer.AuthenticatedViewer", FakeViewer)
     monkeypatch.setattr(
         "cloudbrowser.viewer.create_viewer_server",
-        lambda viewer, *, address, allow_edge_identity=False: (captured.update(allow_edge_identity=allow_edge_identity) or FakeServer()),
+        lambda viewer, *, address, allow_edge_identity=False, session_surface=None: (captured.update(allow_edge_identity=allow_edge_identity) or FakeServer()),
     )
 
     service_runtime.run_service("viewer")

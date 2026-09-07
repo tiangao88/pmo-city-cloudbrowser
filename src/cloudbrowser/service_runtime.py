@@ -113,10 +113,22 @@ def run_service(component: str) -> None:
             ttl_s=ttl_s,
             identity_client=identity_client,
         )
+        session_surface = None
+        if edge_mode == "traefik-forwardauth":
+            from cloudbrowser.viewer.session_surface import RouterHttpClient, ViewerSessionSurface
+
+            router_base_url = os.environ.get("CB_ROUTER_BASE_URL")
+            if not router_base_url:
+                raise SystemExit("CB_ROUTER_BASE_URL is required when CB_EDGE_AUTH is traefik-forwardauth")
+            session_surface = ViewerSessionSurface(
+                identity_client=identity_client,
+                router_api=RouterHttpClient(base_url=router_base_url),
+            )
         server = create_viewer_server(
             viewer,
             address=("0.0.0.0", port),
             allow_edge_identity=edge_mode == "traefik-forwardauth",
+            session_surface=session_surface,
         )
         try:
             server.serve_forever()

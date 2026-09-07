@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import secrets
 import threading
+from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable, Mapping
 
 from cloudbrowser.identity_links import IdentityLinkClient, IdentityLinkClientError
+from cloudbrowser.viewer.session_surface import ViewerSessionSurface
 
 
 @dataclass(frozen=True)
@@ -152,10 +153,11 @@ _SHELL = """<!doctype html>
 
 
 def create_viewer_server(
-    viewer: AuthenticatedViewer,
+    viewer: AuthenticatedViewer | None,
     *,
     address: tuple[str, int] = ("127.0.0.1", 8082),
     allow_edge_identity: bool = False,
+    session_surface: ViewerSessionSurface | None = None,
 ) -> ThreadingHTTPServer:
     """Create the authenticated viewer shell; no CDP or profile routes exist.
 
@@ -171,16 +173,23 @@ def create_viewer_server(
     if not isinstance(allow_edge_identity, bool):
         raise TypeError("allow_edge_identity must be a bool")
 
+    if session_surface is not None and allow_edge_identity is not True:
+        raise ValueError("session_surface requires the authenticated edge mode")
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - stdlib HTTP handler contract
             if self.path == "/health":
                 self._json(200, {"status": "ok", "component": "viewer"})
                 return
+            if session_surface is not None and self.path == "/ui/session":
+                self._surface_call("status")
+                return
             if self.path not in ("/", "/viewer"):
                 self.send_error(404)
                 return
             token = _bearer(self.headers.get("Authorization"))
-            if viewer._store.get(token) is None and not self._edge_authenticated():
+            token_valid = viewer is not None and viewer._store.get(token) is not None
+            if not token_valid and not self._edge_authenticated():
                 self.send_error(401)
                 return
             body = _SHELL.encode("utf-8")
@@ -205,7 +214,44 @@ def create_viewer_server(
             except IdentityLinkClientError:
                 return False
 
+        def _surface_call(self, action: str) -> None:
+            """Run one session-surface action for the edge-authenticated caller."""
+            assert session_surface is not None
+            request_id = self.headers.get("X-CB-Request-Id") or "ui-" + secrets.token_urlsafe(8)
+            if not isinstance(request_id, str) or len(request_id) > 128:
+                self._json(
+                    200,
+                    {"ok": False, "request_id": "", "status": "failed", "error_code": "invalid_request"},
+                )
+                return
+            try:
+                if action == "status":
+                    status, payload = session_surface.status(
+                        headers=dict(self.headers.items()), request_id=request_id
+                    )
+                elif action == "join":
+                    status, payload = session_surface.join(
+                        headers=dict(self.headers.items()), request_id=request_id
+                    )
+                else:
+                    status, payload = session_surface.activate(
+                        headers=dict(self.headers.items()), request_id=request_id
+                    )
+            except Exception:
+                self._json(
+                    200,
+                    {"ok": False, "request_id": request_id, "status": "failed", "error_code": "surface_failed"},
+                )
+                return
+            self._json(status, payload)
+
         def do_POST(self) -> None:  # noqa: N802 - stdlib HTTP handler contract
+            if session_surface is not None and self.path == "/ui/session/join":
+                self._surface_call("join")
+                return
+            if session_surface is not None and self.path == "/ui/session/activate":
+                self._surface_call("activate")
+                return
             if self.path != "/viewer/session":
                 self.send_error(404)
                 return
