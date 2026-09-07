@@ -228,13 +228,23 @@ class RouterSessionStore:
 
     def for_principal(self, principal_id: str) -> RouterSession | None:
         self._validate_text(principal_id, "principal_id")
-        candidates = [
-            record
-            for record in self._sessions.values()
-            if record.principal_id == principal_id and record.status in self._LIVE
-        ]
-        if not candidates:
-            return None
+        with self._lock:
+            # The poll path must observe the passage of time: lapsed offers
+            # and expired sessions return to the queue here, and freed slots
+            # re-offer to waiters — not only when the next enqueue event
+            # happens. Without this, a freed slot never reaches a waiting
+            # session because promote_next() has no production caller.
+            expired = self._expire_locked()
+            promoted = self._assign_waiters_locked()
+            candidates = [
+                record
+                for record in self._sessions.values()
+                if record.principal_id == principal_id and record.status in self._LIVE
+            ]
+            if expired or promoted:
+                self._persist_locked()
+            if not candidates:
+                return None
         order = {
             SessionStatus.ACTIVE: 0,
             SessionStatus.OFFERED: 1,
@@ -260,7 +270,7 @@ class RouterSessionStore:
     def slots(self) -> tuple[SlotDescriptor, ...]:
         return self._slots
 
-    def _assign_waiters_locked(self) -> None:
+    def _assign_waiters_locked(self) -> int:
         occupied = {
             record.slot_id
             for record in self._sessions.values()
@@ -272,6 +282,7 @@ class RouterSessionStore:
             key=lambda record: (record.enqueued_at, record.session_id),
         )
         now = self._clock()
+        promoted = 0
         for record, slot in zip(waiting, free):
             binding = BrowserBinding(
                 profile_id=f"profile-{record.principal_id}",
@@ -286,18 +297,25 @@ class RouterSessionStore:
                 binding=binding,
                 offer_expires_at=now + self._offer_ttl_s,
             )
+            promoted += 1
+        return promoted
 
     def _expire_locked(self) -> bool:
         now = self._clock()
         changed = False
         for record in tuple(self._sessions.values()):
             if record.status is SessionStatus.OFFERED and record.offer_expires_at is not None and now >= record.offer_expires_at:
+                # A lapsed offer means the owner had its offer window and
+                # did not activate: it re-enters the queue at the tail so a
+                # waiting session polling GET /v1/session is not starved by
+                # an absent principal whose offer keeps being re-granted.
                 self._sessions[record.session_id] = replace(
                     record,
                     status=SessionStatus.WAITING,
                     slot_id=None,
                     binding=None,
                     offer_expires_at=None,
+                    enqueued_at=now,
                 )
                 changed = True
             elif record.status is SessionStatus.ACTIVE and record.session_expires_at is not None and now >= record.session_expires_at:
