@@ -114,13 +114,16 @@ def test_adopt_binding_requires_same_browser_id(tmp_path):
     assert transport.pushed == []
 
 
-def test_adopt_binding_rejected_while_active(tmp_path):
+def test_adopt_binding_takes_over_while_active(tmp_path):
+    """Decision 2026-09-08 (Tigo): a slot left running by an ended session is
+    force-stopped and adopted instead of wedging; the browser_id guard still
+    applies. The pre-takeover contract (ValueError while active) is covered
+    by tests/contract/test_slot_wake_takeover.py from the new direction."""
     transport = _FakeTransport()
     supervisor = _supervisor(tmp_path, transport)
     supervisor.wake(_binding())
-    with pytest.raises(ValueError):
-        supervisor.adopt_binding(_binding(generation="generation-s2"))
-    supervisor.suspend(_binding())
+    supervisor.adopt_binding(_binding(generation="generation-s2"))
+    assert supervisor.lifecycle.binding.generation == "generation-s2"
 
 
 def test_adopt_failure_before_push_leaves_lifecycle_untouched(tmp_path):

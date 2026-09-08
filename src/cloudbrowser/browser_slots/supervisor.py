@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import time
+from dataclasses import dataclass
 from typing import Callable
 
 from .lifecycle import BrowserBinding, BrowserState, LifecycleError, OwnerBoundLifecycle
-from .transport import BrowserOwnershipChanged, BrowserReadiness, BrowserTransport, BrowserUnavailable
+from .transport import (
+    BrowserOwnershipChanged,
+    BrowserReadiness,
+    BrowserTransport,
+    BrowserUnavailable,
+)
 
 
 class ReadinessTimeout(BrowserUnavailable):
@@ -98,13 +103,15 @@ class SlotSupervisor:
         return OrchestrationResult("stopped", snapshot.state)
 
     def adopt_binding(self, binding: BrowserBinding) -> OrchestrationResult:
-        """Rebind a stopped slot to a new server-minted binding.
+        """Rebind a slot to a new server-minted binding, taking over if needed.
 
-        The browser is pushed the new identity first; only after that push
-        succeeds is the lifecycle rebound, so a failed push leaves the slot's
-        owner untouched. Refusing to rebind a running browser is the
-        guarantee that one generation's downloads can never be attributed to
-        another owner.
+        The new identity is pushed only while the slot is stopped, so one
+        generation's downloads can never be attributed to another owner.
+        A slot left running by a session that expired or left without
+        stopping its runtime is force-stopped here first (self-healing
+        takeover, decision 2026-09-08): without it a stale READY lifecycle
+        wedges the slot — every control operation then fails closed on the
+        foreign binding until a manual container restart (dev01, q-4/q-6).
         """
 
         if not isinstance(binding, BrowserBinding):
@@ -113,7 +120,10 @@ class SlotSupervisor:
         if binding.browser_id != current.browser_id:
             raise ValueError("binding names a different browser slot")
         if self._lifecycle.state is not BrowserState.STOPPED:
-            raise ValueError("cannot adopt a new binding while the slot is not stopped")
+            # Order matters: stop the browser first, then the lifecycle, so
+            # a refused stop leaves the previous owner untouched.
+            self._transport.stop()
+            self._lifecycle.stop(current)
         push = getattr(self._transport, "push_binding", None)
         if push is not None:
             push(binding)
@@ -144,7 +154,10 @@ class SlotSupervisor:
         deadline = self._clock() + timeout_s
         while True:
             readiness = self._transport.readiness()
-            if readiness.owner != binding.principal_id or readiness.generation != binding.generation:
+            if (
+                readiness.owner != binding.principal_id
+                or readiness.generation != binding.generation
+            ):
                 raise BrowserOwnershipChanged("browser owner or generation changed")
             if readiness.cdp_ok:
                 return readiness

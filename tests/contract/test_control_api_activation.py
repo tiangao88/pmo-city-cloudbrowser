@@ -150,7 +150,11 @@ def test_rewake_with_minted_binding_after_adopt_is_idempotent(tmp_path):
     assert supervisor.lifecycle.binding == minted
 
 
-def test_adopt_refused_while_slot_not_stopped(tmp_path):
+def test_adopt_takes_over_slot_left_running_by_previous_session(tmp_path):
+    """Decision 2026-09-08 (Tigo): a session that left the slot running no
+    longer wedges the next wake; the supervisor force-stops and adopts. The
+    old refused-while-active contract is superseded by the takeover covered
+    in tests/contract/test_slot_wake_takeover.py."""
     api, supervisor, pinned = _stack(tmp_path)
     assert api.handle(ControlRequest(operation="wake", request_id="req-1", binding=pinned))[
         "status"
@@ -162,10 +166,6 @@ def test_adopt_refused_while_slot_not_stopped(tmp_path):
         generation="generation-B",
     )
     result = api.handle(ControlRequest(operation="wake", request_id="req-2", binding=running_owner))
-    assert result == {
-        "request_id": "req-2",
-        "status": "failed",
-        "error_code": "operation_failed",
-    }
-    assert supervisor.lifecycle.binding == pinned
+    assert result["status"] == "ready"
+    assert supervisor.lifecycle.binding == running_owner
     assert supervisor.lifecycle.state.value == "ready"

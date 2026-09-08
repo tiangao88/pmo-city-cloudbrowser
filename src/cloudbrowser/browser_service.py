@@ -45,12 +45,19 @@ def build_browser_service() -> tuple[BrowserProcess, object, threading.Event]:
         ),
         probe=lambda: chrome_version_is_ready(chrome.json_request("/json/version")),
     )
+    from cloudbrowser.browser_slots.page_actions import CdpPageActionAdapter
+
+    # Real page actions (navigate, page_info) via the local DevTools endpoint.
+    # click/type stay fail-closed inside the adapter until an approved
+    # element-interaction channel exists (decision 2026-09-08).
+    page_actions = CdpPageActionAdapter(chrome)
     adapter = ChromeBrowserAdapter(
         chrome,
         owner=owner,
         generation=generation,
         start_callback=process.start,
         stop_callback=process.stop,
+        page_actions=page_actions,
     )
     registry = DownloadWatcherRegistry()
     server = create_browser_server(

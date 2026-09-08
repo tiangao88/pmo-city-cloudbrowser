@@ -1,0 +1,247 @@
+"""RED: real page actions for the deployed browser slot.
+
+Decision 2026-09-08 (Tigo): milestone acceptance needs ``navigate`` and
+``page_info`` working end-to-end through the viewer. The production
+``build_browser_service`` currently leaves ``page_actions=None``, so every
+agent page action fails closed with ``browser_unavailable``.
+
+Design constraints (spec 33/W3, fail-closed by default):
+- Only the local, service-owned Chrome DevTools HTTP endpoint is used as
+  the navigation/target channel (``/json/new`` and ``/json/list``), the
+  same surface the supervisor already relies on.
+- Observed page state is captured through one CDP ``Runtime.evaluate``
+  per request over a short-lived WebSocket, with a bounded JSON payload;
+  no generic CDP passthrough is exposed to callers.
+- Captured URL/title/text are re-validated by ``PageState`` upstream
+  (agent_control) so nothing sensitive is echoed blindly; this adapter
+  stays a dumb, bounded capture pipe.
+"""
+
+from __future__ import annotations
+
+import json
+import struct
+
+import pytest
+
+from cloudbrowser.browser_slots.page_actions import CdpPageActionAdapter
+
+
+def _page_target(tab_id: str, url: str) -> dict[str, object]:
+    return {
+        "type": "page",
+        "url": url,
+        "id": tab_id,
+        "webSocketDebuggerUrl": f"ws://127.0.0.1:9222/devtools/page/{tab_id}",
+    }
+
+
+class _FakeChrome:
+    """Records DevTools HTTP calls the way ChromeHttpClient would."""
+
+    def __init__(self, targets: list[dict[str, object]] | None = None) -> None:
+        self.calls: list[tuple[str, str]] = []
+        self.targets = targets if targets is not None else [
+            {"type": "page", "url": "about:blank", "id": "tab-1"}
+        ]
+
+    def json_request(self, path: str, *, method: str = "GET") -> object:
+        self.calls.append((method, path))
+        if path.startswith("/json/new"):
+            self.targets.append({"type": "page", "url": "about:blank", "id": "tab-2"})
+            return {"type": "page", "id": "tab-2", "url": "about:blank"}
+        if path == "/json/list":
+            return list(self.targets)
+        return {"Browser": "Chrome/128"}
+
+    def text_request(self, path: str, *, method: str = "GET") -> str:
+        self.calls.append((method, path))
+        return "Target is closing"
+
+
+def test_navigate_drives_the_live_page_target_via_cdp_page_navigate() -> None:
+    chrome = _FakeChrome(targets=[_page_target("tab-1", "about:blank")])
+    ws = _FakeWebSocket(responses=[{"id": 1, "result": {}}])
+    adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: ws)
+    adapter.navigate("https://example.test/page")
+    # The live tab is reused — no new target is created.
+    assert not any(path.startswith("/json/new") for _, path in chrome.calls)
+    sent = json.loads(ws.sent[0])
+    assert sent["method"] == "Page.navigate"
+    assert sent["params"]["url"] == "https://example.test/page"
+
+
+def test_navigate_creates_a_target_when_no_page_exists() -> None:
+    chrome = _FakeChrome(targets=[])
+    ws = _FakeWebSocket(responses=[{"id": 1, "result": {}}, {"id": 2, "result": {}}])
+    adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: ws)
+    adapter.navigate("https://example.test/page")
+    assert ("PUT", "/json/new?https%3A%2F%2Fexample.test%2Fpage") in chrome.calls
+
+
+def test_navigate_rejects_non_page_urls_before_touching_chrome() -> None:
+    chrome = _FakeChrome()
+    adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: _FakeWebSocket())
+    bad_urls = (
+        "ftp://example.test/x",
+        "/etc/passwd",
+        "http://u:p@example.test",
+        "https://x.test/#frag",
+    )
+    for bad in bad_urls:
+        with pytest.raises(ValueError):
+            adapter.navigate(bad)
+    assert chrome.calls == []
+
+
+def test_page_info_captures_url_title_and_text_via_cdp() -> None:
+    chrome = _FakeChrome(targets=[_page_target("tab-9", "https://example.test/p")])
+    ws = _FakeWebSocket(
+        responses=[{"id": 1, "result": {"result": {"type": "string", "value": {
+            "url": "https://example.test/p",
+            "title": "Example Page",
+            "text": "Hello world",
+        }}}}]
+    )
+    adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: ws)
+    info = adapter.page_info()
+    assert info == {"url": "https://example.test/p", "title": "Example Page", "text": "Hello world"}
+    # The evaluate payload asks for location/title/body-text only, bounded.
+    sent = json.loads(ws.sent[0])
+    assert sent["method"] == "Runtime.evaluate"
+    assert "document.title" in sent["params"]["expression"]
+    assert sent["params"]["returnByValue"] is True
+
+
+def test_page_info_is_bounded_and_fails_closed_without_a_page() -> None:
+    chrome = _FakeChrome(targets=[{"type": "iframe", "url": "about:blank", "id": "x"}])
+    adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: _FakeWebSocket())
+    with pytest.raises(Exception) as excinfo:
+        adapter.page_info()
+    assert type(excinfo.value).__name__ == "BrowserUnavailable"
+
+
+def test_click_and_type_are_not_implemented_and_stay_fail_closed() -> None:
+    chrome = _FakeChrome()
+    adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: _FakeWebSocket())
+    with pytest.raises(Exception) as excinfo:
+        adapter.click("#submit")
+    assert type(excinfo.value).__name__ == "BrowserUnavailable"
+    with pytest.raises(Exception) as excinfo:
+        adapter.type_text("#name", "Alice")
+    assert type(excinfo.value).__name__ == "BrowserUnavailable"
+
+
+def test_page_info_selector_argument_is_refused_for_now() -> None:
+    """Selector support is undecided (HttpJsonClient rejects query strings);
+    the adapter must refuse it loudly instead of silently ignoring it."""
+    chrome = _FakeChrome()
+    adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: _FakeWebSocket())
+    with pytest.raises(ValueError):
+        adapter.page_info("#some-selector")
+
+
+def test_evaluate_result_is_validated_not_echoed_blindly() -> None:
+    chrome = _FakeChrome(targets=[_page_target("tab-9", "https://example.test/p")])  # no ws url
+    bad = {"id": 1, "result": {"result": {"type": "string", "value": "not-a-dict"}}}
+    ws = _FakeWebSocket(responses=[bad])
+    adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: ws)
+    with pytest.raises(Exception) as excinfo:
+        adapter.page_info()
+    assert type(excinfo.value).__name__ == "BrowserUnavailable"
+
+
+def test_build_browser_service_wires_the_real_page_actions(monkeypatch) -> None:
+    """The production runtime must inject CdpPageActionAdapter, not None."""
+
+    import cloudbrowser.browser_service as browser_service
+
+    env = {
+        "CB_INSTANCE_ID": "test-instance",
+        "CB_RELEASE_VERSION": "test-release",
+        "CB_PRINCIPAL_ID": "principal-unassigned",
+        "CB_BINDING_GENERATION": "generation-0",
+    }
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+
+    captured: dict[str, object] = {}
+
+    class _Probe:
+        def __init__(self, *args, **kwargs):
+            captured["probe"] = kwargs.get("probe")
+
+        def readiness(self):
+            return False
+
+    real_adapter = browser_service.ChromeBrowserAdapter
+
+    def spy_adapter(chrome, *, owner, generation, **kwargs):
+        captured["page_actions"] = kwargs.get("page_actions")
+        return real_adapter(chrome, owner=owner, generation=generation, **kwargs)
+
+    monkeypatch.setattr(browser_service, "ChromeBrowserAdapter", spy_adapter)
+
+    # Touch the construction path without binding a real port.
+
+    class _FakeServer:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def serve_forever(self):
+            pass
+
+        def server_close(self):
+            pass
+
+    monkeypatch.setattr(browser_service, "create_browser_server", lambda *a, **k: _FakeServer())
+    fake_registry = type(
+        "R",
+        (),
+        {
+            "on_binding": staticmethod(lambda b: None),
+            "attach_stop_event": lambda self, e: None,
+            "close": lambda self: None,
+        },
+    )
+    monkeypatch.setattr(browser_service, "DownloadWatcherRegistry", lambda: fake_registry)
+
+    try:
+        browser_service.build_browser_service()
+    except Exception:
+        pass  # construction details (ports) are irrelevant here
+    actions = captured.get("page_actions")
+    assert isinstance(actions, CdpPageActionAdapter)
+
+
+class _FakeWebSocket:
+    """Minimal frame-level WebSocket double for the adapter's CDP session."""
+
+    def __init__(self, responses: list[dict] | None = None) -> None:
+        self.sent: list[str] = []
+        self._responses = list(responses or [])
+
+    def send(self, payload: str) -> None:
+        self.sent.append(payload)
+
+    def recv(self, _size: int = 65536) -> bytes:
+        if not self._responses:
+            return json.dumps({"id": 999, "result": {}}).encode()
+        return json.dumps(self._responses.pop(0)).encode()
+
+    def close(self) -> None:
+        pass
+
+
+def _ws_frame(payload: bytes) -> bytes:
+    header = bytearray([0x81])
+    length = len(payload)
+    if length < 126:
+        header.append(length)
+    elif length < 65536:
+        header.append(126)
+        header += struct.pack(">H", length)
+    else:
+        header.append(127)
+        header += struct.pack(">Q", length)
+    return bytes(header) + payload
