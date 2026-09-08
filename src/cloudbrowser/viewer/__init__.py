@@ -148,8 +148,58 @@ class AuthenticatedViewer:
 
 
 _SHELL = """<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CloudBrowser</title></head>
-<body><main><h1>CloudBrowser</h1><p>Viewer is ready. No interactive browser surface is attached to this instance.</p></main></body></html>"""
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CloudBrowser</title>
+<style>
+:root{color-scheme:light dark}
+body{font:14px/1.5 system-ui,sans-serif;margin:0;background:#f6f7f9;color:#1c1e21}
+main{max-width:760px;margin:0 auto;padding:24px}
+h1{font-size:20px;margin:0 0 12px}
+#panel{background:#fff;border:1px solid #e3e5e8;border-radius:8px;padding:16px;min-height:120px}
+button{font:inherit;padding:6px 12px;border-radius:6px;border:1px solid #c9ccd1;background:#fff;cursor:pointer;margin:2px 4px 2px 0}
+button:hover{background:#f0f2f4}
+input[type=text]{font:inherit;padding:6px 8px;border:1px solid #c9ccd1;border-radius:6px;width:60%}
+#status{font-weight:600}
+#pageinfo{white-space:pre-wrap;font:12px/1.4 ui-monospace,monospace;background:#f6f7f9;border:1px solid #e3e5e8;border-radius:6px;padding:8px;max-height:200px;overflow:auto}
+.err{color:#b3261e}
+</style></head>
+<body><main>
+<h1>CloudBrowser</h1>
+<div id="panel">
+<p>Session: <span id="status">starting&hellip;</span></p>
+<div id="controls" hidden>
+<form id="nav"><input type="text" id="url" placeholder="https://example.com" autocomplete="off"><button type="submit">Go</button></form>
+<button id="pageinfo">Page info</button><button id="tabs">Tabs</button>
+</div>
+<div id="pageinfo" hidden></div>
+<p id="error" class="err" hidden></p>
+</div>
+<script>
+"use strict";
+var st=document.getElementById("status"),err=document.getElementById("error"),
+controls=document.getElementById("controls"),out=document.getElementById("pageinfo");
+function show(e,m){err.textContent=m;err.hidden=false}
+function post(u,body){return fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})}).then(function(r){return r.json()})}
+function act(op,params){return post("/ui/agent/"+op,{params:params||{}}).then(function(p){
+ if(p.status==="ok"){if(p.page){out.textContent=JSON.stringify(p.page,null,1);out.hidden=false}
+ if(p.tabs){out.textContent=JSON.stringify(p.tabs,null,1);out.hidden=false}
+ }else{show(null,p.error_code||"action failed")}
+}).catch(function(){show(null,"action failed")})}
+function poll(){fetch("/ui/session").then(function(r){return r.json()}).then(function(p){
+ var s=p.status||"failed";
+ st.textContent=s;
+ if(s==="waiting"){st.textContent="waiting in queue"+(p.position?" (#"+p.position+")":"");setTimeout(poll,2000)}
+ else if(s==="offered"){post("/ui/session/activate").then(function(){poll()})}
+ else if(s==="active"){controls.hidden=false;st.textContent="active"+(p.session_ttl_s?" \u00b7 "+Math.round(p.session_ttl_s/60)+" min left":"")}
+ else if(s==="failed"){show(null,p.error_code||"session failed")}
+ else{setTimeout(poll,3000)}
+}).catch(function(){st.textContent="offline";setTimeout(poll,3000)})}
+post("/ui/session/join").then(poll).catch(function(){st.textContent="offline"});
+document.getElementById("nav").addEventListener("submit",function(e){e.preventDefault();
+ var u=document.getElementById("url").value.trim();if(!u)return;
+ if(!/^https:\\/\\//.test(u))u="https://"+u;act("navigate",{url:u})});
+document.getElementById("pageinfo").addEventListener("click",function(){act("page_info")});
+document.getElementById("tabs").addEventListener("click",function(){act("tabs_list")});
+</script></main></body></html>"""
 
 
 def create_viewer_server(
@@ -203,16 +253,29 @@ def create_viewer_server(
         def _edge_authenticated(self) -> bool:
             if not allow_edge_identity:
                 return False
-            from cloudbrowser.edge_auth import parse_edge_identity
+            if viewer is not None and isinstance(viewer.identity_client, IdentityLinkClient):
+                from cloudbrowser.edge_auth import parse_edge_identity
 
-            identity = parse_edge_identity(dict(self.headers.items()))
-            resolver = viewer.identity_client
-            if identity is None or not isinstance(resolver, IdentityLinkClient):
-                return False
-            try:
-                return resolver.resolve(identity) is not None
-            except IdentityLinkClientError:
-                return False
+                identity = parse_edge_identity(dict(self.headers.items()))
+                resolver = viewer.identity_client
+                if identity is None:
+                    return False
+                try:
+                    return resolver.resolve(identity) is not None
+                except IdentityLinkClientError:
+                    return False
+            # Surface-only configuration: authorize the shell through the
+            # session surface's own fail-closed identity resolution so the
+            # UI and its data routes share exactly one identity rule.
+            if session_surface is not None:
+                try:
+                    return session_surface.status(
+                        headers=dict(self.headers.items()),
+                        request_id="shell-" + secrets.token_urlsafe(8),
+                    )[1].get("error_code") != "unauthorized"
+                except Exception:
+                    return False
+            return False
 
         def _surface_call(self, action: str) -> None:
             """Run one session-surface action for the edge-authenticated caller."""
@@ -245,12 +308,62 @@ def create_viewer_server(
                 return
             self._json(status, payload)
 
+        def _agent_call(self, operation: str) -> None:
+            """Relay one allowlisted page action for the edge-authenticated caller."""
+            assert session_surface is not None
+            request_id = self.headers.get("X-CB-Request-Id") or "ui-" + secrets.token_urlsafe(8)
+            if not isinstance(request_id, str) or len(request_id) > 128:
+                self._json(
+                    200,
+                    {"ok": False, "request_id": "", "status": "failed", "error_code": "invalid_request"},
+                )
+                return
+            if not isinstance(operation, str) or not operation or len(operation) > 64:
+                self._json(
+                    200,
+                    {"ok": False, "request_id": request_id, "status": "failed", "error_code": "operation_not_supported"},
+                )
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 8192:
+                    raise ValueError
+                raw = json.loads(self.rfile.read(length))
+                if not isinstance(raw, dict):
+                    raise ValueError
+                params = raw.get("params", {})
+                if not isinstance(params, dict):
+                    raise ValueError
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._json(
+                    200,
+                    {"ok": False, "request_id": request_id, "status": "failed", "error_code": "invalid_request"},
+                )
+                return
+            try:
+                status, payload = session_surface.agent(
+                    operation,
+                    headers=dict(self.headers.items()),
+                    params=params,
+                    request_id=request_id,
+                )
+            except Exception:
+                self._json(
+                    200,
+                    {"ok": False, "request_id": request_id, "status": "failed", "error_code": "surface_failed"},
+                )
+                return
+            self._json(status, payload)
+
         def do_POST(self) -> None:  # noqa: N802 - stdlib HTTP handler contract
             if session_surface is not None and self.path == "/ui/session/join":
                 self._surface_call("join")
                 return
             if session_surface is not None and self.path == "/ui/session/activate":
                 self._surface_call("activate")
+                return
+            if session_surface is not None and self.path.startswith("/ui/agent/"):
+                self._agent_call(self.path[len("/ui/agent/") :])
                 return
             if self.path != "/viewer/session":
                 self.send_error(404)

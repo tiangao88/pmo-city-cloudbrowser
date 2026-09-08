@@ -39,8 +39,27 @@ class _RouterPort(Protocol):
         self, *, headers: Mapping[str, object], request_id: str
     ) -> tuple[int, dict[str, object]]: ...
 
+    def agent_action(
+        self,
+        *,
+        headers: Mapping[str, object],
+        operation: str,
+        params: Mapping[str, object],
+        request_id: str,
+    ) -> tuple[int, dict[str, object]]: ...
+
 
 _UNAUTHORIZED: tuple[int, dict[str, object]] = (401, {"ok": False, "error_code": "unauthorized"})
+
+# Allowlisted agent operations relayed to the router; anything else is
+# refused locally, before any router contact.
+_AGENT_ALLOWED_OPERATIONS = frozenset({"navigate", "click", "type", "page_info", "tabs_list"})
+
+# Param bounds enforced before relay; oversized or non-string values are
+# invalid requests, never truncated.
+_MAX_AGENT_URL = 2048
+_MAX_AGENT_SELECTOR = 512
+_MAX_AGENT_TEXT = 4096
 
 # The only headers relayed to the router: the edge-copied identity
 # attributes the router itself resolves through the identity-link service.
@@ -250,3 +269,78 @@ class ViewerSessionSurface:
                 "error_code": "activate_failed"},
             )
         return status, dict(payload)
+
+    def agent(
+        self,
+        operation: str,
+        *,
+        headers: Mapping[str, object],
+        params: Mapping[str, object],
+        request_id: str,
+    ) -> tuple[int, dict[str, object]]:
+        """Relay one allowlisted page action for the caller's active session.
+
+        The operation must be in the local allowlist and every param value
+        must be a bounded string; anything else is refused before the router
+        is contacted. The slot, binding, and generation come exclusively
+        from the caller's own router session.
+        """
+        principal = self._principal_from_headers(headers)
+        if principal is None:
+            return _UNAUTHORIZED
+        if operation not in _AGENT_ALLOWED_OPERATIONS:
+            error_code = (
+                "capability_denied"
+                if operation in ("raw_cdp", "evaluate", "cookies", "storage", "network")
+                else "operation_not_supported"
+            )
+            return 200, {
+                "ok": False, "request_id": request_id,
+                "status": "failed", "error_code": error_code,
+            }
+        if not self._agent_params_valid(operation, params):
+            return 200, {
+                "ok": False, "request_id": request_id,
+                "status": "failed", "error_code": "invalid_request",
+            }
+        try:
+            status, payload = self._router.agent_action(
+                headers=_relay_headers(headers),
+                operation=operation,
+                params=dict(params),
+                request_id=request_id,
+            )
+        except Exception:
+            return (
+                200,
+                {"ok": False, "request_id": request_id, "status": "failed",
+                "error_code": "agent_failed"},
+            )
+        return status, dict(payload)
+
+    @staticmethod
+    def _agent_params_valid(
+        operation: str, params: Mapping[str, object]
+    ) -> bool:
+        limits = {
+            "navigate": {"url": _MAX_AGENT_URL},
+            "click": {"selector": _MAX_AGENT_SELECTOR},
+            "type": {"selector": _MAX_AGENT_SELECTOR, "text": _MAX_AGENT_TEXT},
+            "page_info": {},
+            "tabs_list": {},
+        }
+        allowed = limits[operation]
+        for key, value in params.items():
+            if key not in allowed or not isinstance(value, str):
+                return False
+            if len(value) > allowed[key]:
+                return False
+        if operation == "navigate":
+            from urllib.parse import urlsplit
+
+            parsed = urlsplit(str(params.get("url", "")))
+            if parsed.scheme not in ("http", "https"):
+                return False
+            if not parsed.netloc or parsed.username or parsed.password:
+                return False
+        return True
