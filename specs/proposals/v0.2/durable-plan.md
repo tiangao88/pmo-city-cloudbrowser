@@ -112,8 +112,80 @@ the slot vs who is waiting, leave/release working). Closed.
    volume orphaned~~ **STALE NOTE, corrected 2026-09-08**: credential-broker
    runs and mounts `nievufka0cggf82cregyihav_broker-state` (verified via
    `docker inspect`).
-5. **Phase 6 production rollout** — separately approved; DNS, Traefik, prod
-   Coolify mutation, real fleet.
+## Overall roadmap (corrected 2026-09-08 — full refactor scope, not just CloudFiles)
+
+The v0.2 refactor (spec 85–94) covers the whole product: credential broker,
+browser platform, CloudFiles, and the W3/W4 packages carried over from the
+v1 fleet. CloudFiles phases 0–5 were ONE slice of it. This section is the
+single authoritative view of done vs open.
+
+### Done (implemented, gated, pushed; live on dev01)
+
+- Generic Credential Broker per PRD 85 (replaces v1 `sso-broker.py`):
+  `src/cloudbrowser/credential_broker/` with authentik / generic_form /
+  http_basic / mfa adapters; broker service + compose wiring.
+- CloudFiles phases 0–5 (spec 89–94): identity-adapter gateway, ingest,
+  quarantine, retention, GDPR erasure, ClamAV scan-before-publish, metrics,
+  image qualification, release provenance.
+- Router control plane: `/v1/session` lifecycle (create/activate/leave),
+  roster, allowlisted agent relay (navigate/click/type/page_info/tabs_list),
+  sliding session TTL (work renews, polling does not).
+- Viewer shell with interactive relay surface (milestone 1, confirmed by
+  Tigo retest 2026-09-08), display names, leave/release.
+- Activation-driven slots: boot-stopped Chrome, binding rotation,
+  owner-bound lifecycle; durable session state across restarts.
+- OpenAPI alignment for the shipped router surface (spec gate green, 701
+  tests).
+
+### Open — W3 packages carried over (register: `roadmap-w3-status.md`)
+
+- **W3-1 — PARTIAL / NOT PROVEN.** Strict authenticated-surface continuity:
+  broker auto-relogin through the *generic* broker path is not proven E2E
+  (vault grant → broker adapter → live tab logged in, status-only result).
+  This is the core promise of the refactor; next major milestone.
+- **W3-2 — adapter task post-refactor:** Authentik broker-client hardening
+  + audit enhancement (superseded form; revisit after W3-1 proves the
+  generic path).
+- **W3-3 — OPEN:** screen-follow (v1 feature not yet carried to v2).
+- **W3-4 — OPEN:** agent input via native chat panel (v1 had neko chat; v2
+  has none).
+- **W3-6 — NOT STARTED:** CRMOC rollout + transversal/service browsers.
+  Gated behind W3-1 boundaries being proven.
+- **W3-5 — isolated PoC only** (agent-browser companion); W3-7 (tab
+  snapshot) and W3-8 (ops/retention docs) source-verified but live adoption
+  in v2 still pending.
+
+### Open — v1 → v2 parity gaps (v2 is behind the v1 fleet today)
+
+- **No video/streaming surface:** v1 had a neko-based interactive viewer; v2
+  viewer is a bounded HTML/relay shell (no WebRTC/screen stream, no real
+  screen-follow). Biggest user-visible gap.
+- **Single slot deployed:** compose wires `slot-1` only (`CB_SLOT_SUPERVISOR_URLS`,
+  `CB_AGENT_CONTROL_URLS`); v1 ran a multi-slot fleet with queueing. Router
+  code supports a slot map but the deployment has one slot.
+- **No agent chat panel** (W3-4), **no screen-follow** (W3-3).
+- Idle suspend/resume exists in lifecycle code but is not the tuned v1
+  behavior; W3-7 tab snapshot restore not wired into the live surface.
+- Broker auto-relogin absent (ties to W3-1).
+
+### W4 — replan (original MVP target ≤ 2026-09-13 is lapsed)
+
+Per `roadmap-w3-status.md`: "W4: replan after the broker-boundary
+refactor". Proposed W4 sequencing (needs Tigo approval):
+
+1. **W3-1 E2E broker login proof** (highest value, core refactor promise).
+2. **Streaming/surface decision for the viewer** — approve a mechanism
+   (neko/WebRTC integration vs enhanced relay) before building; this decides
+   W3-3/W3-4 feasibility on v2.
+3. **Second slot + queue demo** (capacity + waiting-room parity).
+4. Then CRMOC/service browsers (W3-6) and v1 decommission decision.
+
+### Phase 6 (CloudFiles slice) — status
+
+Phase 6 was scoped as "production rollout" of CloudFiles. With dev01 == prod
+(Tigo, 2026-09-08) the stack already serves its final domains, so Phase 6
+reduces to: any extra hardening Tigo wants for real user traffic. No
+environment build-out remains.
 
 ## Phase 6 production landscape (read-only discovery, 2026-09-08)
 
