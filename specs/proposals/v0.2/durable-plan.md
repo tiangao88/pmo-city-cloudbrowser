@@ -115,6 +115,41 @@ the slot vs who is waiting, leave/release working). Closed.
 5. **Phase 6 production rollout** — separately approved; DNS, Traefik, prod
    Coolify mutation, real fleet.
 
+## Phase 6 production landscape (read-only discovery, 2026-09-08)
+
+Verified live (subagent: DNS digs, Coolify API GETs, docker/DB reads;
+Artifacts: `/workspace/prod-discovery/coolify-api-services69-apps.txt`,
+`coolify-db-services-all89.txt`):
+
+- **Prod and dev Coolify are the SAME instance** (`deploy.aikumi.app`,
+  Coolify 4.3.18 on mother01) — there is no separate prod Coolify. "Prod
+  rollout" therefore means: same instance, new service, prod domains.
+  The `COOLIFY_TOKEN_PROD` env/VW field names the token for this instance
+  (field `COOLIFY_TOKEN_PROD` in VW item `dd2d937f-…6499` = "hermes_env_dev";
+  401 without token; token may contain `|` — never pass it through ssh argv,
+  use stdin/file).
+- **No prod CloudBrowser exists yet**: the three running CloudBrowser
+  services (v2 `nievufka…`, v1 `4guplgcr…`, older fleet `okixw2f…`) all
+  serve only `*.dev01.pmo.city` on mother01. Mother02 (37.27.218.196) runs
+  no CloudBrowser; mother03 is API-hidden/likely unvalidated.
+- **Prod DNS does not exist yet**: `cloudbrowser2.pmo.city`,
+  `cloudfiles2.pmo.city`, `cloudbrowser.pmo.city` have no records
+  (NXDOMAIN); `secrets.pmo.city` → mother01 is the existing pmo.city
+  pattern to copy (CNAME `mother01.on-ai.sbs` → 145.223.34.130).
+- **IdP is already prod-ready**: Authentik on mother01 (auth.aikumi.app,
+  2025.8.1) serves application `pmoc-sso` (OAuth2 provider #37) with live
+  OIDC discovery at
+  `https://auth.aikumi.app/application/o/pmoc-sso/.well-known/openid-configuration`;
+  the compose already pins `CB_OIDC_ISSUER` to it. `auth.pmo.city` has no
+  DNS and is only the declared launch/callback target.
+- Coolify manages 3 servers (mother01 host.docker.internal, mother02
+  37.27.218.196, mother03 hidden); team "On-AI Side-by-Side"; 69
+  API-visible services (89 incl. mother03 in DB).
+
+Phase 6 preflight still required before any approval: prod DNS records,
+TinyAuth/Authentik groups policy for the prod apps, and a decision on which
+host/instance-id to use (a second CB_INSTANCE_ID on mother01 vs mother02).
+
 ## Standing constraints
 
 - Never commit/push outside task-authorized scope.
