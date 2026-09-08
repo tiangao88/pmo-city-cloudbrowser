@@ -77,6 +77,10 @@ class _FakeRouterClient:
         self.calls.append(("activate", dict(headers), {"request_id": request_id}))
         return 200, {"request_id": request_id, "status": "active", "slot_id": "slot-1", "session_ttl_s": 3600.0}  # noqa: E501
 
+    def leave_session(self, *, headers, request_id):  # noqa: ANN001
+        self.calls.append(("leave", dict(headers), {"request_id": request_id}))
+        return 200, {"request_id": request_id, "session_id": "q-1", "status": "left"}
+
 
 def _surface(
     principal: str | None = "pmo-owner-001",
@@ -186,6 +190,34 @@ class TestSurfaceUnit:
         assert payload["status"] == "active"
         assert router.calls[0][0] == "activate"
 
+    def test_leave_releases_the_callers_own_session(self) -> None:
+        surface, router = _surface()
+        status, payload = surface.leave(headers={"Remote-Sub": "oidc-sub-1"}, request_id="r")
+        assert status == 200
+        assert payload["status"] == "left"
+        assert router.calls[0][0] == "leave"
+        # Same identity-header allowlist rule as every other surface relay.
+        forwarded = router.calls[0][1]
+        assert "authorization" not in {k.lower() for k in forwarded}
+
+    def test_leave_without_resolvable_principal_fails_closed(self) -> None:
+        surface, _router = _surface(principal=None)
+        status, payload = surface.leave(headers={"Remote-Sub": "oidc-sub-1"}, request_id="r")
+        assert status == 401
+        assert payload["error_code"] == "unauthorized"
+
+    def test_leave_router_failure_is_bounded(self) -> None:
+        class _Exploding:
+            def leave_session(self, *, headers, request_id):  # noqa: ANN001
+                raise RuntimeError("router down")
+
+        surface = ViewerSessionSurface(identity_client=_FakeIdentityLinkClient(), router_api=_Exploding())  # noqa: E501
+        status, payload = surface.leave(headers={"Remote-Sub": "oidc-sub-1"}, request_id="r")
+        assert status == 200
+        assert payload["status"] == "failed"
+        assert payload["error_code"] == "leave_failed"
+        assert "router down" not in str(payload)
+
     def test_activate_on_wrong_state_fails_bounded(self) -> None:
         class _NotFound:
             def activate_session(self, *, headers, request_id):  # noqa: ANN001
@@ -236,7 +268,7 @@ class TestSurfaceHttp:
             _stop(server, thread)
 
     def test_status_and_activate_endpoints_exist(self, tmp_path: Path) -> None:
-        surface, router = _surface()
+        surface, _router = _surface()
         server, thread, base = _http_server(surface, tmp_path)
         try:
             status_response = urlopen(
@@ -269,6 +301,46 @@ class TestSurfaceHttp:
             assert "pmo-owner-001" not in body
             assert "owner@example.com" not in body
             assert "oidc-sub-1" not in body
+        finally:
+            _stop(server, thread)
+
+    def test_leave_endpoint_drives_the_router(self, tmp_path: Path) -> None:
+        surface, router = _surface()
+        server, thread, base = _http_server(surface, tmp_path)
+        try:
+            response = urlopen(
+                Request(
+                    base + "/ui/session/leave",
+                    data=b"{}",
+                    headers={**_EDGE_HEADERS, "Content-Type": "application/json"},
+                    method="POST",
+                ),
+                timeout=5,
+            )
+            assert response.status == 200
+            body = json.loads(response.read().decode())
+            assert body["status"] == "left"
+            assert router.calls[-1][0] == "leave"
+        finally:
+            _stop(server, thread)
+
+    def test_status_surfaces_edge_display_name_only(self, tmp_path: Path) -> None:
+        """Remote-Name flows through as display_name; principal never leaks."""
+        surface, _router = _surface()
+        server, thread, base = _http_server(surface, tmp_path)
+        try:
+            headers = {**_EDGE_HEADERS, "Remote-Name": "Thibault Montigaud"}
+            response = urlopen(
+                Request(base + "/ui/session", headers=headers), timeout=5
+            )
+            body = json.loads(response.read().decode())
+            assert body["display_name"] == "Thibault Montigaud"
+            assert "pmo-owner-001" not in json.dumps(body)
+            # Without the header the field is absent, not an empty fallback.
+            plain = urlopen(
+                Request(base + "/ui/session", headers=_EDGE_HEADERS), timeout=5
+            )
+            assert "display_name" not in json.loads(plain.read().decode())
         finally:
             _stop(server, thread)
 

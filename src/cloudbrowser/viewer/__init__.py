@@ -157,25 +157,29 @@ h1{font-size:20px;margin:0 0 12px}
 #panel{background:#fff;border:1px solid #e3e5e8;border-radius:8px;padding:16px;min-height:120px}
 button{font:inherit;padding:6px 12px;border-radius:6px;border:1px solid #c9ccd1;background:#fff;cursor:pointer;margin:2px 4px 2px 0}
 button:hover{background:#f0f2f4}
+button.danger{color:#b3261e;border-color:#d9a19c}
+button.danger:hover{background:#fbeeed}
 input[type=text]{font:inherit;padding:6px 8px;border:1px solid #c9ccd1;border-radius:6px;width:60%}
 #status{font-weight:600}
+#who{color:#5f6368;font-weight:400}
 #pageinfo{white-space:pre-wrap;font:12px/1.4 ui-monospace,monospace;background:#f6f7f9;border:1px solid #e3e5e8;border-radius:6px;padding:8px;max-height:200px;overflow:auto}
 .err{color:#b3261e}
 </style></head>
 <body><main>
 <h1>CloudBrowser</h1>
 <div id="panel">
-<p>Session: <span id="status">starting&hellip;</span></p>
+<p>Session: <span id="status">starting&hellip;</span><span id="who"></span></p>
 <div id="controls" hidden>
 <form id="nav"><input type="text" id="url" placeholder="https://example.com" autocomplete="off"><button type="submit">Go</button></form>
 <button id="pageinfo">Page info</button><button id="tabs">Tabs</button>
+<button id="leave" class="danger">Leave &amp; release slot</button>
 </div>
 <div id="pageinfo" hidden></div>
 <p id="error" class="err" hidden></p>
 </div>
 <script>
 "use strict";
-var st=document.getElementById("status"),err=document.getElementById("error"),
+var st=document.getElementById("status"),who=document.getElementById("who"),err=document.getElementById("error"),
 controls=document.getElementById("controls"),out=document.getElementById("pageinfo");
 function show(e,m){err.textContent=m;err.hidden=false}
 function post(u,body){return fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})}).then(function(r){return r.json()})}
@@ -186,10 +190,11 @@ function act(op,params){return post("/ui/agent/"+op,{params:params||{}}).then(fu
 }).catch(function(){show(null,"action failed")})}
 function poll(){fetch("/ui/session").then(function(r){return r.json()}).then(function(p){
  var s=p.status||"failed";
- st.textContent=s;
+ who.textContent=p.display_name?" \\u2014 "+p.display_name:"";
  if(s==="waiting"){st.textContent="waiting in queue"+(p.position?" (#"+p.position+")":"");setTimeout(poll,2000)}
  else if(s==="offered"){post("/ui/session/activate").then(function(){poll()})}
- else if(s==="active"){controls.hidden=false;st.textContent="active"+(p.session_ttl_s?" \u00b7 "+Math.round(p.session_ttl_s/60)+" min left":"")}
+ else if(s==="active"){controls.hidden=false;st.textContent="active"+(p.session_ttl_s?" \\u00b7 "+Math.round(p.session_ttl_s/60)+" min left":"")}
+ else if(s==="left"){controls.hidden=true;st.textContent="left \\u2014 rejoining";setTimeout(poll,1500)}
  else if(s==="failed"){show(null,p.error_code||"session failed")}
  else{setTimeout(poll,3000)}
 }).catch(function(){st.textContent="offline";setTimeout(poll,3000)})}
@@ -199,6 +204,10 @@ document.getElementById("nav").addEventListener("submit",function(e){e.preventDe
  if(!/^https:\\/\\//.test(u))u="https://"+u;act("navigate",{url:u})});
 document.getElementById("pageinfo").addEventListener("click",function(){act("page_info")});
 document.getElementById("tabs").addEventListener("click",function(){act("tabs_list")});
+document.getElementById("leave").addEventListener("click",function(){
+ if(!confirm("Leave the session and release the slot for the next person?"))return;
+ post("/ui/session/leave").then(function(){out.hidden=true;controls.hidden=true;st.textContent="left \\u2014 rejoining";setTimeout(poll,1500)})
+ .catch(function(){show(null,"leave failed")})});
 </script></main></body></html>"""
 
 
@@ -292,8 +301,21 @@ def create_viewer_server(
                     status, payload = session_surface.status(
                         headers=dict(self.headers.items()), request_id=request_id
                     )
+                    # Non-authoritative display name only: the edge-validated
+                    # Remote-Name header, never an identity key, never the
+                    # principal id. Absent header -> absent field.
+                    from cloudbrowser.edge_auth import parse_edge_identity
+
+                    identity = parse_edge_identity(dict(self.headers.items()))
+                    if identity is not None and identity.name:
+                        payload = dict(payload)
+                        payload["display_name"] = identity.name
                 elif action == "join":
                     status, payload = session_surface.join(
+                        headers=dict(self.headers.items()), request_id=request_id
+                    )
+                elif action == "leave":
+                    status, payload = session_surface.leave(
                         headers=dict(self.headers.items()), request_id=request_id
                     )
                 else:
@@ -361,6 +383,9 @@ def create_viewer_server(
                 return
             if session_surface is not None and self.path == "/ui/session/activate":
                 self._surface_call("activate")
+                return
+            if session_surface is not None and self.path == "/ui/session/leave":
+                self._surface_call("leave")
                 return
             if session_surface is not None and self.path.startswith("/ui/agent/"):
                 self._agent_call(self.path[len("/ui/agent/") :])

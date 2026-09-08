@@ -158,5 +158,12 @@ class TestRealRouterClientWire:
                 request_id="ui-r1",
             )
             assert stub.captured["path"] == "/v1/session/activate"
+            surface.leave(
+                headers={"Remote-Sub": "sub-1"},
+                request_id="ui-r1",
+            )
+            assert stub.captured["method"] == "POST"
+            assert stub.captured["path"] == "/v1/session/leave"
+            assert stub.captured["body"] == {"request_id": "ui-r1"}
         finally:
             stub.stop()

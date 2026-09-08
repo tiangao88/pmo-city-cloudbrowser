@@ -39,6 +39,10 @@ class _RouterPort(Protocol):
         self, *, headers: Mapping[str, str], request_id: str
     ) -> tuple[int, dict[str, object]]: ...
 
+    def leave_session(
+        self, *, headers: Mapping[str, str], request_id: str
+    ) -> tuple[int, dict[str, object]]: ...
+
     def agent_action(
         self,
         *,
@@ -148,6 +152,15 @@ class RouterHttpClient:
         # Activation always targets the caller's own session; the router
         # resolves it from identity, never from a caller-supplied id.
         return self.post_json("/v1/session/activate", headers=headers, body={})
+
+    def leave_session(
+        self, *, headers: Mapping[str, str], request_id: str
+    ) -> tuple[int, dict[str, object]]:
+        # Leaving always targets the caller's own session; the router
+        # resolves it from identity, never from a caller-supplied id.
+        return self.post_json(
+            "/v1/session/leave", headers=headers, body={"request_id": request_id}
+        )
 
     def agent_action(
         self,
@@ -283,6 +296,25 @@ class ViewerSessionSurface:
                 200,
                 {"ok": False, "request_id": request_id, "status": "failed",
                 "error_code": "activate_failed"},
+            )
+        return status, dict(payload)
+
+    def leave(
+        self, *, headers: Mapping[str, object], request_id: str
+    ) -> tuple[int, dict[str, object]]:
+        """Release the caller's own session (queue exit or slot release)."""
+        principal = self._principal_from_headers(headers)
+        if principal is None:
+            return _UNAUTHORIZED
+        try:
+            status, payload = self._router.leave_session(
+                headers=_relay_headers(headers), request_id=request_id
+            )
+        except Exception:
+            return (
+                200,
+                {"ok": False, "request_id": request_id, "status": "failed",
+                "error_code": "leave_failed"},
             )
         return status, dict(payload)
 
