@@ -67,6 +67,10 @@ Awaiting Tigo's UI retest at the public host; then this milestone is closed.
 - Image digest sync to `2c6a6e7` build (run `34219815337`) — `fee0119`
 - Viewer: logged-in display name (`Remote-Name` only, never an identity key)
   + "Leave & release slot" route and button (waiting and active) — `949faea`
+- Roster: who is waiting / who holds a slot — `GET /v1/roster` (identity-gated),
+  `GET /ui/roster` relay, and a live roster list in the viewer shell;
+  display identity switched from `Remote-Name` to the edge-validated
+  `Remote-Email` (non-authoritative metadata only, never an identity key)
 - Image digest sync to `949faea` build (run `34231460028`); viewer live on
   dev01 at digest `2968da87…` — `e4740e9`
 

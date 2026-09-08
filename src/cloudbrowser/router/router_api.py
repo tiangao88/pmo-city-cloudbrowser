@@ -10,6 +10,10 @@ Endpoints exposed by ``create_router_server``:
   session (no other principal's record is readable).
 - ``POST /v1/session/leave``  — release the caller's current session and
   free the slot.
+- ``GET  /v1/roster``        — bounded roster of live sessions (status +
+  non-authoritative display email captured at join) for every
+  authenticated caller. Entries never contain principal IDs, bindings,
+  or slot URLs.
 - ``POST /v1/slot/<slot>/<op>`` — dispatch a bounded lifecycle command
   to the configured slot supervisor (``wake`` | ``suspend`` |
   ``recreate``).
@@ -168,6 +172,22 @@ def _coerce_int(value: object, *, default: int) -> int:
     return default
 
 
+def _display_email_from(headers: Mapping[str, object]) -> str | None:
+    """Extract the bounded non-authoritative display email, or None.
+
+    The edge-authenticated ``remote-email`` header is display metadata only:
+    it never participates in identity resolution and is captured solely so
+    the roster can show who is queued. Anything absent, oversized, or
+    carrying control characters is silently dropped, never stored.
+    """
+    value = headers.get("Remote-Email") or headers.get("remote-email")
+    if not isinstance(value, str) or not value or len(value) > 256:
+        return None
+    if any(ord(char) < 0x20 or ord(char) == 0x7F for char in value):
+        return None
+    return value
+
+
 class RouterApi:
     """Route the owner-bound router control plane to a session store + supervisor client."""
 
@@ -205,7 +225,11 @@ class RouterApi:
         if resolved is None:
             return 401, _envelope(request_id, status="failed", error_code="unauthorized")
         try:
-            session = self._store.enqueue(resolved.principal_id, request_id=request_id)
+            session = self._store.enqueue(
+                resolved.principal_id,
+                request_id=request_id,
+                display_email=_display_email_from(headers),
+            )
         except Exception:
             return 200, _envelope(request_id, status="failed", error_code="enqueue_failed")
         try:
@@ -249,6 +273,26 @@ class RouterApi:
         except Exception:
             return 200, _envelope(request_id, status="failed", error_code="leave_failed")
         return 200, _envelope(request_id, session_id=left.session_id, status=left.status.value)
+
+    def roster(
+        self, *, headers: Mapping[str, object]
+    ) -> tuple[int, dict[str, object]]:
+        """Return who is waiting and who holds a slot (identity-gated).
+
+        Every authenticated caller sees the same bounded roster: one entry
+        per live session with its status and, when captured at join, its
+        non-authoritative display email. Entries never include principal
+        IDs, bindings, slot URLs, or session ids.
+        """
+        request_id = "roster"
+        resolved = _resolve_identity(headers=headers, client=self._identity)
+        if resolved is None:
+            return 401, _envelope(request_id, status="failed", error_code="unauthorized")
+        try:
+            entries = self._store.roster()
+        except Exception:
+            return 200, _envelope(request_id, status="failed", error_code="roster_failed")
+        return 200, _envelope(request_id, status="ok", entries=entries)
 
     def activate_session(
         self,
@@ -498,6 +542,10 @@ def create_router_server(
                 status, payload = api.get_session(
                     headers=self.headers, request_id="req-1"
                 )
+                self._send_json(status, payload)
+                return
+            if path == "/v1/roster":
+                status, payload = api.roster(headers=dict(self.headers.items()))
                 self._send_json(status, payload)
                 return
             self.send_error(404)

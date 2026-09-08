@@ -299,7 +299,8 @@ class TestSurfaceHttp:
             )
             body = response.read().decode()
             assert "pmo-owner-001" not in body
-            assert "owner@example.com" not in body
+            # The edge-validated email is intentional display metadata.
+            assert "owner@example.com" in body
             assert "oidc-sub-1" not in body
         finally:
             _stop(server, thread)
@@ -324,23 +325,23 @@ class TestSurfaceHttp:
         finally:
             _stop(server, thread)
 
-    def test_status_surfaces_edge_display_name_only(self, tmp_path: Path) -> None:
-        """Remote-Name flows through as display_name; principal never leaks."""
+    def test_status_surfaces_edge_display_email_only(self, tmp_path: Path) -> None:
+        """Remote-Email flows through as display_email; principal never leaks."""
         surface, _router = _surface()
         server, thread, base = _http_server(surface, tmp_path)
         try:
-            headers = {**_EDGE_HEADERS, "Remote-Name": "Thibault Montigaud"}
+            headers = {**_EDGE_HEADERS, "Remote-Email": "owner@example.com"}
             response = urlopen(
                 Request(base + "/ui/session", headers=headers), timeout=5
             )
             body = json.loads(response.read().decode())
-            assert body["display_name"] == "Thibault Montigaud"
+            assert body["display_email"] == "owner@example.com"
             assert "pmo-owner-001" not in json.dumps(body)
-            # Without the header the field is absent, not an empty fallback.
+            # Without an email the field is absent, not an empty fallback.
             plain = urlopen(
-                Request(base + "/ui/session", headers=_EDGE_HEADERS), timeout=5
+                Request(base + "/ui/session", headers={"Remote-Sub": "oidc-sub-1"}), timeout=5
             )
-            assert "display_name" not in json.loads(plain.read().decode())
+            assert "display_email" not in json.loads(plain.read().decode())
         finally:
             _stop(server, thread)
 

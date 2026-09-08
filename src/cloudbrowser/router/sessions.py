@@ -54,6 +54,7 @@ class RouterSession:
     offer_expires_at: float | None = None
     session_expires_at: float | None = None
     backoff_until: float | None = None
+    display_email: str | None = None
 
     def public_dict(self, *, now: float = 0.0, position: int | None = None) -> dict[str, object]:
         """Return bounded metadata without principal, binding, URL, or secret values."""
@@ -114,10 +115,14 @@ class RouterSessionStore:
         self._sessions: dict[str, RouterSession] = {}
         self._load()
 
-    def enqueue(self, principal_id: str, *, request_id: str) -> RouterSession:
+    def enqueue(
+        self, principal_id: str, *, request_id: str, display_email: str | None = None
+    ) -> RouterSession:
         with self._lock:
             self._validate_text(principal_id, "principal_id")
             self._validate_text(request_id, "request_id")
+            if display_email is not None:
+                self._validate_email(display_email)
             self._expire_locked()
             current = self.for_principal(principal_id)
             if current is not None:
@@ -128,6 +133,7 @@ class RouterSessionStore:
                 principal_id=principal_id,
                 status=SessionStatus.WAITING,
                 enqueued_at=self._clock(),
+                display_email=display_email,
             )
             self._sessions[record.session_id] = record
             self._assign_waiters_locked()
@@ -270,6 +276,35 @@ class RouterSessionStore:
     def slots(self) -> tuple[SlotDescriptor, ...]:
         return self._slots
 
+    def roster(self) -> list[dict[str, object]]:
+        """Return bounded live-session metadata (status + display email).
+
+        Ordered FIFO by enqueue time. Entries never contain principal IDs,
+        bindings, or slot URLs; the email is the non-authoritative display
+        value captured from the edge at join time and is omitted entirely
+        when it was never provided.
+        """
+        with self._lock:
+            changed = self._expire_locked()
+            promoted = self._assign_waiters_locked()
+            live = [
+                record
+                for record in self._sessions.values()
+                if record.status in self._LIVE
+            ]
+            live.sort(key=lambda record: (record.enqueued_at, record.session_id))
+            if changed or promoted:
+                self._persist_locked()
+        entries: list[dict[str, object]] = []
+        for record in live:
+            entry: dict[str, object] = {
+                "status": record.status.value,
+            }
+            if record.display_email is not None:
+                entry["email"] = record.display_email
+            entries.append(entry)
+        return entries
+
     def _assign_waiters_locked(self) -> int:
         occupied = {
             record.slot_id
@@ -353,6 +388,11 @@ class RouterSessionStore:
         if any(ord(char) < 0x20 or ord(char) == 0x7F for char in value):
             raise ValueError(f"{name} is invalid")
 
+    @staticmethod
+    def _validate_email(value: str) -> None:
+        """Bound-check one non-authoritative display email (metadata only)."""
+        RouterSessionStore._validate_text(value, "display_email")
+
     def _load(self) -> None:
         if not self._path.exists():
             return
@@ -416,6 +456,9 @@ class RouterSessionStore:
         slot_id = item.get("slot_id")
         if slot_id is not None:
             self._validate_text(slot_id, "slot_id")
+        display_email = item.get("display_email")
+        if display_email is not None:
+            self._validate_email(display_email)
         return RouterSession(
             session_id=session_id,
             request_id=request_id,
@@ -427,6 +470,7 @@ class RouterSessionStore:
             offer_expires_at=_optional_float(item.get("offer_expires_at")),
             session_expires_at=_optional_float(item.get("session_expires_at")),
             backoff_until=_optional_float(item.get("backoff_until")),
+            display_email=display_email,
         )
 
     def _persist_locked(self) -> None:
@@ -447,7 +491,7 @@ class RouterSessionStore:
     @staticmethod
     def _encode(record: RouterSession) -> dict[str, object]:
         binding = record.binding
-        return {
+        encoded: dict[str, object] = {
             "session_id": record.session_id,
             "request_id": record.request_id,
             "principal_id": record.principal_id,
@@ -466,6 +510,9 @@ class RouterSessionStore:
             "session_expires_at": record.session_expires_at,
             "backoff_until": record.backoff_until,
         }
+        if record.display_email is not None:
+            encoded["display_email"] = record.display_email
+        return encoded
 
 
 def _optional_float(value: object) -> float | None:

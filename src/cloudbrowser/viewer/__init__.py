@@ -163,6 +163,7 @@ input[type=text]{font:inherit;padding:6px 8px;border:1px solid #c9ccd1;border-ra
 #status{font-weight:600}
 #who{color:#5f6368;font-weight:400}
 #pageinfo{white-space:pre-wrap;font:12px/1.4 ui-monospace,monospace;background:#f6f7f9;border:1px solid #e3e5e8;border-radius:6px;padding:8px;max-height:200px;overflow:auto}
+#roster{font:12px/1.5 system-ui,sans-serif;color:#5f6368;margin:8px 0 0;padding:0;list-style:none}
 .err{color:#b3261e}
 </style></head>
 <body><main>
@@ -175,12 +176,24 @@ input[type=text]{font:inherit;padding:6px 8px;border:1px solid #c9ccd1;border-ra
 <button id="leave" class="danger">Leave &amp; release slot</button>
 </div>
 <div id="pageinfo" hidden></div>
+<ul id="roster" hidden></ul>
 <p id="error" class="err" hidden></p>
 </div>
 <script>
 "use strict";
 var st=document.getElementById("status"),who=document.getElementById("who"),err=document.getElementById("error"),
-controls=document.getElementById("controls"),out=document.getElementById("pageinfo");
+controls=document.getElementById("controls"),out=document.getElementById("pageinfo"),roster=document.getElementById("roster");
+function refreshRoster(){fetch("/ui/roster").then(function(r){return r.json()}).then(function(p){
+ var entries=(p&&p.entries)||[];
+ roster.innerHTML="";
+ entries.forEach(function(e){
+  var li=document.createElement("li");
+  var label=e.email?e.email:"(anonymous)";
+  li.textContent=(e.status==="active"?"\\u25cf ":"\\u25cb ")+label+" \\u2014 "+e.status;
+  roster.appendChild(li);
+ });
+ roster.hidden=entries.length===0;
+}).catch(function(){roster.hidden=true})}
 function show(e,m){err.textContent=m;err.hidden=false}
 function post(u,body){return fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})}).then(function(r){return r.json()})}
 function act(op,params){return post("/ui/agent/"+op,{params:params||{}}).then(function(p){
@@ -190,13 +203,14 @@ function act(op,params){return post("/ui/agent/"+op,{params:params||{}}).then(fu
 }).catch(function(){show(null,"action failed")})}
 function poll(){fetch("/ui/session").then(function(r){return r.json()}).then(function(p){
  var s=p.status||"failed";
- who.textContent=p.display_name?" \\u2014 "+p.display_name:"";
+ who.textContent=p.display_email?" \\u2014 "+p.display_email:"";
  if(s==="waiting"){st.textContent="waiting in queue"+(p.position?" (#"+p.position+")":"");setTimeout(poll,2000)}
  else if(s==="offered"){post("/ui/session/activate").then(function(){poll()})}
  else if(s==="active"){controls.hidden=false;st.textContent="active"+(p.session_ttl_s?" \\u00b7 "+Math.round(p.session_ttl_s/60)+" min left":"")}
  else if(s==="left"){controls.hidden=true;st.textContent="left \\u2014 rejoining";setTimeout(poll,1500)}
  else if(s==="failed"){show(null,p.error_code||"session failed")}
  else{setTimeout(poll,3000)}
+ refreshRoster();
 }).catch(function(){st.textContent="offline";setTimeout(poll,3000)})}
 post("/ui/session/join").then(poll).catch(function(){st.textContent="offline"});
 document.getElementById("nav").addEventListener("submit",function(e){e.preventDefault();
@@ -242,6 +256,9 @@ def create_viewer_server(
                 return
             if session_surface is not None and self.path == "/ui/session":
                 self._surface_call("status")
+                return
+            if session_surface is not None and self.path == "/ui/roster":
+                self._surface_roster_call()
                 return
             if self.path not in ("/", "/viewer"):
                 self.send_error(404)
@@ -301,15 +318,15 @@ def create_viewer_server(
                     status, payload = session_surface.status(
                         headers=dict(self.headers.items()), request_id=request_id
                     )
-                    # Non-authoritative display name only: the edge-validated
-                    # Remote-Name header, never an identity key, never the
+                    # Non-authoritative display email only: the edge-validated
+                    # Remote-Email header, never an identity key, never the
                     # principal id. Absent header -> absent field.
                     from cloudbrowser.edge_auth import parse_edge_identity
 
                     identity = parse_edge_identity(dict(self.headers.items()))
-                    if identity is not None and identity.name:
+                    if identity is not None and identity.email:
                         payload = dict(payload)
-                        payload["display_name"] = identity.name
+                        payload["display_email"] = identity.email
                 elif action == "join":
                     status, payload = session_surface.join(
                         headers=dict(self.headers.items()), request_id=request_id
@@ -326,6 +343,21 @@ def create_viewer_server(
                 self._json(
                     200,
                     {"ok": False, "request_id": request_id, "status": "failed", "error_code": "surface_failed"},
+                )
+                return
+            self._json(status, payload)
+
+        def _surface_roster_call(self) -> None:
+            """Relay the roster query (who is waiting / who holds a slot)."""
+            assert session_surface is not None
+            try:
+                status, payload = session_surface.roster(
+                    headers=dict(self.headers.items())
+                )
+            except Exception:
+                self._json(
+                    200,
+                    {"ok": False, "request_id": "roster", "status": "failed", "error_code": "surface_failed"},
                 )
                 return
             self._json(status, payload)

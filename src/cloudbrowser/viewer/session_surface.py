@@ -43,6 +43,10 @@ class _RouterPort(Protocol):
         self, *, headers: Mapping[str, str], request_id: str
     ) -> tuple[int, dict[str, object]]: ...
 
+    def roster(
+        self, *, headers: Mapping[str, str]
+    ) -> tuple[int, dict[str, object]]: ...
+
     def agent_action(
         self,
         *,
@@ -161,6 +165,13 @@ class RouterHttpClient:
         return self.post_json(
             "/v1/session/leave", headers=headers, body={"request_id": request_id}
         )
+
+    def roster(
+        self, *, headers: Mapping[str, str]
+    ) -> tuple[int, dict[str, object]]:
+        # The roster is identity-derived; GET carries the allowlisted
+        # identity headers only.
+        return self.get_json("/v1/roster", headers=headers)
 
     def agent_action(
         self,
@@ -315,6 +326,27 @@ class ViewerSessionSurface:
                 200,
                 {"ok": False, "request_id": request_id, "status": "failed",
                 "error_code": "leave_failed"},
+            )
+        return status, dict(payload)
+
+    def roster(
+        self, *, headers: Mapping[str, object]
+    ) -> tuple[int, dict[str, object]]:
+        """Relay the roster query: who is waiting and who holds a slot.
+
+        Identity is resolved as on every other surface action; the relay
+        carries only the allowlisted identity headers.
+        """
+        principal = self._principal_from_headers(headers)
+        if principal is None:
+            return _UNAUTHORIZED
+        try:
+            status, payload = self._router.roster(headers=_relay_headers(headers))
+        except Exception:
+            return (
+                200,
+                {"ok": False, "request_id": "roster", "status": "failed",
+                "error_code": "roster_failed"},
             )
         return status, dict(payload)
 
