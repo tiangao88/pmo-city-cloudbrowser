@@ -1,4 +1,4 @@
-# CloudBrowser v2 — Durable Plan (status as of 2026-09-07)
+# CloudBrowser v2 — Durable Plan (status as of 2026-09-08)
 
 Repo: `https://github.com/tiangao88/pmo-city-cloudbrowser` (branch `main`).
 Dev-staging fleet: Coolify service `nievufka0cggf82cregyihav` (instance
@@ -30,6 +30,22 @@ Live fleet is healthy on the `2416673` build (digest sync `d693101`).
 
 Awaiting Tigo's UI retest at the public host; then this milestone is closed.
 
+**Fixes shipped 2026-09-08 (`ffda61c`, decision by Tigo):**
+
+- **Self-healing wake takeover** — a slot left running by an ended session
+  (expired/abandoned runtime holding a foreign binding) no longer wedges
+  the next wake with `operation_failed`. `SlotSupervisor.adopt_binding`
+  force-stops the stale browser, then adopts the new server-minted
+  binding; `browser_id` guard and stop-failure fail-closed semantics are
+  unchanged, and the binding push still happens only while stopped. The
+  dev01 q-4/q-6 wedge class is closed (no manual container restarts).
+- **Real CDP page actions** — `CdpPageActionAdapter` wires `navigate` and
+  `page_info` through the local DevTools endpoint (`Page.navigate` on the
+  live page target, `/json/new` only when no page exists; bounded
+  `Runtime.evaluate` capture over a short-lived WebSocket). Wired into
+  `build_browser_service`; `click`/`type` remain fail-closed until an
+  approved element-interaction channel exists; no generic CDP passthrough.
+
 ## Shipped (commits on origin/main)
 
 - Phase 0 boundary + red security suite — `f3cc3b4`
@@ -46,6 +62,8 @@ Awaiting Tigo's UI retest at the public host; then this milestone is closed.
   `565dd5c`, `d693101`
 - Viewer UI shell: auto-join, status poll, activation, allowlisted agent
   relay — `f313fc3`; real-client agent relay wire fix — `2416673`
+- Self-healing wake takeover + real CDP page actions (navigate, page_info)
+  — `ffda61c`
 
 ## Next milestones (dependency order)
 
