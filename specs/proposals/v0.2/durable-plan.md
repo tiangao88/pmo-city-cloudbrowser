@@ -71,6 +71,11 @@ Awaiting Tigo's UI retest at the public host; then this milestone is closed.
   `GET /ui/roster` relay, and a live roster list in the viewer shell;
   display identity switched from `Remote-Name` to the edge-validated
   `Remote-Email` (non-authoritative metadata only, never an identity key)
+  — `fd3985b`, digests run `34246186158` (`6680a4a`)
+- Roster live on dev01: router `dbdeeb4b…`, viewer `dfa599f7…` swapped via
+  compose image-line edit + `up -d --no-deps` (backup kept on host);
+  `/v1/roster`, `/ui/roster`, shell wiring, and `display_email` verified
+  through in-container probes with real identity headers
 - Image digest sync to `949faea` build (run `34231460028`); viewer live on
   dev01 at digest `2968da87…` — `e4740e9`
 
