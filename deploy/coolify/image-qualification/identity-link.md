@@ -1,7 +1,7 @@
 # Image qualification — identity-link
 
-- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/identity-link@sha256:fc47429540c2242193e661056585582ec4d80d92d90cf166ca57696eb184013d`
-- digest: `sha256:fc47429540c2242193e661056585582ec4d80d92d90cf166ca57696eb184013d`
+- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/identity-link@sha256:0800251a6c2e469ae1b5924ffbe0a3ec64fd2942c7be38dbb9c924108a8e17b4`
+- digest: `sha256:0800251a6c2e469ae1b5924ffbe0a3ec64fd2942c7be38dbb9c924108a8e17b4`
 - status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/identity-link/Dockerfile`
@@ -11,6 +11,6 @@
 - configured user: `cloudbrowser`
 - runtime endpoint: passed (`/health`)
 - provenance/SBOM metadata: present in registry manifest
-- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/34219815337`
-- source commit `2c6a6e7702069b9d918585768770169c9896ccb6`
+- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/34231460028`
+- source commit `949faea701cfc36a24f8f53713aac1693c9cd5eb`
 The image was built, published, and qualified by the referenced CI run.
