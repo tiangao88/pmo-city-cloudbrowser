@@ -121,21 +121,29 @@ Verified live (subagent: DNS digs, Coolify API GETs, docker/DB reads;
 Artifacts: `/workspace/prod-discovery/coolify-api-services69-apps.txt`,
 `coolify-db-services-all89.txt`):
 
-- **Prod and dev Coolify are the SAME instance** (`deploy.aikumi.app`,
-  Coolify 4.3.18 on mother01) — there is no separate prod Coolify. "Prod
-  rollout" therefore means: same instance, new service, prod domains.
-  The `COOLIFY_TOKEN_PROD` env/VW field names the token for this instance
+- **Dev and prod are the SAME environment for now (Tigo, 2026-09-08):**
+  there is no separate prod Coolify, no separate prod host, and no new DNS
+  to create — the dev01 deployment IS production. `deploy.aikumi.app`
+  (Coolify 4.3.18 on mother01) is the only instance; the
+  `COOLIFY_TOKEN_PROD` env/VW field names the token for this instance
   (field `COOLIFY_TOKEN_PROD` in VW item `dd2d937f-…6499` = "hermes_env_dev";
   401 without token; token may contain `|` — never pass it through ssh argv,
   use stdin/file).
+- **Domains are already set up**: `cloudbrowser2.dev01.pmo.city` and
+  `cloudfiles2.dev01.pmo.city` resolve (CNAME `mother01.on-ai.sbs` →
+  145.223.34.130) and are managed by Coolify/Traefik on service
+  `nievufka…`. Apex-`pmo.city` subdomains (e.g. `cloudbrowser.pmo.city`)
+  have no records — that is fine and NOT a gap; do not propose DNS or
+  Cloudflare changes (forbidden: Tigo forbids touching Cloudflare).
 - **No prod CloudBrowser exists yet**: the three running CloudBrowser
   services (v2 `nievufka…`, v1 `4guplgcr…`, older fleet `okixw2f…`) all
   serve only `*.dev01.pmo.city` on mother01. Mother02 (37.27.218.196) runs
   no CloudBrowser; mother03 is API-hidden/likely unvalidated.
-- **Prod DNS does not exist yet**: `cloudbrowser2.pmo.city`,
-  `cloudfiles2.pmo.city`, `cloudbrowser.pmo.city` have no records
-  (NXDOMAIN); `secrets.pmo.city` → mother01 is the existing pmo.city
-  pattern to copy (CNAME `mother01.on-ai.sbs` → 145.223.34.130).
+- **Apex-`pmo.city` records** (verified, informational only):
+  `cloudbrowser2.pmo.city`, `cloudfiles2.pmo.city`, `auth.pmo.city` have no
+  DNS records; `secrets.pmo.city` → CNAME `mother01.on-ai.sbs` →
+  145.223.34.130. These apex subdomains are not used by CloudBrowser and
+  are NOT a Phase 6 dependency.
 - **IdP is already prod-ready**: Authentik on mother01 (auth.aikumi.app,
   2025.8.1) serves application `pmoc-sso` (OAuth2 provider #37) with live
   OIDC discovery at
@@ -146,9 +154,10 @@ Artifacts: `/workspace/prod-discovery/coolify-api-services69-apps.txt`,
   37.27.218.196, mother03 hidden); team "On-AI Side-by-Side"; 69
   API-visible services (89 incl. mother03 in DB).
 
-Phase 6 preflight still required before any approval: prod DNS records,
-TinyAuth/Authentik groups policy for the prod apps, and a decision on which
-host/instance-id to use (a second CB_INSTANCE_ID on mother01 vs mother02).
+Phase 6 preflight still required before any approval: TinyAuth/Authentik
+groups policy for the prod-facing apps, and a decision on whether Phase 6
+needs a separate second deployment at all given dev01 == prod for now
+(dev01 already serves the v2 stack on its final domains).
 
 ## Standing constraints
 
