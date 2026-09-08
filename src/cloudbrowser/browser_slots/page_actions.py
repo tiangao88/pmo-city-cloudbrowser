@@ -55,9 +55,14 @@ class _WebSocket:
             raise BrowserUnavailable("DevTools WebSocket is unavailable") from exc
         self._sock.settimeout(command_timeout_s)
         key = base64.b64encode(os.urandom(16)).decode("ascii")
+        target = parsed.path
+        if parsed.query:
+            target += "?" + parsed.query
+        host = parsed.hostname or ""
+        host_header = f"{host}:{port}" if port not in (80, 443) else host
         handshake = (
-            f"GET {parsed.path}?{parsed.query} HTTP/1.1\r\n"
-            f"Host: {parsed.hostname}:{port}\r\n"
+            f"GET {target} HTTP/1.1\r\n"
+            f"Host: {host_header}\r\n"
             "Upgrade: websocket\r\n"
             "Connection: Upgrade\r\n"
             f"Sec-WebSocket-Key: {key}\r\n"

@@ -214,6 +214,58 @@ def test_build_browser_service_wires_the_real_page_actions(monkeypatch) -> None:
     assert isinstance(actions, CdpPageActionAdapter)
 
 
+def test_handshake_request_target_never_ends_in_a_bare_question_mark() -> None:
+    """Chrome 500s a DevTools WS handshake with a trailing '?' (live on dev01,
+    2026-09-08): the target must omit the query separator when there is no
+    query, or page_info fails closed with browser_unavailable."""
+
+    class _RawSocket:
+        def __init__(self, *args):
+            self.sent: list[bytes] = []
+
+        def settimeout(self, timeout):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def sendall(self, data):
+            self.sent.append(data)
+
+        def recv(self, size):
+            # Handshake response, then a close frame.
+            if len(self.sent) == 1:
+                return b"HTTP/1.1 101 WebSocket Protocol Handshake\r\nUpgrade: websocket\r\n\r\n"
+            return b"\x88\x02\x03\xe8"  # close frame
+
+        def close(self):
+            pass
+
+    raw = _RawSocket()
+    monkeypatch = __import__("pytest").MonkeyPatch()
+
+    def fake_connect(address, timeout):
+        return raw
+
+    import cloudbrowser.browser_slots.page_actions as pa
+
+    monkeypatch.setattr(pa.socket, "create_connection", fake_connect)
+    ws = pa._WebSocket(
+        "ws://127.0.0.1:9222/devtools/page/tab-1",
+        open_timeout_s=2,
+        command_timeout_s=2,
+    )
+    assert ws is not None
+    first = raw.sent[0].decode("latin-1")
+    request_line = first.split("\r\n")[0]
+    assert "?" not in request_line, request_line
+    assert "/devtools/page/tab-1 HTTP/1.1" in request_line
+    monkeypatch.undo()
+
+
 class _FakeWebSocket:
     """Minimal frame-level WebSocket double for the adapter's CDP session."""
 
