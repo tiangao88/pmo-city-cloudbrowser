@@ -28,21 +28,21 @@ class _IdentityPort(Protocol):
 
 class _RouterPort(Protocol):
     def open_session(
-        self, *, headers: Mapping[str, object], body: Mapping[str, object]
+        self, *, headers: Mapping[str, str], body: Mapping[str, object]
     ) -> tuple[int, dict[str, object]]: ...
 
     def get_session(
-        self, *, headers: Mapping[str, object], request_id: str
+        self, *, headers: Mapping[str, str], request_id: str
     ) -> tuple[int, dict[str, object]]: ...
 
     def activate_session(
-        self, *, headers: Mapping[str, object], request_id: str
+        self, *, headers: Mapping[str, str], request_id: str
     ) -> tuple[int, dict[str, object]]: ...
 
     def agent_action(
         self,
         *,
-        headers: Mapping[str, object],
+        headers: Mapping[str, str],
         operation: str,
         params: Mapping[str, object],
         request_id: str,
@@ -148,6 +148,22 @@ class RouterHttpClient:
         # Activation always targets the caller's own session; the router
         # resolves it from identity, never from a caller-supplied id.
         return self.post_json("/v1/session/activate", headers=headers, body={})
+
+    def agent_action(
+        self,
+        *,
+        headers: Mapping[str, str],
+        operation: str,
+        params: Mapping[str, object],
+        request_id: str,
+    ) -> tuple[int, dict[str, object]]:
+        # The router validates the operation against its own allowlist and
+        # derives slot/binding from the caller's active session.
+        return self.post_json(
+            f"/v1/agent/{operation}",
+            headers=headers,
+            body={"request_id": request_id, "params": dict(params)},
+        )
 
     def _call(
         self,
