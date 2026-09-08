@@ -28,7 +28,9 @@ relay; wire-level tests pin the exact path/method/headers/body it sends.
 
 Live fleet is healthy on the `2416673` build (digest sync `d693101`).
 
-Awaiting Tigo's UI retest at the public host; then this milestone is closed.
+Milestone 1 **confirmed by Tigo's public-host retest on 2026-09-08** (active
+session with countdown, navigate/page_info working, roster showing who holds
+the slot vs who is waiting, leave/release working). Closed.
 
 **Fixes shipped 2026-09-08 (`ffda61c`, decision by Tigo):**
 
@@ -81,10 +83,11 @@ Awaiting Tigo's UI retest at the public host; then this milestone is closed.
 
 ## Next milestones (dependency order)
 
-1. ~~Viewer frontend + interactive surface~~ — **implemented, deployed, in
-   user retest.** Pending only Tigo's confirmation at the public host.
-2. **Spec alignment (was plan §3.6)** — add `POST /v1/agent/<op>` and
-   `POST /v1/session/activate` to `specs/contracts/control-api/v1/openapi.yaml`;
+1. ~~Viewer frontend + interactive surface~~ — **DONE, confirmed 2026-09-08.**
+2. **Spec alignment (was plan §3.6)** — add `POST /v1/agent/<op>`,
+   `POST /v1/session/activate` (and `POST /v1/session/leave`,
+   `GET /v1/roster`) to
+   `specs/contracts/control-api/v1/openapi.yaml`;
    refresh stale phase statuses in `specs/proposals/v0.2/91-…` (still say
    "Phase 0 pending"). Local, no live changes.
 3. **Session-TTL product decision (backlog)** — TTL runs from creation, not
