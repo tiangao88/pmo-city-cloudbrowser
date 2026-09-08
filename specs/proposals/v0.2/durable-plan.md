@@ -84,22 +84,34 @@ the slot vs who is waiting, leave/release working). Closed.
 ## Next milestones (dependency order)
 
 1. ~~Viewer frontend + interactive surface~~ — **DONE, confirmed 2026-09-08.**
-2. **Spec alignment (was plan §3.6)** — add `POST /v1/agent/<op>`,
-   `POST /v1/session/activate` (and `POST /v1/session/leave`,
-   `GET /v1/roster`) to
-   `specs/contracts/control-api/v1/openapi.yaml`;
-   refresh stale phase statuses in `specs/proposals/v0.2/91-…` (still say
-   "Phase 0 pending"). Local, no live changes.
-3. **Session-TTL product decision (backlog)** — TTL runs from creation, not
-   last activity; a 1-hour active session is cut off the same as an idle one.
-   Candidate: sliding renewal on authenticated activity. Decision needed from
-   Tigo before wiring.
+2. ~~Spec alignment (was plan §3.6)~~ — **DONE 2026-09-08.** Router surface
+   (`/v1/session` GET+POST, `/v1/session/activate`, `/v1/session/leave`,
+   `/v1/roster`, `/v1/agent/{operation}`) added to
+   `specs/contracts/control-api/v1/openapi.yaml` with bounded schemas
+   (`SessionResponse`, `RosterResponse`, `AgentActionRequest/Response`,
+   `BoundedEnvelope`); yaml parse-verified. Spec 91 status refreshed
+   ("delivered through Phase 5"). Gate:
+   `tests/contract/test_control_api_contract.py`.
+3. ~~Session-TTL product decision~~ — **RESOLVED 2026-09-08: sliding TTL
+   wired** (approved in the 2026-09-08 task list). New
+   `RouterSessionStore.renew(principal_id)` extends an ACTIVE lease to
+   `now + session_ttl_s`; the router calls it best-effort after every
+   successfully relayed agent page action (work renews; status polling
+   never does; expiry is never resurrected). Renewed expiry survives
+   restart via persisted state. Gate:
+   `tests/contract/test_router_sessions_sliding_ttl.py`.
 4. **Live hygiene (dev01 only, separate approval each)** — cosmetic
    first-activate `supervisor_unavailable` race (wake succeeds; bounded retry
-   is the current workaround; candidate for a spec note); stale static binding
-   values (`principal-dev01` etc.) in the Coolify env store are inert but
-   would re-apply on a full re-render; `broker-state` volume orphaned in
-   `deploy/coolify/compose.yaml`.
+   is the current workaround; candidate for a spec note). ~~Stale static
+   binding envs~~ **DELETED from the dev01 Coolify env store 2026-09-08**
+   (`CB_PRINCIPAL_ID`/`CB_PROFILE_ID`/`CB_BROWSER_ID`/
+   `CB_BINDING_GENERATION`; running containers were untouched — no
+   redeploy — and wake uses supervisor binding pushes, so dev01 keeps
+   working; the next approved re-render picks up the compose fallbacks
+   `browser-slot-1`/`principal-unassigned`/`generation-0`). ~~`broker-state`
+   volume orphaned~~ **STALE NOTE, corrected 2026-09-08**: credential-broker
+   runs and mounts `nievufka0cggf82cregyihav_broker-state` (verified via
+   `docker inspect`).
 5. **Phase 6 production rollout** — separately approved; DNS, Traefik, prod
    Coolify mutation, real fleet.
 

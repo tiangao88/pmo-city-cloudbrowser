@@ -415,6 +415,14 @@ class RouterApi:
             return 200, _envelope(request_id, status="failed", error_code="agent_unavailable")
         if not isinstance(result, dict) or not isinstance(result.get("status"), str):
             return 200, _envelope(request_id, status="failed", error_code="agent_unavailable")
+        # Sliding TTL: a successfully relayed action is authenticated work,
+        # so the caller's active lease slides forward. Renewal is
+        # best-effort — the page action already happened, so a renewal
+        # hiccup must not turn it into a reported failure.
+        try:
+            self._store.renew(resolved.principal_id)
+        except Exception:
+            pass
         payload: dict[str, object] = {
             "request_id": request_id,
             "status": result["status"],

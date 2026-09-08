@@ -1,6 +1,6 @@
 # CloudFiles delivery phases
 
-> Status: **planning map — 2026-09-03**
+> Status: **delivered through Phase 5 (2026-09-08); Phase 6 separately gated**
 
 This is the short, chronological map for implementing the frozen CloudFiles
 target. The detailed requirement is in
@@ -27,8 +27,9 @@ Exit:
 - the red boundary tests exist and have actually failed;
 - no public downloads implementation has been written yet.
 
-**Current status:** target and plan documented; contract drafted; Phase 0
-review, matrices, and red tests remain.
+**Current status:** delivered (Phases 0–5; boundary, red security tests,
+gateway, phase-4 ops wiring, E2E, and release qualification all shipped —
+see the durable plan for the commit chain).
 
 ## Phase 1 — pure domain and storage policy
 

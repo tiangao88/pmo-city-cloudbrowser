@@ -259,6 +259,32 @@ class RouterSessionStore:
         }
         return min(candidates, key=lambda record: (order[record.status], -record.enqueued_at))
 
+    def renew(self, principal_id: str) -> RouterSession | None:
+        """Extend the caller's ACTIVE lease to a full window from now.
+
+        Sliding-TTL renewal: authenticated work (agent page actions) pushes
+        ``session_expires_at`` out to ``now + session_ttl_s`` so an actively
+        driven session is not cut off mid-use, while an abandoned one still
+        expires on schedule. Expiry and promotion run first, so a session
+        that just lapsed is never resurrected. Returns the renewed record,
+        the unchanged record when there is no active lease to extend
+        (waiting/offered/backed-off), or ``None`` when no live session
+        exists.
+        """
+        self._validate_text(principal_id, "principal_id")
+        with self._lock:
+            current = self.for_principal(principal_id)
+            if current is None:
+                return None
+            if current.status is not SessionStatus.ACTIVE or current.session_expires_at is None:
+                return current
+            renewed = replace(
+                current, session_expires_at=self._clock() + self._session_ttl_s
+            )
+            self._sessions[current.session_id] = renewed
+            self._persist_locked()
+            return renewed
+
     def position_for(self, session_id: str) -> int | None:
         with self._lock:
             record = self._require_locked(session_id)

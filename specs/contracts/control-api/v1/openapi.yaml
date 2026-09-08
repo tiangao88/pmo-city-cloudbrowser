@@ -30,8 +30,176 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ControlResponse'
+  /v1/session:
+    get:
+      operationId: getSession
+      description: The caller's own current session in a bounded shape.
+      responses:
+        '200':
+          description: Bounded session envelope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+    post:
+      operationId: openSession
+      description: Enqueue or refresh the caller's own session and assign the next free slot.
+      responses:
+        '200':
+          description: Bounded session envelope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+  /v1/session/activate:
+    post:
+      operationId: activateSession
+      description: Wake the caller's assigned slot under the server-minted binding and flip offered -> active.
+      responses:
+        '200':
+          description: Bounded session envelope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+  /v1/session/leave:
+    post:
+      operationId: leaveSession
+      description: Release the caller's own session and free its slot.
+      responses:
+        '200':
+          description: Bounded outcome envelope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoundedEnvelope'
+  /v1/roster:
+    get:
+      operationId: roster
+      description: Live sessions (status + optional non-authoritative display email) for every authenticated caller.
+      responses:
+        '200':
+          description: Bounded roster envelope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RosterResponse'
+  /v1/agent/{operation}:
+    post:
+      operationId: agentAction
+      description: Relay one allowlisted page action to the caller's own assigned slot.
+      parameters:
+        - name: operation
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [navigate, click, type, page_info, tabs_list]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentActionRequest'
+      responses:
+        '200':
+          description: Bounded relay envelope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentActionResponse'
 components:
   schemas:
+    BoundedEnvelope:
+      type: object
+      additionalProperties: false
+      required: [request_id, status]
+      properties:
+        request_id:
+          type: string
+        status:
+          type: string
+        error_code:
+          type: string
+          maxLength: 64
+    SessionResponse:
+      type: object
+      additionalProperties: false
+      required: [request_id, status]
+      properties:
+        request_id:
+          type: string
+        status:
+          type: string
+          enum: [waiting, offered, active, backed_off, stopped, left, failed]
+        error_code:
+          type: string
+          maxLength: 64
+        session_id:
+          type: string
+        slot_id:
+          type: string
+        offer_ttl_s:
+          type: number
+          minimum: 0
+        session_ttl_s:
+          type: number
+          minimum: 0
+          description: Sliding lease; extended by authenticated agent activity.
+    RosterResponse:
+      type: object
+      additionalProperties: false
+      required: [request_id, status, entries]
+      properties:
+        request_id:
+          type: string
+        status:
+          type: string
+        error_code:
+          type: string
+          maxLength: 64
+        entries:
+          type: array
+          maxItems: 256
+          items:
+            type: object
+            additionalProperties: false
+            required: [status]
+            properties:
+              status:
+                type: string
+                enum: [waiting, offered, active, backed_off]
+              email:
+                type: string
+                maxLength: 256
+    AgentActionRequest:
+      type: object
+      additionalProperties: false
+      required: [request_id]
+      properties:
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        params:
+          type: object
+          additionalProperties: true
+    AgentActionResponse:
+      type: object
+      additionalProperties: false
+      required: [request_id, status]
+      properties:
+        request_id:
+          type: string
+        status:
+          type: string
+        error_code:
+          type: string
+          maxLength: 64
+        page:
+          type: object
+          additionalProperties:
+            type: string
     ControlRequest:
       type: object
       additionalProperties: false
