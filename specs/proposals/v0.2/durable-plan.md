@@ -13,15 +13,22 @@ workspace wipes. Update it at the end of every milestone.
 
 All CloudFiles phases 0–5 are implemented, gated, and pushed. The router
 control plane (session create/activate, slot wake, agent forwarding, lease
-rotation) is implemented and verified live on dev-staging. The viewer backend
-(authenticated session surface driving the router) is pushed and deployed.
-The live fleet is healthy on the `d1ca5cf` build (digest sync `50c0dca`).
+rotation) is implemented and verified live on dev-staging.
 
-Current user-visible gap: the viewer page at `cloudbrowser2.dev01.pmo.city`
-serves a 300-byte static placeholder — it never calls the session routes and
-shows "No interactive browser surface is attached to this instance."
-regardless of session state. This is expected behavior of the current build,
-not a defect: the viewer frontend milestone has not been implemented yet.
+**Milestone 1 (viewer UI + interactive surface) is implemented, gated, and
+deployed to dev01.** The public viewer page at `cloudbrowser2.dev01.pmo.city`
+is no longer a static placeholder: after edge SSO it auto-joins the router
+queue (`POST /ui/session/join`), polls session state (`GET /ui/session`),
+activates an offered session (`POST /ui/session/activate`), and once active
+drives the assigned slot through the router's allowlisted agent operations
+(`POST /ui/agent/<op>`: navigate/click/type/page_info/tabs_list) — all with
+the same fail-closed identity rules and bounded envelopes as the rest of the
+control plane. The real router client (`RouterHttpClient`) carries the agent
+relay; wire-level tests pin the exact path/method/headers/body it sends.
+
+Live fleet is healthy on the `2416673` build (digest sync `d693101`).
+
+Awaiting Tigo's UI retest at the public host; then this milestone is closed.
 
 ## Shipped (commits on origin/main)
 
@@ -35,16 +42,15 @@ not a defect: the viewer frontend milestone has not been implemented yet.
   `56bd70b`…`164a2bf`, `40c1faa`, `00836a3`
 - Router queue promotion fix — `40fb03d`
 - Viewer authenticated session surface (backend routes) — `d1ca5cf`
-- Image digest syncs — `8f7bf19`, `6f63594`, `df2dedc`, `149519a`, `50c0dca`
+- Image digest syncs — `8f7bf19`, `6f63594`, `df2dedc`, `149519a`, `50c0dca`,
+  `565dd5c`, `d693101`
+- Viewer UI shell: auto-join, status poll, activation, allowlisted agent
+  relay — `f313fc3`; real-client agent relay wire fix — `2416673`
 
 ## Next milestones (dependency order)
 
-1. **Viewer frontend + interactive surface** — the only user-facing gap.
-   Shell auto-joins on load (`POST /ui/session/join`), polls
-   `GET /ui/session`, activates on offer (`POST /ui/session/activate`), and
-   attaches the interactive browser surface when a slot is bound. Fail-closed
-   identity preserved; no principal values in the DOM. TDD; then digest sync
-   and dev01 redeploy for Tigo retest.
+1. ~~Viewer frontend + interactive surface~~ — **implemented, deployed, in
+   user retest.** Pending only Tigo's confirmation at the public host.
 2. **Spec alignment (was plan §3.6)** — add `POST /v1/agent/<op>` and
    `POST /v1/session/activate` to `specs/contracts/control-api/v1/openapi.yaml`;
    refresh stale phase statuses in `specs/proposals/v0.2/91-…` (still say
