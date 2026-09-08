@@ -1,7 +1,7 @@
 # Image qualification — downloads
 
-- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/downloads@sha256:a7b72366f4ae65b7095cfb0adef8cdca483e5afcec115cb99d28429180e24de8`
-- digest: `sha256:a7b72366f4ae65b7095cfb0adef8cdca483e5afcec115cb99d28429180e24de8`
+- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/downloads@sha256:cb9f3474276472d120097e508a541491f24261c829f59bd722bac8cbfec80384`
+- digest: `sha256:cb9f3474276472d120097e508a541491f24261c829f59bd722bac8cbfec80384`
 - status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/downloads/Dockerfile`
@@ -11,8 +11,8 @@
 - configured user: `cloudbrowser`
 - runtime endpoint: passed (`/health`)
 - provenance/SBOM metadata: present in registry manifest
-- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/34231460028`
-- source commit `949faea701cfc36a24f8f53713aac1693c9cd5eb`
+- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/34246186158`
+- source commit `fd3985ba0d247f17139a484fa8e6e3a0aa6f1226`
 ## Qualification evidence
 
 The immutable digest was resolved from the GHCR manifest for the image built

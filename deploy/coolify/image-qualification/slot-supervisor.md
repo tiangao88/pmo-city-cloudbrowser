@@ -1,7 +1,7 @@
 # Image qualification — slot-supervisor
 
-- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/slot-supervisor@sha256:d14cc32a4f7c4aadb1acfda5c724d72594bf679783dbeb5eeebd2fabd5fbf20e`
-- digest: `sha256:d14cc32a4f7c4aadb1acfda5c724d72594bf679783dbeb5eeebd2fabd5fbf20e`
+- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/slot-supervisor@sha256:0cf42668f8e5ea7f33383a5640a01ec09567ed54685053097cc7bcbf5ad373aa`
+- digest: `sha256:0cf42668f8e5ea7f33383a5640a01ec09567ed54685053097cc7bcbf5ad373aa`
 - status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/slot-supervisor/Dockerfile`
@@ -11,8 +11,8 @@
 - configured user: `cloudbrowser`
 - runtime endpoint: passed (`/health`)
 - provenance/SBOM metadata: present in registry manifest
-- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/34231460028`
-- source commit `949faea701cfc36a24f8f53713aac1693c9cd5eb`
+- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/34246186158`
+- source commit `fd3985ba0d247f17139a484fa8e6e3a0aa6f1226`
 ## Qualification evidence
 
 The immutable digest was resolved from the GHCR manifest for the image built
