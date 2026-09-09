@@ -88,7 +88,15 @@ def _certificates(root: Path) -> tuple[Path, Path]:
     return cert, key
 
 
-def _wait_json(url: str, timeout_s: float = 10.0) -> object:
+def _free_port() -> int:
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def _wait_json(url: str, timeout_s: float = 30.0) -> object:
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         try:
@@ -127,7 +135,7 @@ def test_basic_auth_capability_fills_real_chrome_cdp_challenge() -> None:
         thread.start()
         origin = f"https://127.0.0.1:{server.server_port}"
 
-        debug_port = 19222
+        debug_port = _free_port()
         profile = root / "profile"
         process = subprocess.Popen(
             [
@@ -199,7 +207,7 @@ def test_basic_auth_capability_rejects_wrong_password_via_real_cdp() -> None:
         thread.start()
         origin = f"https://127.0.0.1:{server.server_port}"
 
-        debug_port = 19223
+        debug_port = _free_port()
         process = subprocess.Popen(
             [
                 str(chrome_binary),
