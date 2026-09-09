@@ -139,6 +139,7 @@ jobs:
             --env CB_BROKER_SHARED_SECRET=qualification-broker-request-secret \
             --env CB_BROKER_SUBMIT_SECRET=qualification-broker-submit-secret \
             --env CB_BROKER_SITE_ID=qualification-site \
+            --env CB_BROKER_ADAPTER=basic \
             --env CB_BROKER_ORIGIN=https://qualification.example.test \
             --env CB_BROKER_SUCCESS_PATH=/authenticated \
             --env CB_BROKER_USERNAME_SELECTOR='#username' \
