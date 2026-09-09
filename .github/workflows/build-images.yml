@@ -136,6 +136,17 @@ jobs:
             --env CB_VIEWER_TOKEN_SECRET=qualification-viewer-secret \
             --env CB_AGENT_CONTROL_SHARED_SECRET=qualification-agent-secret \
             --env CB_ROUTER_SHARED_SECRET=qualification-router-shared-secret \
+            --env CB_BROKER_SHARED_SECRET=qualification-broker-request-secret \
+            --env CB_BROKER_SUBMIT_SECRET=qualification-broker-submit-secret \
+            --env CB_BROKER_SITE_ID=qualification-site \
+            --env CB_BROKER_ORIGIN=https://qualification.example.test \
+            --env CB_BROKER_SUCCESS_PATH=/authenticated \
+            --env CB_BROKER_USERNAME_SELECTOR='#username' \
+            --env CB_BROKER_PASSWORD_SELECTOR='#password' \
+            --env CB_BROKER_SUBMIT_SELECTOR='button[type="submit"]' \
+            --env CB_VAULT_BASE_URL=https://vault.qualification.test \
+            --env CB_VAULT_EMAIL=qualification@example.test \
+            --env CB_VAULT_PASSWORD=qualification-vault-password \
             --env CB_SLOT_SUPERVISOR_URLS=slot-1=http://127.0.0.1:8081 \
             --env CB_AGENT_CONTROL_URLS=slot-1=http://127.0.0.1:8087 \
             --env CB_AGENT_CONTROL_SHARED_SECRET=qualification-agent-forwarding-secret \
