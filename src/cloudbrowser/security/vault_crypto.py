@@ -286,7 +286,7 @@ def rsa_oaep_decrypt(der_private_key: bytes, ciphertext: bytes, *, sha256: bool 
             if lib.EVP_PKEY_CTX_set_rsa_mgf1_md(ctx, md) != 1:
                 raise VaultCryptoError("set MGF1 md failed")
             lib.EVP_PKEY_decrypt.argtypes = [
-                c_void_p, c_char_p, POINTER(c_size_t), c_char_p, c_size_t
+                c_void_p, c_void_p, POINTER(c_size_t), c_void_p, c_size_t
             ]
             outlen = c_size_t()
             if lib.EVP_PKEY_decrypt(ctx, None, byref(outlen), ciphertext, len(ciphertext)) != 1:

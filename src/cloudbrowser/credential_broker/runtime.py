@@ -32,6 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable, Mapping
 from urllib.parse import urlsplit
 
+from cloudbrowser.agent_browser_http import HttpAgentBrowser, HttpAgentBrowserTransport
 from cloudbrowser.credential_broker.adapters.form import (
     CredentialMaterial,
     FormLoginAdapter,
@@ -46,6 +47,7 @@ from cloudbrowser.credential_broker.audit import AuditEventType
 from cloudbrowser.credential_broker.coordinator import BrokerCoordinator
 from cloudbrowser.credential_broker.service import ResolvedBinding
 from cloudbrowser.security.vault_client import VaultwardenClient
+from cloudbrowser.sidecar_form_browser import SidecarFormBrowser
 
 _REQUIRED = ("CB_VAULT_BASE_URL", "CB_VAULT_EMAIL", "CB_VAULT_PASSWORD")
 _SELECTORS = (
@@ -79,6 +81,32 @@ def make_urllib_transport(base_url: str) -> Callable[..., tuple[int, bytes]]:
             return exc.code, exc.read()
 
     return transport
+
+
+def make_default_browser() -> HttpAgentBrowser:
+    """Build the real ``HttpAgentBrowser`` from environment configuration.
+
+    Required: ``CB_BROWSER_API_URL``, ``CB_PRINCIPAL_ID``,
+    ``CB_BINDING_GENERATION``. Reads ``CB_BROWSER_API_URL`` (defaults to
+    ``http://browser:9230``), uses ``urllib`` JSON for the sidecar
+    client. Readiness check happens at adapter-execute time so a cold
+    browser does not crash the service.
+    """
+    from cloudbrowser.browser_slots.http_client import HttpJsonClient
+
+    principal_id = os.environ.get("CB_PRINCIPAL_ID", "principal-unassigned")
+    generation = os.environ.get("CB_BINDING_GENERATION", "generation-0")
+    api_url = os.environ.get("CB_BROWSER_API_URL", "http://browser:9230")
+    transport = HttpAgentBrowserTransport(
+        HttpJsonClient(api_url),
+        expected_owner=principal_id,
+        expected_generation=generation,
+    )
+    return HttpAgentBrowser(transport)
+
+
+# Type alias for browser factories used in tests / production injection.
+BrowserFactory = Callable[[], HttpAgentBrowser]
 
 
 # ---------------------------------------------------------------------------
@@ -125,14 +153,29 @@ def make_static_binding(principal: AuthenticatedPrincipal) -> Callable[[object],
 # ---------------------------------------------------------------------------
 
 
-def build_broker_api() -> BrokerHttpServer:
-    """Assemble the full broker stack from environment configuration."""
+def build_broker_api(
+    *,
+    browser_factory: Callable[[], object] | None = None,
+    vault_transport: Callable[..., tuple[int, bytes]] | None = None,
+) -> BrokerHttpServer:
+    """Assemble the full broker stack from environment configuration.
+
+    ``browser_factory`` and ``vault_transport`` are injection seams for
+    tests; production uses ``make_default_browser`` and
+    ``make_urllib_transport``. The vault password lives only in this
+    process's environment (never on disk, never logged).
+    """
     for name in _REQUIRED:
         if not os.environ.get(name):
             raise SystemExit(f"{name} is required")
     for name, _field in _SELECTORS:
         if not os.environ.get(name):
             raise SystemExit(f"{name} is required")
+
+    if browser_factory is None:
+        browser_factory = make_default_browser
+    if vault_transport is None:
+        vault_transport = make_urllib_transport(os.environ["CB_VAULT_BASE_URL"])
 
     principal = AuthenticatedPrincipal(
         profile_id=os.environ.get("CB_PROFILE_ID", "profile-unassigned"),
@@ -161,14 +204,21 @@ def build_broker_api() -> BrokerHttpServer:
         base_url=os.environ["CB_VAULT_BASE_URL"],
         email=os.environ["CB_VAULT_EMAIL"],
         password=os.environ["CB_VAULT_PASSWORD"],
-        transport=make_urllib_transport(os.environ["CB_VAULT_BASE_URL"]),
+        transport=vault_transport,
     )
+
+    def make_adapter(_site_id: str, _declaration: object) -> Callable[..., object]:
+        adapter = FormLoginAdapter()
+        browser = browser_factory()
+        return lambda declaration, material: adapter.execute(
+            declaration, material, SidecarFormBrowser(browser)
+        )
 
     coordinator = BrokerCoordinator(
         resolve_initial=make_static_binding(principal),
         resolve_pre_fill=make_static_binding(principal),
         declarations={site_id: declaration},
-        adapter_selector=lambda _site_id, _declaration: FormLoginAdapter().execute,
+        adapter_selector=make_adapter,
         audit_emit=_log_audit_event,
     )
 

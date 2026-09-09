@@ -150,16 +150,23 @@ def test_rsa_oaep_unwrap_sha256_round_trip() -> None:
     lib.EVP_PKEY_CTX_new_id.restype = c_void_p
     lib.EVP_PKEY_CTX_new_id.argtypes = [c_int, c_void_p]
     lib.EVP_PKEY_keygen_init.argtypes = [c_void_p]
+    lib.EVP_PKEY_keygen_init.restype = c_int
     lib.EVP_PKEY_CTX_set_rsa_keygen_bits.argtypes = [c_void_p, c_int]
+    lib.EVP_PKEY_CTX_set_rsa_keygen_bits.restype = c_int
     lib.EVP_PKEY_keygen.argtypes = [c_void_p, POINTER(c_void_p)]
+    lib.EVP_PKEY_keygen.restype = c_int
     lib.EVP_PKEY_free.argtypes = [c_void_p]
     lib.EVP_PKEY_CTX_free.argtypes = [c_void_p]
     lib.i2d_PrivateKey.restype = c_int
     lib.i2d_PrivateKey.argtypes = [c_void_p, POINTER(POINTER(c_ubyte))]
     lib.EVP_PKEY_encrypt_init.argtypes = [c_void_p]
+    lib.EVP_PKEY_encrypt_init.restype = c_int
+    lib.EVP_PKEY_CTX_set_rsa_padding.argtypes = [c_void_p, c_int]
+    lib.EVP_PKEY_CTX_set_rsa_padding.restype = c_int
     lib.EVP_PKEY_encrypt.argtypes = [
         c_void_p, c_void_p, POINTER(c_size_t), c_char_p, c_size_t
     ]
+    lib.EVP_PKEY_encrypt.restype = c_int
 
     ctx = lib.EVP_PKEY_CTX_new_id(6, None)  # EVP_PKEY_RSA
     assert lib.EVP_PKEY_keygen_init(ctx) == 1
