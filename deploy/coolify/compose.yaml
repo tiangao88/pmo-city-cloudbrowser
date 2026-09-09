@@ -99,8 +99,10 @@ services:
       CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
       CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
       CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-slot-1}
-      # Trusted-secret gate for supervisor binding pushes.
+      # Supervisor binding pushes and broker→browser submission use distinct
+      # one-way secrets; browser never receives caller→broker request auth.
       CB_ROUTER_SHARED_SECRET: ${CB_ROUTER_SHARED_SECRET:?CB_ROUTER_SHARED_SECRET is required}
+      CB_BROKER_SUBMIT_SECRET: ${CB_BROKER_SUBMIT_SECRET:?CB_BROKER_SUBMIT_SECRET is required}
       CB_BROWSER_DOWNLOAD_DIR: /data/downloads-browser
       CB_DOWNLOADS_INGEST_URL: http://cloudfiles:8086
       CB_DOWNLOADS_INGEST_SECRET: ${CB_DOWNLOADS_INGEST_SECRET:?CB_DOWNLOADS_INGEST_SECRET is required}
@@ -273,6 +275,23 @@ services:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:?CB_INSTANCE_ID is required}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:?CB_RELEASE_VERSION is required}
       CB_PORT: 8084
+      CB_BROWSER_API_URL: http://browser:9230
+      CB_PROFILE_ID: ${CB_PROFILE_ID:-profile-unassigned}
+      CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
+      CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-slot-1}
+      CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
+      CB_BROKER_SHARED_SECRET: ${CB_BROKER_SHARED_SECRET:?CB_BROKER_SHARED_SECRET is required}
+      CB_BROKER_SUBMIT_SECRET: ${CB_BROKER_SUBMIT_SECRET:?CB_BROKER_SUBMIT_SECRET is required}
+      CB_BROKER_ADAPTER: ${CB_BROKER_ADAPTER:-basic}
+      CB_BROKER_SITE_ID: ${CB_BROKER_SITE_ID:?CB_BROKER_SITE_ID is required}
+      CB_BROKER_ORIGIN: ${CB_BROKER_ORIGIN:?CB_BROKER_ORIGIN is required}
+      CB_BROKER_SUCCESS_PATH: ${CB_BROKER_SUCCESS_PATH:?CB_BROKER_SUCCESS_PATH is required}
+      CB_VAULT_BASE_URL: ${CB_VAULT_BASE_URL:?CB_VAULT_BASE_URL is required}
+      CB_VAULT_EMAIL: ${CB_VAULT_EMAIL:?CB_VAULT_EMAIL is required}
+      CB_VAULT_PASSWORD: ${CB_VAULT_PASSWORD:?CB_VAULT_PASSWORD is required}
+    depends_on:
+      browser:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8084/health', timeout=3)"]
       interval: 10s

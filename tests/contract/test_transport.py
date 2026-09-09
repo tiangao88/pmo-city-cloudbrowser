@@ -53,6 +53,7 @@ def test_login_returns_only_status_to_agent() -> None:
         "username_ref": "acct-1",
         "site_id": "site-a",
         "current_url": "https://login.example.test/start",
+        "target_tab_id": "target-1",
     }
     with server.handle("/v1/credential/login", request) as response:
         body = response.body
@@ -72,6 +73,7 @@ def test_login_rejects_caller_overridden_principal_id() -> None:
         "username_ref": "acct-1",
         "site_id": "site-a",
         "current_url": "https://login.example.test/start",
+        "target_tab_id": "target-1",
         "principal_id": "bob@example.test",
     }
     with server.handle("/v1/credential/login", request) as response:
@@ -88,6 +90,7 @@ def test_login_replays_idempotent_result() -> None:
         "username_ref": "acct-1",
         "site_id": "site-a",
         "current_url": "https://login.example.test/start",
+        "target_tab_id": "target-1",
         "idempotency_key": "idem-9",
     }
     with server.handle("/v1/credential/login", request) as first:
@@ -111,6 +114,7 @@ def test_login_request_validation_returns_structured_error() -> None:
         "username_ref": "acct-1",
         "site_id": "site-a",
         "current_url": "https://login.example.test/start",
+        "target_tab_id": "target-1",
     }
     with server.handle("/v1/credential/login", request) as response:
         assert response.body["status"] == "failed"

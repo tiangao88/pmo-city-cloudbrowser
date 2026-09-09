@@ -2,16 +2,32 @@
 
 from __future__ import annotations
 
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import hmac
 import json
-from typing import Any, Callable
-from urllib.parse import urlsplit
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any, Callable, Mapping, Protocol
 
 from .browser_process import BrowserProcess
 from .chrome_adapter import ChromeBrowserAdapter
 from .transport import BrowserUnavailable
 
 _MAX_BODY = 8192
+
+
+class BrokerBasicAuthCapability(Protocol):
+    def state(self, *, target_id: str) -> dict[str, str | bool | None]: ...
+
+    def probe(self, *, target_id: str) -> dict[str, str | bool | None]: ...
+
+    def submit(
+        self,
+        origin: str,
+        username: str,
+        password: str,
+        *,
+        target_id: str,
+        success_path: str,
+    ) -> None: ...
 
 
 def create_browser_server(
@@ -22,6 +38,8 @@ def create_browser_server(
     release_version: str,
     address: tuple[str, int] = ("127.0.0.1", 9230),
     binding_listener: Callable[[Any], None] | None = None,
+    basic_auth: BrokerBasicAuthCapability | None = None,
+    broker_submit_secret: str = "",
 ) -> ThreadingHTTPServer:
     """Create the restricted browser API consumed by supervisor and agent control.
 
@@ -77,13 +95,18 @@ def create_browser_server(
                     if self.path == "/browser/pages":
                         self._send_json(200, {"urls": urls})
                     else:
-                        self._send_json(
-                            200,
-                            {"pages": [{"tab_id": f"tab-{i}", "url": url, "title": "untitled"} for i, url in enumerate(urls, 1)]},
-                        )
+                        pages = [
+                            {
+                                "tab_id": f"tab-{i}",
+                                "url": url,
+                                "title": "untitled",
+                            }
+                            for i, url in enumerate(urls, 1)
+                        ]
+                        self._send_json(200, {"pages": pages})
                     return
-                if urlsplit(self.path).path == "/agent/pages/info":
-                    self._send_json(200, adapter.page_info())
+                if self.path == "/broker/basic/state":
+                    self.send_error(405)
                     return
                 self.send_error(404)
             except BrowserUnavailable:
@@ -109,6 +132,55 @@ def create_browser_server(
                 elif self.path == "/agent/pages/type":
                     selector, text = self._read_text().split("\n", 1)
                     adapter.type_text(selector, text)
+                elif self.path == "/broker/basic/state":
+                    if not self._broker_authorized() or basic_auth is None:
+                        self._send_json(401, {"ok": False, "error_code": "unauthorized"})
+                        return
+                    payload = json.loads(self._read_text())
+                    if not isinstance(payload, dict):
+                        raise ValueError("Basic Auth state payload must be an object")
+                    target_id = payload.get("target_id")
+                    if not isinstance(target_id, str):
+                        raise ValueError("Basic Auth target_id is invalid")
+                    probe = getattr(basic_auth, "probe", None)
+                    probe_result = (
+                        probe(target_id=target_id)
+                        if callable(probe)
+                        else basic_auth.state(target_id=target_id)
+                    )
+                    if not isinstance(probe_result, Mapping):
+                        raise BrowserUnavailable("invalid Basic Auth probe state")
+                    self._send_json(200, probe_result)
+                    return
+                elif self.path == "/broker/basic/submit":
+                    if not self._broker_authorized() or basic_auth is None:
+                        self._send_json(401, {"ok": False, "error_code": "unauthorized"})
+                        return
+                    payload = json.loads(self._read_text())
+                    if not isinstance(payload, dict):
+                        raise ValueError("Basic Auth payload must be an object")
+                    origin = payload.get("origin")
+                    username = payload.get("username")
+                    password = payload.get("password")
+                    target_id = payload.get("target_id")
+                    success_path = payload.get("success_path")
+                    if not all(
+                        isinstance(value, str)
+                        for value in (origin, username, password, target_id, success_path)
+                    ):
+                        raise ValueError("Basic Auth payload is invalid")
+                    assert isinstance(origin, str)
+                    assert isinstance(username, str)
+                    assert isinstance(password, str)
+                    assert isinstance(target_id, str)
+                    assert isinstance(success_path, str)
+                    basic_auth.submit(
+                        origin,
+                        username,
+                        password,
+                        target_id=target_id,
+                        success_path=success_path,
+                    )
                 else:
                     self.send_error(404)
                     return
@@ -159,6 +231,14 @@ def create_browser_server(
                     self.log_error("binding listener raised; push still accepted")
             self._send_json(200, {"ok": True})
 
+        def _broker_authorized(self) -> bool:
+            candidate = self.headers.get("X-CB-Broker-Secret", "")
+            return bool(
+                basic_auth is not None
+                and len(broker_submit_secret) >= 16
+                and hmac.compare_digest(candidate, broker_submit_secret)
+            )
+
         def _read_text(self) -> str:
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -168,7 +248,7 @@ def create_browser_server(
                 raise ValueError("invalid body length")
             return self.rfile.read(length).decode("utf-8")
 
-        def _send_json(self, status: int, payload: dict[str, object]) -> None:
+        def _send_json(self, status: int, payload: Mapping[str, object]) -> None:
             body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")

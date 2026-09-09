@@ -23,6 +23,9 @@ class HttpAgentBrowser:
     def readiness(self) -> BrowserReadiness:
         return self.transport.readiness()
 
+    def live_binding(self) -> tuple[str, str]:
+        return self.transport.live_binding()
+
     def list_pages(self) -> list[dict[str, str]]:
         return self.transport.list_pages()
 
@@ -57,20 +60,41 @@ class HttpAgentBrowserTransport:
         self.expected_owner = principal_id
         self.expected_generation = generation
 
-    def readiness(self) -> BrowserReadiness:
+    def live_binding(self) -> tuple[str, str]:
+        readiness = self._readiness_payload()
+        if not readiness["cdp_ok"]:
+            raise BrowserUnavailable("agent browser is not ready")
+        return str(readiness["owner"]), str(readiness["generation"])
+
+    def _readiness_payload(self) -> dict[str, str | bool]:
         raw = self.client.request("GET", "/agent/readiness")
         if not isinstance(raw, dict):
             raise BrowserUnavailable("invalid agent browser readiness")
         owner, generation, cdp_ok = raw.get("owner"), raw.get("generation"), raw.get("cdp_ok")
-        if not isinstance(owner, str) or not isinstance(generation, str) or not isinstance(cdp_ok, bool):
+        if (
+            not isinstance(owner, str)
+            or not isinstance(generation, str)
+            or not isinstance(cdp_ok, bool)
+        ):
             raise BrowserUnavailable("invalid agent browser readiness")
+        return {"owner": owner, "generation": generation, "cdp_ok": cdp_ok}
+
+    def readiness(self) -> BrowserReadiness:
+        readiness = self._readiness_payload()
+        owner = str(readiness["owner"])
+        generation = str(readiness["generation"])
+        cdp_ok = bool(readiness["cdp_ok"])
         if owner != self.expected_owner or generation != self.expected_generation:
             raise BrowserUnavailable("agent browser readiness binding mismatch")
         return BrowserReadiness(owner, generation, cdp_ok)
 
     def list_pages(self) -> list[dict[str, str]]:
         raw = self.client.request("GET", "/agent/pages")
-        if not isinstance(raw, dict) or not isinstance(raw.get("pages"), list) or len(raw["pages"]) > 32:
+        if (
+            not isinstance(raw, dict)
+            or not isinstance(raw.get("pages"), list)
+            or len(raw["pages"]) > 32
+        ):
             raise BrowserUnavailable("invalid agent browser pages response")
         pages: list[dict[str, str]] = []
         for page in raw["pages"]:
@@ -89,7 +113,9 @@ class HttpAgentBrowserTransport:
         self._expect_ok(self.client.request("POST", "/agent/pages/click", body=selector))
 
     def type_text(self, selector: str, text: str) -> None:
-        self._expect_ok(self.client.request("POST", "/agent/pages/type", body=selector + "\n" + text))
+        self._expect_ok(
+            self.client.request("POST", "/agent/pages/type", body=selector + "\n" + text)
+        )
 
     def page_info(self, selector: str | None = None) -> dict[str, str]:
         path = "/agent/pages/info"

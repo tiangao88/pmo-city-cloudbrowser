@@ -182,6 +182,9 @@ def make_fake_sidecar(
             if selector in submit_selectors:
                 submitted["flag"] = True
 
+        def live_binding(self):
+            return "alice@example.test", "g1"
+
         def readiness(self):
             calls.readiness += 1
             return None
@@ -207,6 +210,7 @@ def broker_env(monkeypatch, fake_vault):
     monkeypatch.setenv("CB_BROWSER_ID", "browser-1")
     monkeypatch.setenv("CB_BINDING_GENERATION", "g1")
     monkeypatch.setenv("CB_BROKER_SHARED_SECRET", "broker-secret-0123456789abcdef")
+    monkeypatch.setenv("CB_BROKER_SUBMIT_SECRET", "submit-secret-0123456789abcdef")
     monkeypatch.setenv("CB_BROKER_SITE_ID", "site-a")
     monkeypatch.setenv("CB_BROKER_ORIGIN", "https://example.test")
     monkeypatch.setenv("CB_BROKER_USERNAME_SELECTOR", "#user")
@@ -251,6 +255,7 @@ def test_layer4_login_full_chain_authenticated(broker_env) -> None:
                 "username_ref": "PMO Test Site",
                 "site_id": "site-a",
                 "current_url": "https://example.test/login",
+                "target_tab_id": "target-1",
             },
         )
         assert status == 200
@@ -283,6 +288,9 @@ def test_layer4_browser_unreachable_fails_closed(broker_env) -> None:
         def click(self, selector):  # noqa: ARG002
             raise RuntimeError("sidecar offline")
 
+        def live_binding(self):
+            return "alice@example.test", "g1"
+
         def readiness(self):
             calls.readiness += 1
             raise RuntimeError("sidecar offline")
@@ -307,6 +315,7 @@ def test_layer4_browser_unreachable_fails_closed(broker_env) -> None:
                 "username_ref": "PMO Test Site",
                 "site_id": "site-a",
                 "current_url": "https://example.test/login",
+                "target_tab_id": "target-1",
             },
         )
         assert body["status"] == "failed"
@@ -333,6 +342,7 @@ def test_layer4_form_failure_selectors_fail_closed(broker_env) -> None:
                 "username_ref": "PMO Test Site",
                 "site_id": "site-a",
                 "current_url": "https://example.test/login",
+                "target_tab_id": "target-1",
             },
         )
         assert body["status"] == "failed"

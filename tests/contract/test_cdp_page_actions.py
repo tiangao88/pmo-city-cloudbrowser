@@ -214,6 +214,50 @@ def test_build_browser_service_wires_the_real_page_actions(monkeypatch) -> None:
     assert isinstance(actions, CdpPageActionAdapter)
 
 
+def test_build_browser_service_wires_basic_auth_secret_gate(monkeypatch) -> None:
+    """Production browser runtime must wire BasicAuthCapability + secret gate."""
+    import cloudbrowser.browser_service as browser_service
+    from cloudbrowser.browser_slots.basic_auth import BasicAuthCapability
+
+    for key, value in {
+        "CB_INSTANCE_ID": "test-instance",
+        "CB_RELEASE_VERSION": "test-release",
+        "CB_PRINCIPAL_ID": "principal-unassigned",
+        "CB_BINDING_GENERATION": "generation-0",
+        "CB_BROKER_SUBMIT_SECRET": "submit-secret-0123456789abcdef",
+    }.items():
+        monkeypatch.setenv(key, value)
+    captured: dict[str, object] = {}
+
+    class _FakeServer:
+        def serve_forever(self):
+            pass
+
+        def server_close(self):
+            pass
+
+    def create_spy(*args, **kwargs):
+        captured.update(kwargs)
+        return _FakeServer()
+
+    monkeypatch.setattr(browser_service, "create_browser_server", create_spy)
+    fake_registry = type(
+        "R",
+        (),
+        {
+            "on_binding": staticmethod(lambda b: None),
+            "attach_stop_event": lambda self, e: None,
+            "close": lambda self: None,
+        },
+    )
+    monkeypatch.setattr(browser_service, "DownloadWatcherRegistry", lambda: fake_registry)
+
+    browser_service.build_browser_service()
+
+    assert isinstance(captured["basic_auth"], BasicAuthCapability)
+    assert captured["broker_submit_secret"] == "submit-secret-0123456789abcdef"
+
+
 def test_handshake_request_target_never_ends_in_a_bare_question_mark() -> None:
     """Chrome 500s a DevTools WS handshake with a trailing '?' (live on dev01,
     2026-09-08): the target must omit the query separator when there is no

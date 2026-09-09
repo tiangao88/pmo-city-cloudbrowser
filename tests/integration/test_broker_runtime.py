@@ -89,7 +89,6 @@ class FakeVaultHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _send_sync(self) -> None:
-        from cloudbrowser.security import vault_crypto as crypto
 
         auth = self.headers.get("Authorization", "")
         assert auth == "Bearer live-access-token"
@@ -168,6 +167,7 @@ def broker_server(monkeypatch, fake_vault):
     monkeypatch.setenv("CB_BROWSER_ID", "browser-1")
     monkeypatch.setenv("CB_BINDING_GENERATION", "g1")
     monkeypatch.setenv("CB_BROKER_SHARED_SECRET", "broker-secret-0123456789abcdef")
+    monkeypatch.setenv("CB_BROKER_SUBMIT_SECRET", "submit-secret-0123456789abcdef")
     monkeypatch.setenv("CB_BROKER_SITE_ID", "site-a")
     monkeypatch.setenv("CB_BROKER_ORIGIN", "https://example.test")
     monkeypatch.setenv("CB_BROKER_USERNAME_SELECTOR", "#username")
@@ -210,6 +210,7 @@ def test_full_stack_status_only_response(broker_server) -> None:
             "username_ref": "PMO Test Site",
             "site_id": "site-a",
             "current_url": "https://example.test/login",
+            "target_tab_id": "target-1",
         },
     )
     assert status == 200
@@ -229,6 +230,7 @@ def test_full_stack_rejects_bad_secret(broker_server) -> None:
             "username_ref": "PMO Test Site",
             "site_id": "site-a",
             "current_url": "https://example.test/login",
+            "target_tab_id": "target-1",
         },
     )
     assert body["status"] == "failed"
@@ -245,6 +247,7 @@ def test_full_stack_unknown_ref_fails_closed(broker_server) -> None:
             "username_ref": "no-such-item",
             "site_id": "site-a",
             "current_url": "https://example.test/login",
+            "target_tab_id": "target-1",
         },
     )
     assert body["status"] == "failed"

@@ -7,7 +7,12 @@ import os
 import shlex
 import threading
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from cloudbrowser.browser_slots.lifecycle import BrowserBinding
+
+from cloudbrowser.browser_slots.basic_auth import BasicAuthCapability
 from cloudbrowser.browser_slots.browser_process import (
     BrowserProcess,
     BrowserProcessConfig,
@@ -17,7 +22,9 @@ from cloudbrowser.browser_slots.browser_server import create_browser_server
 from cloudbrowser.browser_slots.chrome_adapter import ChromeBrowserAdapter, ChromeHttpClient
 
 
-def build_browser_service() -> tuple[BrowserProcess, object, threading.Event]:
+def build_browser_service() -> tuple[
+    BrowserProcess, object, threading.Event, "DownloadWatcherRegistry"
+]:
     """Construct the browser process, adapter server, and shutdown signal."""
     instance_id = os.environ.get("CB_INSTANCE_ID")
     release_version = os.environ.get("CB_RELEASE_VERSION")
@@ -40,17 +47,25 @@ def build_browser_service() -> tuple[BrowserProcess, object, threading.Event]:
             generation=generation,
             extra_args=tuple(shlex.split(os.environ.get("CB_CHROME_EXTRA_ARGS", ""))),
             download_dir=(
-                Path(download_dir) if (download_dir := os.environ.get("CB_BROWSER_DOWNLOAD_DIR")) else None
+                Path(download_dir)
+                if (download_dir := os.environ.get("CB_BROWSER_DOWNLOAD_DIR"))
+                else None
             ),
         ),
         probe=lambda: chrome_version_is_ready(chrome.json_request("/json/version")),
     )
-    from cloudbrowser.browser_slots.page_actions import CdpPageActionAdapter
+    from cloudbrowser.browser_slots.page_actions import CdpPageActionAdapter, _WebSocket
 
     # Real page actions (navigate, page_info) via the local DevTools endpoint.
     # click/type stay fail-closed inside the adapter until an approved
     # element-interaction channel exists (decision 2026-09-08).
     page_actions = CdpPageActionAdapter(chrome)
+    basic_auth = BasicAuthCapability(
+        chrome,
+        ws_factory=lambda url, timeout_s: _WebSocket(
+            url, open_timeout_s=3.0, command_timeout_s=timeout_s
+        ),
+    )
     adapter = ChromeBrowserAdapter(
         chrome,
         owner=owner,
@@ -67,11 +82,13 @@ def build_browser_service() -> tuple[BrowserProcess, object, threading.Event]:
         release_version=release_version,
         address=("0.0.0.0", service_port),
         binding_listener=registry.on_binding,
+        basic_auth=basic_auth,
+        broker_submit_secret=os.environ.get("CB_BROKER_SUBMIT_SECRET", ""),
     )
     return process, server, threading.Event(), registry
 
 
-def build_download_watcher(binding: "PrincipalBinding | None" = None):
+def build_download_watcher(binding: "object | None" = None):
     """Construct the production download emitter from server configuration.
 
     The download directory, the internal CloudFiles ingest receiver URL, and
@@ -124,6 +141,8 @@ def build_download_watcher(binding: "PrincipalBinding | None" = None):
     )
     from cloudbrowser.cloudfiles.contracts import PrincipalBinding
     from cloudbrowser.cloudfiles.ingest_client import IngestClient
+    if binding is not None and not isinstance(binding, PrincipalBinding):
+        raise SystemExit("download watcher binding is invalid")
 
     if binding is None:
         principal_id = os.environ.get("CB_PRINCIPAL_ID", "principal-unassigned")
@@ -160,7 +179,7 @@ def build_download_watcher(binding: "PrincipalBinding | None" = None):
 _MAX_BINDING_FIELD = 256
 
 
-def parse_binding_push(payload: object, *, provided_secret: str | None) -> "BrowserBinding":
+def parse_binding_push(payload: object, *, provided_secret: str | None) -> "BrowserBinding":  # noqa: F821
     """Validate a trusted-secret-gated binding push from the slot supervisor.
 
     The secret gate runs before any payload inspection: without a configured
@@ -229,7 +248,6 @@ class DownloadWatcherRegistry:
     def on_binding(self, binding) -> None:
         """Binding-push callback: build or rotate the download watcher."""
 
-        from cloudbrowser.cloudfiles.browser_downloads import BrowserDownloadWatcher
         from cloudbrowser.cloudfiles.contracts import PrincipalBinding
 
         principal = PrincipalBinding(

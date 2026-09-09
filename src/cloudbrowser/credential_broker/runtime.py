@@ -12,7 +12,9 @@ Environment:
 - ``CB_VAULT_EMAIL`` / ``CB_VAULT_PASSWORD`` (required; passed by the
   platform secret store, never written to disk or logs);
 - ``CB_BROKER_SHARED_SECRET`` (required; callers must present it as
-  ``X-CB-Broker-Secret`` — the same pattern as identity-link);
+  ``X-CB-Broker-Secret``);
+- ``CB_BROKER_SUBMIT_SECRET`` (required; distinct one-way secret used only
+  from credential-broker to the browser's narrow Basic Auth capability);
 - ``CB_BROKER_SITE_ID`` / ``CB_BROKER_ORIGIN`` / selector env vars for the
   single declared form-login site (``CB_BROKER_USERNAME_SELECTOR`` etc.);
 - ``CB_INSTANCE_ID``, ``CB_RELEASE_VERSION``, ``CB_PORT`` (service runtime).
@@ -33,8 +35,12 @@ from typing import Callable, Mapping
 from urllib.parse import urlsplit
 
 from cloudbrowser.agent_browser_http import HttpAgentBrowser, HttpAgentBrowserTransport
+from cloudbrowser.basic_auth_http import HttpBasicAuthBrowser
+from cloudbrowser.credential_broker.adapters.basic import (
+    BasicAuthAdapter,
+    BasicAuthDeclaration,
+)
 from cloudbrowser.credential_broker.adapters.form import (
-    CredentialMaterial,
     FormLoginAdapter,
     FormLoginDeclaration,
 )
@@ -43,7 +49,7 @@ from cloudbrowser.credential_broker.api import (
     BrokerHttpServer,
     ServerIdentity,
 )
-from cloudbrowser.credential_broker.audit import AuditEventType
+from cloudbrowser.credential_broker.contracts import LoginIntent
 from cloudbrowser.credential_broker.coordinator import BrokerCoordinator
 from cloudbrowser.credential_broker.service import ResolvedBinding
 from cloudbrowser.security.vault_client import VaultwardenClient
@@ -67,7 +73,11 @@ def make_urllib_transport(base_url: str) -> Callable[..., tuple[int, bytes]]:
     """HTTPS-capable transport with the host pinned to the configured base."""
 
     def transport(
-        method: str, url: str, *, headers: Mapping[str, str] | None = None, body: bytes | None = None
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        body: bytes | None = None,
     ) -> tuple[int, bytes]:
         if not url.startswith(base_url.rstrip("/") + "/"):
             raise ValueError("transport refused a URL outside the configured vault host")
@@ -157,25 +167,44 @@ def build_broker_api(
     *,
     browser_factory: Callable[[], object] | None = None,
     vault_transport: Callable[..., tuple[int, bytes]] | None = None,
+    credential_fetcher: Callable[[str], object] | None = None,
 ) -> BrokerHttpServer:
     """Assemble the full broker stack from environment configuration.
 
-    ``browser_factory`` and ``vault_transport`` are injection seams for
-    tests; production uses ``make_default_browser`` and
-    ``make_urllib_transport``. The vault password lives only in this
+    ``browser_factory``, ``vault_transport``, and ``credential_fetcher``
+    are injection seams for tests; production uses
+    ``make_default_browser``, ``make_urllib_transport``, and
+    ``VaultwardenClient.fetch``. The vault password lives only in this
     process's environment (never on disk, never logged).
     """
-    for name in _REQUIRED:
+    adapter_kind = os.environ.get("CB_BROKER_ADAPTER", "form").strip().lower()
+    if adapter_kind not in {"form", "basic"}:
+        raise SystemExit("CB_BROKER_ADAPTER must be 'form' or 'basic'")
+    required = list(_REQUIRED)
+    if credential_fetcher is not None:
+        required = []
+    for name in required:
         if not os.environ.get(name):
             raise SystemExit(f"{name} is required")
-    for name, _field in _SELECTORS:
-        if not os.environ.get(name):
-            raise SystemExit(f"{name} is required")
+    if adapter_kind == "form":
+        for name, _field in _SELECTORS:
+            if not os.environ.get(name):
+                raise SystemExit(f"{name} is required")
+    elif not os.environ.get("CB_BROKER_SUCCESS_PATH"):
+        raise SystemExit("CB_BROKER_SUCCESS_PATH is required for Basic Auth")
 
     if browser_factory is None:
         browser_factory = make_default_browser
-    if vault_transport is None:
+    if credential_fetcher is None and vault_transport is None:
         vault_transport = make_urllib_transport(os.environ["CB_VAULT_BASE_URL"])
+
+    broker_secret = os.environ.get("CB_BROKER_SHARED_SECRET", "")
+    if len(broker_secret) < 16:
+        raise SystemExit("CB_BROKER_SHARED_SECRET must be at least 16 characters")
+
+    browser_submit_secret = os.environ.get("CB_BROKER_SUBMIT_SECRET", "")
+    if len(browser_submit_secret) < 16:
+        raise SystemExit("CB_BROKER_SUBMIT_SECRET must be at least 16 characters")
 
     principal = AuthenticatedPrincipal(
         profile_id=os.environ.get("CB_PROFILE_ID", "profile-unassigned"),
@@ -191,25 +220,93 @@ def build_broker_api(
 
     site_id = os.environ["CB_BROKER_SITE_ID"]
     origin = os.environ["CB_BROKER_ORIGIN"]
-    declaration = FormLoginDeclaration(
-        site_id=site_id,
-        origin=origin,
-        username_selector=os.environ["CB_BROKER_USERNAME_SELECTOR"],
-        password_selector=os.environ["CB_BROKER_PASSWORD_SELECTOR"],
-        submit_selector=os.environ["CB_BROKER_SUBMIT_SELECTOR"],
-        success_selector=os.environ["CB_BROKER_SUCCESS_SELECTOR"],
-    )
+    if adapter_kind == "basic":
+        declaration: object = BasicAuthDeclaration(
+            site_id=site_id,
+            origin=origin,
+            success_path=os.environ["CB_BROKER_SUCCESS_PATH"],
+        )
+    else:
+        declaration = FormLoginDeclaration(
+            site_id=site_id,
+            origin=origin,
+            username_selector=os.environ["CB_BROKER_USERNAME_SELECTOR"],
+            password_selector=os.environ["CB_BROKER_PASSWORD_SELECTOR"],
+            submit_selector=os.environ["CB_BROKER_SUBMIT_SELECTOR"],
+            success_selector=os.environ["CB_BROKER_SUCCESS_SELECTOR"],
+        )
 
-    vault = VaultwardenClient(
-        base_url=os.environ["CB_VAULT_BASE_URL"],
-        email=os.environ["CB_VAULT_EMAIL"],
-        password=os.environ["CB_VAULT_PASSWORD"],
-        transport=vault_transport,
-    )
+    if credential_fetcher is None:
+        assert vault_transport is not None
+        vault = VaultwardenClient(
+            base_url=os.environ["CB_VAULT_BASE_URL"],
+            email=os.environ["CB_VAULT_EMAIL"],
+            password=os.environ["CB_VAULT_PASSWORD"],
+            transport=vault_transport,
+        )
+        credential_fetcher = vault.fetch
 
-    def make_adapter(_site_id: str, _declaration: object) -> Callable[..., object]:
-        adapter = FormLoginAdapter()
+    def make_adapter(
+        _site_id: str, _declaration: object, intent: LoginIntent
+    ) -> Callable[..., object]:
         browser = browser_factory()
+        live_binding = getattr(browser, "live_binding", None)
+        if not callable(live_binding):
+            raise RuntimeError("browser does not expose live binding proof")
+        live = live_binding()
+        if (
+            not isinstance(live, tuple)
+            or len(live) != 2
+            or not all(isinstance(value, str) for value in live)
+        ):
+            raise RuntimeError("browser returned invalid live binding proof")
+        live_owner, live_generation = live
+        if (
+            live_owner != intent.principal_id
+            or live_generation != intent.binding_generation
+        ):
+            raise RuntimeError("browser live binding does not match login intent")
+        transport = getattr(browser, "transport", None)
+        rotate_binding = getattr(transport, "rotate_binding", None)
+        if callable(rotate_binding):
+            rotate_binding(live_owner, live_generation)
+            readiness = getattr(browser, "readiness", None)
+            if not callable(readiness):
+                raise RuntimeError("browser does not expose readiness proof")
+            readiness()
+        # Re-read browser ownership immediately before invoking the
+        # credential-bearing adapter. This closes reassignment races that can
+        # occur after vault retrieval or challenge probing.
+        live_before_fill = live_binding()
+        if live_before_fill != (intent.principal_id, intent.binding_generation):
+            raise RuntimeError("browser binding changed before credential fill")
+        if adapter_kind == "basic":
+            adapter = BasicAuthAdapter()
+            if callable(getattr(browser, "submit_basic_auth", None)):
+                # Direct BasicAuthBrowser injection (integration tests and
+                # future in-process broker capability).
+                basic_browser = browser
+            else:
+                # Production path: HttpAgentBrowser -> secret-gated internal
+                # browser API. The normal agent surface has no Basic methods.
+                transport = getattr(browser, "transport", None)
+                client_factory = getattr(transport, "client", None)
+                if not callable(client_factory):
+                    raise RuntimeError("browser does not provide a Basic Auth capability")
+                basic_browser = HttpBasicAuthBrowser(
+                    client_factory(),
+                    shared_secret=browser_submit_secret,
+                )
+            target_id = intent.target_tab_id
+            if not isinstance(target_id, str) or not target_id:
+                raise RuntimeError("Basic Auth login requires target_tab_id")
+            return lambda declaration, material: adapter.execute(
+                declaration,
+                material,
+                basic_browser,
+                target_id=target_id,
+            )
+        adapter = FormLoginAdapter()
         return lambda declaration, material: adapter.execute(
             declaration, material, SidecarFormBrowser(browser)
         )
@@ -222,14 +319,13 @@ def build_broker_api(
         audit_emit=_log_audit_event,
     )
 
-    secret = os.environ.get("CB_BROKER_SHARED_SECRET", "")
-    resolver = SharedSecretPrincipalResolver(secret=secret, principal=principal)
+    resolver = SharedSecretPrincipalResolver(secret=broker_secret, principal=principal)
 
     return BrokerHttpServer(
         server_identity=identity,
         principal_for=resolver,
         coordinator=coordinator,
-        fetch_credentials=vault.fetch,
+        fetch_credentials=credential_fetcher,
     )
 
 

@@ -2,28 +2,28 @@
 
 The Credential Broker owns deterministic, status-only login execution.
 
-## Current slice (step 13)
+## Current slice (W3-1 broker login E2E)
 
-This repository now contains the generic, dependency-injected broker boundary:
+The service now runs the real status-only broker runtime rather than a
+health-only shell. The form and HTTP Basic adapters are wired locally; the SSO
+adapter and live image/deployment qualification remain open.
+
+Implemented:
 
 - server-bound intent validation and status-only results;
 - deterministic coordinator with a second binding check after credential fetch
   and immediately before adapter execution;
-- exact-origin form, HTTP Basic, SSO, and RFC 6238 TOTP adapter contracts;
-- one-shot, TTL-bound human MFA handoff without code retention;
+- per-call Vaultwarden unlock (`prelogin → grant → sync → decrypt`), with no
+  retained access/refresh token;
+- exact-origin form and HTTP Basic adapter dispatch;
+- a secret-gated broker-only Basic browser capability using CDP
+  `Fetch.authRequired` / `Fetch.continueWithAuth` (not exposed through the
+  router/agent-control allowlist);
 - bounded idempotency and `cloudbrowser.audit.v1` metadata events with
-  credential-shaped payload rejection;
-- synthetic contract/security coverage only.
+  credential-shaped payload rejection.
 
-The broker never returns passwords, tokens, cookies, storage values, page
-content, network bodies, raw exceptions, OTP seeds, or one-time codes.
+## Remaining gate
 
-## Deliberate non-goals
-
-No live Vaultwarden/GrantHub access, Authentik/TinyAuth daemon, network-hook
-capture, router-side unwrap, or real user login is included in this slice.
-The production grant/session provider and browser capability must be injected
-behind these contracts and separately qualified before the service can become
-an installable live credential broker. The v0.2.0-dev1 release manifest is
-installable from source-level qualification; live broker qualification remains
-Step 19 and no live credential operation is implied.
+SSO/Authentik and MFA live qualification are not included yet. The production
+Vaultwarden item, ephemeral browser test slot, image publication, live rollout,
+and real login proof remain separately gated before W3-1 can be marked PASS.

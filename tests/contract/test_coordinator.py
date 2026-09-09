@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cloudbrowser.credential_broker import BrokerResult, LoginIntent
+from cloudbrowser.credential_broker import LoginIntent
 from cloudbrowser.credential_broker.audit import AuditEventType
 from cloudbrowser.credential_broker.coordinator import BrokerCoordinator
 from cloudbrowser.credential_broker.service import AdapterResult, ResolvedBinding
@@ -70,7 +70,7 @@ def test_coordinator_audits_accepted_login() -> None:
         resolve_initial=lambda _: make_binding(),
         resolve_pre_fill=lambda _: make_binding(),
         declarations={"site-a": _FakeDeclaration()},
-        adapter_selector=lambda site, decl: adapter,
+        adapter_selector=lambda site, decl, intent: adapter,
         audit_emit=lambda event_type, fields: trace.events.append((event_type, fields)),
     )
 
@@ -87,7 +87,7 @@ def test_coordinator_re_runs_binding_resolution_pre_fill_and_rejects_change() ->
         resolve_initial=lambda _: make_binding(),
         resolve_pre_fill=lambda _: make_binding(generation="g2"),
         declarations={"site-a": _FakeDeclaration()},
-        adapter_selector=lambda site, decl: adapter,
+        adapter_selector=lambda site, decl, intent: adapter,
         audit_emit=lambda event_type, fields: trace.events.append((event_type, fields)),
     )
 
@@ -105,7 +105,7 @@ def test_coordinator_emits_mfa_required_audit_when_adapter_returns_mfa() -> None
         resolve_initial=lambda _: make_binding(),
         resolve_pre_fill=lambda _: make_binding(),
         declarations={"site-a": _FakeDeclaration()},
-        adapter_selector=lambda site, decl: adapter,
+        adapter_selector=lambda site, decl, intent: adapter,
         audit_emit=lambda event_type, fields: trace.events.append((event_type, fields)),
     )
 
@@ -136,7 +136,7 @@ def test_coordinator_masks_credential_in_audit_fields() -> None:
         resolve_initial=lambda _: make_binding(),
         resolve_pre_fill=lambda _: make_binding(),
         declarations={"site-a": _FakeDeclaration()},
-        adapter_selector=lambda site, decl: adapter,
+        adapter_selector=lambda site, decl, intent: adapter,
         audit_emit=emit,
     )
 
@@ -161,7 +161,7 @@ def test_coordinator_returns_not_shared_when_credential_unavailable() -> None:
         resolve_initial=lambda _: make_binding(),
         resolve_pre_fill=lambda _: make_binding(),
         declarations={"site-a": _FakeDeclaration()},
-        adapter_selector=lambda site, decl: adapter,
+        adapter_selector=lambda site, decl, intent: adapter,
         audit_emit=lambda *_: None,
     )
 

@@ -153,12 +153,22 @@ single authoritative view of done vs open.
   adapter cannot navigate or list pages (protocol is the boundary).
   Fail-closed on unreachable sidecar and wrong success selector.
 
-  **Still to land for W3-1 close:** basic (HTTP Basic Auth) and sso
-  (Authentik pmoc-sso) adapters. Same shape: vault producer is shared,
-  the adapter selector dispatches by `site_id`/`origin` to
-  `BasicAuthAdapter.execute` or `SSOAdapter.execute` (both exist in
-  `src/cloudbrowser/credential_broker/adapters/`), each with its own
-  test against a disposable target site.
+  **Basic adapter SHIPPED locally (2026-09-09; live deployment not yet
+  attempted):** runtime dispatch now selects `BasicAuthAdapter` with a
+  `BasicAuthDeclaration`; the broker-only browser channel is separately
+  secret-gated at `/broker/basic/state` + `/broker/basic/submit` and is
+  unreachable from router/agent-control. Chrome challenge handling uses
+  bounded CDP `Fetch.authRequired` / `Fetch.continueWithAuth`, exact HTTPS
+  origins, one matching challenge, no URL credentials, foreign-origin
+  cancellation, challenge-loop/origin-change checks, and boolean-only
+  application proof. A disposable local HTTPS server provides a real 401
+  Basic challenge for the E2E gate. Verification: focused 25 passed;
+  `make check` **746 passed**, all validators PASS; CloudFiles boundary
+  80 passed; compileall and diff-check clean.
+
+  **Still to land for W3-1 close:** sso (Authentik pmoc-sso) adapter, then
+  live image qualification/deploy and E2E against the real browser/vault.
+  The shared per-call Vaultwarden producer is already complete.
 - **W3-2 — adapter task post-refactor:** Authentik broker-client hardening
   + audit enhancement (superseded form; revisit after W3-1 proves the
   generic path).

@@ -5,12 +5,11 @@ from __future__ import annotations
 from typing import Callable, Mapping, Protocol
 
 from .audit import AuditEmitter, AuditEventType, build_event
-from .contracts import BrokerResult, LoginIntent, SiteDeclaration
+from .contracts import BrokerResult, LoginIntent
 from .idempotency import IdempotencyStore
 from .service import AdapterResult, BindingMismatch, BrokerService, ResolvedBinding, StaleBinding
 
-
-AdapterSelector = Callable[[str, object], "_AdapterCall"]
+AdapterSelector = Callable[[str, object, LoginIntent], "_AdapterCall"]
 
 
 class _AdapterCall(Protocol):
@@ -87,7 +86,7 @@ class BrokerCoordinator:
             return self._remember(intent, result)
 
         try:
-            adapter = self._adapter_selector(intent.site_id, declaration)
+            adapter = self._adapter_selector(intent.site_id, declaration, intent)
             outcome = adapter(declaration, material)
             result = BrokerService.result_from_adapter(intent.request_id, outcome)
         except ValueError:

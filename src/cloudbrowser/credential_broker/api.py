@@ -60,24 +60,48 @@ class BrokerHttpServer:
         try:
             principal = self._principal_for(str(payload.get("auth_token", "")))
         except Exception:
-            yield BrokerResponse(body=BrokerResult(request_id, "failed", "invalid_auth").to_public_dict())
+            yield BrokerResponse(
+                body=BrokerResult(request_id, "failed", "invalid_auth").to_public_dict()
+            )
             return
 
         mismatch = _caller_binding_mismatch(payload, principal)
         if mismatch:
-            yield BrokerResponse(body=BrokerResult(request_id, "failed", "binding_mismatch").to_public_dict())
+            yield BrokerResponse(
+                body=BrokerResult(
+                    request_id, "failed", "binding_mismatch"
+                ).to_public_dict()
+            )
             return
         if not request_id or request_id == "missing":
-            yield BrokerResponse(body=BrokerResult("missing", "failed", "invalid_request").to_public_dict())
+            yield BrokerResponse(
+                body=BrokerResult("missing", "failed", "invalid_request").to_public_dict()
+            )
             return
         username_ref = payload.get("username_ref")
         site_id = payload.get("site_id")
         current_url = payload.get("current_url")
-        if not isinstance(username_ref, str) or not username_ref or not isinstance(site_id, str) or not site_id:
-            yield BrokerResponse(body=BrokerResult(request_id, "failed", "invalid_request").to_public_dict())
+        if (
+            not isinstance(username_ref, str)
+            or not username_ref
+            or not isinstance(site_id, str)
+            or not site_id
+        ):
+            yield BrokerResponse(
+                body=BrokerResult(request_id, "failed", "invalid_request").to_public_dict()
+            )
             return
         if not isinstance(current_url, str) or not current_url:
-            yield BrokerResponse(body=BrokerResult(request_id, "failed", "invalid_request").to_public_dict())
+            yield BrokerResponse(
+                body=BrokerResult(request_id, "failed", "invalid_request").to_public_dict()
+            )
+            return
+        if not isinstance(payload.get("target_tab_id"), str) or not payload.get(
+            "target_tab_id"
+        ):
+            yield BrokerResponse(
+                body=BrokerResult(request_id, "failed", "invalid_request").to_public_dict()
+            )
             return
 
         if self._coordinator is None or self._fetch_credentials is None:

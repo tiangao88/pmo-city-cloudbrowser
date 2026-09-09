@@ -5,14 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from cloudbrowser.credential_broker import AdapterResult, BrokerResult, LoginIntent, SiteDeclaration
-from cloudbrowser.credential_broker.adapters.basic import BasicAuthAdapter, BasicAuthDeclaration, CredentialMaterial as BasicMaterial
+from cloudbrowser.credential_broker.adapters.basic import BasicAuthAdapter, BasicAuthDeclaration
+from cloudbrowser.credential_broker.adapters.basic import CredentialMaterial as BasicMaterial
 from cloudbrowser.credential_broker.adapters.human_handoff import (
     HumanHandoffStore,
     human_handoff_request,
     human_handoff_submit,
 )
 from cloudbrowser.credential_broker.adapters.sso import SSOAdapter, SSODeclaration
-from cloudbrowser.credential_broker.adapters.totp import TOTPAdapter, TOTPDeclaration, TOTPMaterial, compute_totp
+from cloudbrowser.credential_broker.adapters.totp import (
+    TOTPAdapter,
+    TOTPDeclaration,
+    TOTPMaterial,
+    compute_totp,
+)
 from cloudbrowser.credential_broker.coordinator import BrokerCoordinator
 from cloudbrowser.credential_broker.service import ResolvedBinding
 
@@ -25,20 +31,28 @@ class BasicBrowser:
         self.index = 0
         self.calls: list[tuple[str, str, str]] = []
 
-    def current_url(self) -> str:
+    def current_url(self, *, target_id: str) -> str:
         return self.urls[min(self.index, len(self.urls) - 1)]
 
-    def challenge_origin(self) -> str | None:
+    def challenge_origin(self, *, target_id: str) -> str | None:
         return self.challenges[min(self.index, len(self.challenges) - 1)]
 
-    def has_basic_auth_challenge(self, origin: str) -> bool:
-        return self.challenge_origin() == origin
+    def has_basic_auth_challenge(self, origin: str, *, target_id: str) -> bool:
+        return self.challenge_origin(target_id=target_id) == origin
 
-    def submit_basic_auth(self, origin: str, username: str, password: str) -> None:
+    def submit_basic_auth(
+        self,
+        origin: str,
+        username: str,
+        password: str,
+        *,
+        target_id: str,
+        success_path: str,
+    ) -> None:
         self.calls.append((origin, username, password))
         self.index += 1
 
-    def application_authenticated(self) -> bool:
+    def application_authenticated(self, *, target_id: str = "target-1") -> bool:
         return self.authenticated
 
 
@@ -60,7 +74,7 @@ class TOTPBrowser:
     def click(self, selector: str) -> None:
         self.clicked.append(selector)
 
-    def application_authenticated(self) -> bool:
+    def application_authenticated(self, *, target_id: str = "target-1") -> bool:
         return self.authenticated
 
 
@@ -128,7 +142,10 @@ def test_basic_auth_requires_a_challenge_and_application_proof() -> None:
         ["https://login.example.test", None],
     )
     result = BasicAuthAdapter().execute(
-        BasicAuthDeclaration("basic", "https://login.example.test"), material(), browser
+        BasicAuthDeclaration("basic", "https://login.example.test", success_path="/home"),
+        material(),
+        browser,
+        target_id="target-1",
     )
     assert result == AdapterResult("authenticated", True)
     assert browser.calls == [("https://login.example.test", "alice@example.test", "synthetic-password")]
@@ -140,7 +157,10 @@ def test_basic_auth_fails_closed_on_a_challenge_loop() -> None:
         ["https://login.example.test", "https://login.example.test"],
     )
     result = BasicAuthAdapter().execute(
-        BasicAuthDeclaration("basic", "https://login.example.test"), material(), browser
+        BasicAuthDeclaration("basic", "https://login.example.test", success_path="/home"),
+        material(),
+        browser,
+        target_id="target-1",
     )
     assert result == AdapterResult("failed", False, "challenge_loop")
     assert len(browser.calls) == 1
@@ -152,7 +172,10 @@ def test_basic_auth_fails_closed_on_origin_change() -> None:
         ["https://login.example.test", None],
     )
     result = BasicAuthAdapter().execute(
-        BasicAuthDeclaration("basic", "https://login.example.test"), material(), browser
+        BasicAuthDeclaration("basic", "https://login.example.test", success_path="/home"),
+        material(),
+        browser,
+        target_id="target-1",
     )
     assert result == AdapterResult("failed", False, "origin_changed")
 
@@ -164,7 +187,10 @@ def test_basic_auth_does_not_claim_success_without_application_proof() -> None:
         authenticated=False,
     )
     result = BasicAuthAdapter().execute(
-        BasicAuthDeclaration("basic", "https://login.example.test"), material(), browser
+        BasicAuthDeclaration("basic", "https://login.example.test", success_path="/home"),
+        material(),
+        browser,
+        target_id="target-1",
     )
     assert result == AdapterResult("failed", False, "success_unverified")
 
@@ -283,7 +309,7 @@ def test_coordinator_revalidates_after_credential_fetch() -> None:
         resolve_initial=lambda _: initial,
         resolve_pre_fill=resolve_pre_fill,
         declarations={"site-a": declaration},
-        adapter_selector=lambda site, decl: lambda declaration, material: AdapterResult("authenticated", True),
+        adapter_selector=lambda site, decl, intent: lambda declaration, material: AdapterResult("authenticated", True),
     )
     result = coordinator.execute(intent, fetch_credentials=fetch)
     assert result == BrokerResult("req-hardening", "failed", "stale_binding")

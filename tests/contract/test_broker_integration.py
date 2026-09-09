@@ -10,7 +10,11 @@ never returned.
 from __future__ import annotations
 
 from cloudbrowser.credential_broker import BrokerResult, LoginIntent, SiteDeclaration
-from cloudbrowser.credential_broker.adapters import CredentialMaterial, FormLoginAdapter, FormLoginDeclaration
+from cloudbrowser.credential_broker.adapters import (
+    CredentialMaterial,
+    FormLoginAdapter,
+    FormLoginDeclaration,
+)
 from cloudbrowser.credential_broker.audit import AuditEmitter
 from cloudbrowser.credential_broker.coordinator import BrokerCoordinator
 from cloudbrowser.credential_broker.service import ResolvedBinding
@@ -72,7 +76,7 @@ def test_transport_to_coordinator_round_trip_returns_status_only() -> None:
         resolve_initial=lambda _: binding,
         resolve_pre_fill=lambda _: binding,
         declarations={"site-a": declaration},
-        adapter_selector=lambda site, decl: _run_adapter,
+        adapter_selector=lambda site, decl, intent: _run_adapter,
         emitter=emitter,
     )
 

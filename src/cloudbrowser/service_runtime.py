@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import time
+from pathlib import Path
 
 from cloudbrowser.deployment import InstanceNamespace
 from cloudbrowser.health import serve_health
-
 
 KNOWN_COMPONENTS = {
     "router",
@@ -86,7 +85,11 @@ def run_service(component: str) -> None:
             server.server_close()
         return
     if component == "viewer":
-        from cloudbrowser.viewer import AuthenticatedViewer, ViewerSessionStore, create_viewer_server
+        from cloudbrowser.viewer import (
+            AuthenticatedViewer,
+            ViewerSessionStore,
+            create_viewer_server,
+        )
 
         secret = os.environ.get("CB_VIEWER_TOKEN_SECRET")
         if not secret:
@@ -119,7 +122,10 @@ def run_service(component: str) -> None:
 
             router_base_url = os.environ.get("CB_ROUTER_BASE_URL")
             if not router_base_url:
-                raise SystemExit("CB_ROUTER_BASE_URL is required when CB_EDGE_AUTH is traefik-forwardauth")
+                raise SystemExit(
+                    "CB_ROUTER_BASE_URL is required when "
+                    "CB_EDGE_AUTH is traefik-forwardauth"
+                )
             session_surface = ViewerSessionSurface(
                 identity_client=identity_client,
                 router_api=RouterHttpClient(base_url=router_base_url),
@@ -292,13 +298,25 @@ def run_service(component: str) -> None:
         finally:
             server.server_close()
         return
+    if component == "credential-broker":
+        from cloudbrowser.credential_broker.runtime import create_broker_server
+
+        server = create_broker_server(("0.0.0.0", port))
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
+        return
     if component == "cloudfiles":
         from cloudbrowser.cloudfiles_entrypoint import main
 
         main()
         return
     if component == "identity-link":
-        from cloudbrowser.identity_link_service import IdentityLinkStore, create_identity_link_server
+        from cloudbrowser.identity_link_service import (
+            IdentityLinkStore,
+            create_identity_link_server,
+        )
 
         database_path = os.environ.get("CB_IDENTITY_LINK_DB", "/data/identity-links.sqlite3")
         server = create_identity_link_server(
@@ -313,4 +331,9 @@ def run_service(component: str) -> None:
         finally:
             server.server_close()
         return
-    serve_health(component=component, instance_id=instance_id, release_version=release_version, port=port)
+    serve_health(
+        component=component,
+        instance_id=instance_id,
+        release_version=release_version,
+        port=port,
+    )
