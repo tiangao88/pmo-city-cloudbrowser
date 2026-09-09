@@ -142,19 +142,23 @@ single authoritative view of done vs open.
 
 ### Open — W3 packages carried over (register: `roadmap-w3-status.md`)
 
-- **W3-1 — broker login E2E proof — STARTING 2026-09-08 (Tigo approved).**
-  Scope: implement the Vaultwarden producer (`fetch_credentials` injectable
-  that resolves a Vaultwarden item from `https://secrets.pmo.city`,
-  decrypts it through the broker-only path, returns material to the
-  broker) and prove the full E2E for three adapters in sequence:
-  `basic` (HTTP Basic Auth), `form` (username/password form), `sso`
-  (Authentik `pmoc-sso`). Each E2E proves: Hermes intent → broker
-  resolves binding → fetches grant → adapter logs into declared site in
-  the slot browser → status-only `BrokerResult` returned → redacted
-  audit. No plaintext credential leaves the broker; agent never sees
-  material. Acceptance: three RED test files go GREEN on dev01's real
-  broker service, against disposable test sites (basic + form) and the
-  real Authentik test app (sso).
+- **W3-1 — broker login E2E proof — LAYERS 1-4 SHIPPED (form adapter).**
+  Commits: `1d9c17c` (crypto), `25d02e7` (vault client), `72f536e`
+  (runtime wiring), `f8ca15f` (form adapter E2E). Gate: `make check` →
+  **731 passed**; all validators PASS; `git diff --check` clean.
+  What is proven: Hermes intent → broker → per-call Vaultwarden unlock
+  (prelogin→grant→sync→decrypt) → SidecarFormBrowser (narrow FormBrowser
+  over HttpAgentBrowser) → FormLoginAdapter → broker returns
+  `authenticated` to the caller; no material in any response body; the
+  adapter cannot navigate or list pages (protocol is the boundary).
+  Fail-closed on unreachable sidecar and wrong success selector.
+
+  **Still to land for W3-1 close:** basic (HTTP Basic Auth) and sso
+  (Authentik pmoc-sso) adapters. Same shape: vault producer is shared,
+  the adapter selector dispatches by `site_id`/`origin` to
+  `BasicAuthAdapter.execute` or `SSOAdapter.execute` (both exist in
+  `src/cloudbrowser/credential_broker/adapters/`), each with its own
+  test against a disposable target site.
 - **W3-2 — adapter task post-refactor:** Authentik broker-client hardening
   + audit enhancement (superseded form; revisit after W3-1 proves the
   generic path).
