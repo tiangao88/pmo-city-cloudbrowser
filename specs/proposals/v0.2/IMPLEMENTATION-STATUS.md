@@ -16,7 +16,9 @@ without a completed final independent review.
 
 Never collapse these states into an unqualified "done". Current source has no
 matching qualified release in the checked-in manifest. Live systems were not
-inspected during this documentation reset.
+inspected during the initial documentation reset. Subsequent read-only
+environment verification on 2026-09-11 is recorded in
+[M0 environment evidence](../../../docs/evidence/2026-09-11-m0-environment.md).
 
 ## Capability inventory
 
@@ -92,6 +94,21 @@ Current takeover run on macOS/Python 3.12.12:
 M0 retains Linux/OpenSSL and real-Chromium qualification as an open gate; this
 Mac run does not reproduce the handoff's green full suite. Documentation changes
 do not repair or waive that gate.
+
+### Subsequent Linux baseline verification — 2026-09-11
+
+The original Hermes environment reproduced **1006 passed, 7 skipped** at
+`430a066`. A separate persistent Linux checkout then verified the Mac's
+documentation candidate `3eb071a` with the missing Compose executable supplied:
+**1010 passed, 3 intentionally disabled form tests skipped**, all six validators
+passed, CloudFiles boundary **80 passed**, compileall/diff checks passed.
+This closes the environment/test reproduction gate noted above. The original
+Hermes checkout stayed clean and unchanged.
+
+All nine deployed application image references match the manifest's older pins
+attributed to `50ce198`; none establish qualification of `430a066`. See
+[evidence](../../../docs/evidence/2026-09-11-m0-environment.md) and
+[development workflow](../../../docs/DEVELOPMENT.md).
 
 A final independent security GO verdict, current-source image qualification,
 and live acceptance are not supplied by this documentation review.

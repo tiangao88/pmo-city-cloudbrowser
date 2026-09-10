@@ -16,6 +16,8 @@ to the employee's ordinary browser.
   source evidence, gaps, test results and qualification state.
 - [Service map](services/README.md): implementation responsibilities.
 - [Installation guide](deploy/coolify/README.md): configuration and operation.
+- [Development workflow](docs/DEVELOPMENT.md): edit on the Mac and test exact
+  commits in the separate persistent Linux checkout on mother01.
 
 ## Current checkpoint
 
