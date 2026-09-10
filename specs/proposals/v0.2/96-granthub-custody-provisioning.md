@@ -163,13 +163,17 @@ may remain valid only for Vaultwarden's short configured lifetime.
 The completed custody implementation is deliberately not auto-wired from
 `CB_VAULT_EMAIL`/`CB_VAULT_PASSWORD`: those deployment-wide credentials violate
 G5 and would make a fresh install appear usable when no per-user grant exists.
-The current `build_broker_api` remains the compatibility path for existing
-controlled tests and must be switched to `CustodyGrantStore` plus
-`CustodyCredentialFetcher` only when the deployment supplies the KEK through a
-real secret source and the browser/router binding source provides the same
-immutable tuple. Until then, the secure operator path is available and the
-broker must report `not_shared`/dependency failure rather than fall back to a
-shared vault account.
+At source checkpoint `430a066`, `build_broker_api` already wires
+`ProductionGrantResolver` (a `CustodyGrantStore` subclass) and
+`CustodyCredentialFetcher` when no test fetcher is injected. Startup requires
+`CB_BROKER_GRANT_KEK_HEX` and `CB_VAULT_BASE_URL`; a usable grant must match
+the browser/router binding tuple. Missing authorization must yield
+`not_shared`/dependency failure, never a shared vault account fallback.
+
+This source wiring is distinct from provisioning and live qualification. The
+current full-tuple key also leaves consent reuse after tab/generation changes
+unproven. The proposed [roadmap](ROADMAP.md) schedules a grant-lifetime decision
+and recovery acceptance without weakening request-level binding or revocation.
 
 This milestone does not claim live GrantHub capture, live Vaultwarden access,
 or deployment. The fake-vault contract tests prove provision → opaque resolve →

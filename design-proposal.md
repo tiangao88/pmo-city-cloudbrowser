@@ -1,5 +1,12 @@
 # Cloud-Browser Service for PMO City — Design Proposal
 
+> Historical design rationale. Read the consolidated
+> [product PRD](specs/proposals/v0.2/PRODUCT-PRD.md), proposed
+> [roadmap](specs/proposals/v0.2/ROADMAP.md), and
+> [status register](specs/proposals/v0.2/IMPLEMENTATION-STATUS.md) first.
+> The topology, raw-CDP assumptions and POC steps below are historical, not
+> current implementation or security authorization.
+
 > Status: **proposal** (not a brick yet). Outcome of the `tools-considered`
 > evaluation of open-computer-use (FSL license = commercial blocker) and its
 > MIT-licensed equivalents. This design builds the same capability on **MIT

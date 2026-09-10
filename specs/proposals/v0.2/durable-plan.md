@@ -1,13 +1,21 @@
 # CloudBrowser v2 — Durable Plan (status as of 2026-09-10)
 
+> **Historical checkpoint, retained for traceability — superseded as the forward
+> plan on 2026-09-11.** Start with [ROADMAP.md](ROADMAP.md),
+> [PRODUCT-PRD.md](PRODUCT-PRD.md), and
+> [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md).
+> All status/deployment claims below describe earlier checkpoints, including
+> contradictory intermediate notes; none establish current-source readiness.
+> Old token-budget instructions and milestone sequencing are no longer current.
+
 Repo: `https://github.com/tiangao88/pmo-city-cloudbrowser` (branch `main`).
 Dev-staging fleet: Coolify service `nievufka0cggf82cregyihav` (instance
 `cloudbrowser2-dev-v01`), hosts `cloudbrowser2.dev01.pmo.city` (viewer) and
 `cloudfiles2.dev01.pmo.city` (CloudFiles). Phase 6 production rollout remains
 separately gated.
 
-This file is the single durable plan. It lives in the repo so it survives
-workspace wipes. Update it at the end of every milestone.
+This file preserves the former plan and milestone history. Update the new
+roadmap/status register for future work.
 
 ## Where we are
 

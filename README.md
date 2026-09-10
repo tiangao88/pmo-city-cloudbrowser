@@ -1,117 +1,74 @@
 # PMO City CloudBrowser
 
-CloudFiles is the TinyAuth-protected, user-scoped file door in the employee's
-normal/main browser. Its frozen product target, development plan, and
-phase-by-phase delivery map are in:
+CloudBrowser gives each employee a persistent personal Chromium workspace on
+client infrastructure, accessible through company sign-in and controllable by
+their Hermes agent. A deterministic Credential Broker handles authorized logins
+without exposing credentials to the agent. CloudFiles returns browser downloads
+to the employee's ordinary browser.
 
-- `specs/proposals/v0.2/89-cloudfiles-product-requirement.md`
-- `specs/proposals/v0.2/90-cloudfiles-development-plan.md`
-- `specs/proposals/v0.2/91-cloudfiles-delivery-phases.md`
+## Start here
 
-CloudBrowser is an independently installable, owner-bound cloud-browser
-component for PMO City. It provides persistent Chromium sessions, lifecycle
-and queue control, a viewer, restricted agent control, and durable per-user
-storage. The target installation platform is a server managed by Coolify.
+- [Product PRD](specs/proposals/v0.2/PRODUCT-PRD.md): intended journeys,
+  requirements, scope and acceptance.
+- [Development roadmap](specs/proposals/v0.2/ROADMAP.md): proposed milestones,
+  dependencies and release gates, awaiting Tigo's validation.
+- [Implementation status](specs/proposals/v0.2/IMPLEMENTATION-STATUS.md):
+  source evidence, gaps, test results and qualification state.
+- [Service map](services/README.md): implementation responsibilities.
+- [Installation guide](deploy/coolify/README.md): configuration and operation.
+
+## Current checkpoint
+
+Source checkpoint: `430a066`, 2026-09-11. Broker capabilities, durable grant
+custody, Basic/Authentik paths and exact-target page actions are present in
+source. Production form mode is disabled. TOTP submission, human code handoff,
+a live browser stream, and complete personal-workspace recovery remain open
+acceptance work. See the status register for precise evidence.
+
+The current release manifest is pre-build and not installable. Retained image
+digests qualify earlier source; they must be rebuilt/qualified and synchronized
+before a deployment decision. Local tests do not establish live qualification.
 
 ## Product boundaries
 
-CloudBrowser and the Credential Broker are separate capabilities:
+- Runtime: browser lifecycle, temporary slots, persistent profiles, routing,
+  queueing, viewer and restricted agent control.
+- Credential Broker: authorized Vaultwarden access and deterministic,
+  exact-target login with status-only results. Grant custody belongs here.
+- CloudFiles: authenticated per-user file listing and local attachment retrieval;
+  the downloads service remains internal.
+- Hermes: owner-scoped page actions and login intents; no passwords, tokens,
+  OTP seeds/codes, cookies, network bodies or unrestricted CDP.
+- TinyAuth/identity-link: edge authentication and immutable principal resolution.
+- Coolify: installation and operation of isolated, digest-pinned service bundles.
 
-- **CloudBrowser runtime** owns browser lifecycle, slots, profiles, tabs,
-  viewer access, queueing, routing, downloads, and restricted browser control.
-- **CloudFiles** is the TinyAuth-protected, user-scoped file door in the
-  employee's normal/main browser. It lists files downloaded inside CloudBrowser
-  and returns them as local-browser attachments; it is not a slot-local API.
-- **Credential Broker** is a deterministic, non-LLM service. It obtains
-  explicitly authorized Vaultwarden material, fills an owner-bound browser,
-  verifies the result, and returns status only.
-- **Hermes** requests intent and reasons about page state. It never receives
-  passwords, tokens, OTP seeds, cookies, network bodies, or unrestricted CDP.
-- **Coolify** installs and operates a pinned release; it is not part of the
-  application trust model.
+## Repository layout and documentation rules
 
-The broker-only custody boundary is an enforced security requirement, not a
-convention. Authentik is an adapter, not the definition of the broker.
+`src/cloudbrowser/` contains runtime code; `services/` contains entrypoints
+and images; `browser/` contains browser assets; `integrations/` contains
+adapters; `tests/` and `tools/` contain verification.
 
-## Repository navigation
+`specs/proposals/v0.2/` holds mutable requirements and the current planning
+entrypoints. `specs/contracts/` holds versioned APIs. `specs/baselines/`
+holds immutable approvals. `specs/archive/` and `legacy/` preserve prior
+specifications and implementation as historical evidence.
 
-- `specs/` — proposals, immutable baselines, API contracts, ADRs, and the
-  imported W2/W3 source material.
-- `src/` — product libraries and domain code. Extraction from `legacy/` is
-  intentionally test-first.
-- `services/` — independently buildable/deployable service entry points.
-- `browser/` — extension, browser policy, and image integration material.
-- `deploy/coolify/` — reproducible Coolify manifests and release operations.
-- `tests/` — unit, contract, integration, security, installation, and E2E
-  verification.
-- `integrations/` — Hermes and other control-plane adapters.
-- `legacy/` — imported implementation and scripts from `pmo-city-builds`,
-  retained as migration source and not represented as refactored code.
+The PRD records requirements, the roadmap records intended work, and the status
+register records demonstrated behavior. Source, image, deployment and user
+acceptance are separate evidence. Historical documents cannot establish current
+readiness. Changes to approved requirements need a proposal and new approval;
+approved baselines are never rewritten.
 
-## Versioning and parallel work
-
-The repository bootstrap is `0.1.0-bootstrap.1`. The first installable product
-release will have its own approved specification baseline.
-
-- Work on requirements in `specs/proposals/vX.Y/`.
-- Approve material into immutable `specs/baselines/vX.Y.Z/` snapshots.
-- Keep compatibility contracts under `specs/contracts/*/vN/`.
-- Version code with branches, Git tags, and immutable image digests; do not
-  duplicate source trees as `src/v0.1`, `src/v0.2`, and so on.
-- Use `release/X.Y` maintenance branches for supported release lines.
-- Bind a release manifest to the product version, specification baseline,
-  contract versions, component images, and persistent-volume namespace.
-
-This allows different specification proposals and code/release lines to exist
-in parallel without silently sharing browser state or rewriting history.
-
-## Coolify installation model
-
-One installation corresponds to one isolated Coolify resource bundle. Every
-installation must have unique values for:
-
-- Coolify resource and Compose project name;
-- Docker network;
-- browser-profile, router-state, grant/broker-state, downloads, and backup
-  volumes;
-- public browser/files hostnames;
-- secret/configuration namespace.
-
-A `v0.1` and `v0.2` installation on the same server must not reuse any of
-those resources. Deploy immutable tags and image digests; never use `latest`
-for a qualified release. See `deploy/coolify/README.md`.
-
-## Current status
-
-- The repository has been created as a private GitHub repository.
-- W2/W3 implementation, tests, deployment references, and specifications have
-  been imported from `pmo-city-builds` under explicit `legacy/` and
-  `specs/archive/` paths.
-- The generic Credential Broker is implemented as the first v0.2 vertical
-  slice. Production form mode is disabled until a broker-only exact-target
-  capability and its qualification evidence exist; Basic and approved SSO
-  paths remain gated by runtime qualification.
-- The current v0.2.0-dev1 manifest is pre-build and not installable. It retains
-  digests and provenance from the prior qualification run for traceability
-  only; the current source must be built, qualified, and digest-synchronized
-  before deployment can be considered. Coolify deployment, runtime/security
-  acceptance, and live-fleet mutation remain Step 19+ work and require separate
-  approval.
-- The current W3-1 status remains partial: owner-bound recovery passes, while
-  strict authenticated-surface continuity through the intended broker path is
-  not proven.
-- No deployment, restart, credential rotation, or live-fleet mutation is
-  performed by this repository bootstrap.
-
-## Development
+## Development and release
 
 ```bash
 uv sync --dev
-make check
+uv run make check
+uv run make cloudfiles-boundary
 ```
 
-The release preview is pre-build and not installable. The retained digests and
-qualification metadata apply only to the prior qualified commit; build and
-qualify the current source, synchronize all image digests and provenance, and
-rerun the gates before any deployment decision. Coolify deployment and
-runtime/security acceptance remain separate Step 19 work.
+Follow [CONTRIBUTING.md](CONTRIBUTING.md). Each installation has its own
+resource/project name, network, profiles/state/download volumes, public hosts
+and secrets. Versions must not share persistent state. Qualify all nine service
+images against a recorded source SHA, use immutable digests, and follow the
+[release guide](deploy/coolify/releases/README.md) for migration and rollback.

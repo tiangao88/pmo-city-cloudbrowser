@@ -1,5 +1,10 @@
 # CloudFiles development plan
 
+> Historical phase plan. Source implementation has progressed beyond the
+> September 3 starting position below. For current evidence and remaining
+> integrated qualification, see [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md)
+> and [ROADMAP.md](ROADMAP.md). The frozen product target remains unchanged.
+
 > Version: **v0.2 development proposal — 2026-09-03**
 > Status: **RECOMMENDED PLAN — follows the frozen CloudFiles target**
 > This plan describes implementation gates. It does not authorize live

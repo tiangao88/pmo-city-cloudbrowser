@@ -1,11 +1,16 @@
 # Slot supervisor service
 
-The slot supervisor owns the owner-bound browser lifecycle, slot assignment,
-suspend/wake/recreate, and profile/tab persistence. The first extracted slice
-is `cloudbrowser.browser_slots.lifecycle.OwnerBoundLifecycle`: it is state-only,
-transport-agnostic, and has no dependency on the legacy scripts or credential
-handling paths.
+The supervisor implements owner-bound wake, suspend, stop and recreate through
+the private browser transport. Binding adoption is serialized with lifecycle
+operations; a stale running browser must stop before a different binding is
+adopted. Failed stops must not silently allow takeover.
 
-The service image currently exposes the bounded health/ready endpoint. Chrome
-and CDP transport will be added behind separate interfaces and acceptance tests;
-the legacy runtime remains migration/reference material only.
+Implementation: `src/cloudbrowser/browser_slots/supervisor.py`,
+`lifecycle.py`, and `src/cloudbrowser/router/control_api.py`. The trusted
+router calls the private lifecycle API; callers do not choose an authoritative
+owner. This is an implemented runtime, not a health-only placeholder.
+
+Lifecycle metadata checks do not by themselves establish per-principal profile
+storage across slot reuse. The real-browser A → B → A persistence/isolation
+journey is a required gate in the
+[roadmap](../../specs/proposals/v0.2/ROADMAP.md).

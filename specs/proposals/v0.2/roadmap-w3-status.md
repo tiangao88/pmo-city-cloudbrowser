@@ -1,5 +1,9 @@
 # W3 refactor roadmap
 
+> Historical register. The proposed forward plan is [ROADMAP.md](ROADMAP.md),
+> with W3-to-milestone mapping; current evidence is in
+> [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md).
+
 This file records the current status imported from the former project. It is
 not an approval to deploy the imported implementation.
 

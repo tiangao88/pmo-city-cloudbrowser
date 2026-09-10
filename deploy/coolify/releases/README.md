@@ -56,8 +56,8 @@ python -m cloudbrowser.credential_broker.grant_admin rollback \
 
 
 1. Commit the source/spec change and record the source commit.
-2. Have the user/operator trigger the approved GitHub Actions build from that
-   commit; current token limits prevent an automatic trigger.
+2. Have an authorized user/operator or agent trigger the approved GitHub Actions
+   build from that reviewed commit.
 3. After CI passes, verify provenance/SBOM and synchronize immutable image
    digests in the compose, manifest, qualification records, and provenance
    tests as a separate release change.

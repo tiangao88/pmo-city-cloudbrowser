@@ -19,12 +19,11 @@ implemented by this service.
   attachment`. The downloads service never renders inline.
 - `GET /ready` — bounded readiness metadata.
 
-The current runtime is intentionally only the internal `downloads/v1` contract
-slice. It does not yet provide the public CloudFiles gateway, HTML homepage, or
-browser-download ingest path. The frozen product target and the new-structure
-implementation plan are documented in
+This service implements the internal `downloads/v1` boundary. The separate
+CloudFiles service now implements the public gateway, HTML and ingest receiver;
+the browser service supplies completed-download events. The frozen target is in
 `specs/proposals/v0.2/89-cloudfiles-product-requirement.md` and
-`specs/proposals/v0.2/90-cloudfiles-development-plan.md`.
+current evidence is in `specs/proposals/v0.2/IMPLEMENTATION-STATUS.md`.
 
 The public product target is deliberately separate from this service:
 `cloudfiles2.dev01.pmo.city` must terminate at a TinyAuth-protected CloudFiles
@@ -54,6 +53,6 @@ service compares the header against the configured secret with
 - `src/cloudbrowser/downloads/identity.py` — `TrustedSecret`, server identity.
 - `src/cloudbrowser/downloads/api.py` — `ThreadingHTTPServer` shell.
 
-The release is installable after image publication and source-level runtime,
-security, and release qualification pass. The v0.2.0-dev1 manifest records the
-immutable CI-qualified images; deployed runtime qualification remains Step 19.
+The current v0.2.0-dev1 manifest is pre-build and not installable. Retained
+digests qualify prior source only. Build, image/runtime qualification and
+integrated user-journey acceptance must be recorded for the candidate release.

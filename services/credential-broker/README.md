@@ -113,9 +113,9 @@ before the Credential Broker product can be marked complete.
    atomically restores the validated backup without merging users.
 4. Commit the source and spec/test changes together. Run the local validators
    and record the source commit.
-5. Because the current token budget does not permit an automatic Actions
-   trigger, the user/operator triggers the approved GitHub Actions build from
-   that commit.
+5. An authorized operator or agent triggers the GitHub Actions build from the
+   reviewed source commit. Follow the validation and qualification gates in
+   the current roadmap; an earlier task's token budget is not a release rule.
 6. After the build and provenance/SBOM checks pass, resolve the immutable
    service digests and synchronize the compose/release-manifest/
    image-qualification records in a separate release step.
@@ -125,3 +125,12 @@ before the Credential Broker product can be marked complete.
 Do not edit stale release digest pins as part of this source/spec checkpoint.
 A green local test run does not establish image provenance, live deployment, or
 Authentik qualification.
+
+## Product continuity
+
+The current custody key includes the exact tab and browser generation. Safe
+reuse of user consent after those values change still requires a demonstrated
+reauthorization flow. Offline provisioning is an operator capability; employee
+self-service consent and complete restart/recovery acceptance remain roadmap
+work. See [implementation status](../../specs/proposals/v0.2/IMPLEMENTATION-STATUS.md)
+and the proposed [roadmap](../../specs/proposals/v0.2/ROADMAP.md).

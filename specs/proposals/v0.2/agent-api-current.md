@@ -1,5 +1,12 @@
 # Agent API — MCP Surface for Hermes (draft)
 
+> Historical target API draft. The implemented HTTP interfaces are documented
+> in [agent-control/v1](../../contracts/agent-control/v1/contract.md) and
+> [control-api/v1](../../contracts/control-api/v1/README.md). A proposed MCP tool
+> list below does not mean those tools are deployed. Page actions now require
+> an exact target tab; login authorization uses signed one-time capabilities.
+> See [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md).
+
 > **Refactor update — 2026-09-01:** `credential.login` is now specified as a
 > broker intent, not merely a comment. Its request is profile/principal/site
 > bound by the server and its response is status-only. The normal agent/CDP

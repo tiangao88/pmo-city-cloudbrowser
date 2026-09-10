@@ -13,6 +13,20 @@
    or unredacted operational evidence.
 6. Keep deployment changes separate from application changes where possible.
 
+## Documentation and acceptance
+
+Use the current product PRD, roadmap and implementation-status register linked
+from the root README. Update requirements before changing scope, the roadmap
+when sequencing changes, and status after demonstrating behavior. Record source
+SHA, local test results/skips, qualified image digests and deployed user
+acceptance separately. Historical reports are not evidence for a newer build.
+Do not rewrite immutable baselines or imported evidence. Keep service READMEs
+aligned with implemented boundaries, rather than duplicating the roadmap.
+
+For documentation-only edits, run the documentation/contract checks and
+validators plus a relative-link/diff check. A full runtime run is useful for a
+takeover baseline but is not proof supplied by the prose change.
+
 ## Pull requests
 
 A PR must state:

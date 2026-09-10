@@ -33,8 +33,8 @@ The v0.2.0-dev1 pins are stale relative to the current source/spec checkpoint.
 Do not edit them now. The release sequence is:
 
 1. commit the source and specs;
-2. have the user/operator trigger the GitHub Actions build from that source
-   commit because current token limits prevent an automatic trigger;
+2. have an authorized user/operator or agent trigger the GitHub Actions build
+   from that reviewed source commit;
 3. verify CI provenance/SBOM and synchronize digests in a separate release
    change;
 4. run the provenance/full gates against the synchronized pins;

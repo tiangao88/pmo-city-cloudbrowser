@@ -3,20 +3,36 @@
 This contract defines the status-only broker boundary for baseline `v0.2.0`.
 The request is an intent; it is not a credential transport.
 
-## Request
+## Request: two distinct HTTP boundaries
 
-A broker request contains only:
+Implementation clarification for source `430a066`: the logical intent is
+translated by the authenticated router into a private broker capability.
 
-- `request_id` or a server-bound nonce;
-- authenticated profile context (server-derived);
-- authenticated principal context (server-derived);
-- server-resolved owner browser and optional owner tab;
-- an allowlisted `site_id` or exact declared origin;
-- an account selector/reference, never a password or token;
-- optional idempotency key.
+The caller sends `POST /v1/credential/login` to the router with:
 
-The caller cannot select another profile, principal, slot, browser, grant, or
-origin by supplying an alternate value.
+```json
+{
+  "request_id": "opaque-request-id",
+  "site_id": "declared-site",
+  "target_tab_id": "exact-owner-tab"
+}
+```
+
+The router derives the active session/profile/principal/browser/generation.
+It mints a signed, expiring capability with site, exact target, operation,
+request correlation, audience, deployment and one-time nonce. Caller-supplied
+credential/account references, alternate binding fields and extra fields are
+rejected. An exact target is mandatory, not an optional first-tab fallback.
+
+The router sends `POST /v1/credential/login` to the private broker with only
+`{"capability": "<signed one-time capability>"}`. The capability is not
+returned as an agent handle. The broker verifies it, resolves principal-scoped
+grant custody, and enforces durable nonce/idempotency state and live binding.
+It does not accept the earlier username-reference or shared bearer schema.
+
+Reference implementations: `router/router_api.py`,
+`router/credential_broker_forwarder.py`, `credential_capability.py`, and
+`credential_broker/api.py` under `src/cloudbrowser/`.
 
 ## Site declaration
 

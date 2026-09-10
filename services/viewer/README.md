@@ -1,8 +1,9 @@
 # Viewer service
 
-The viewer owns the authenticated user-facing browser surface. This slice
-provides an owner-bound, expiring session registry and a deliberately bounded
-HTTP shell on port `8082`.
+The viewer owns the authenticated user-facing control surface on port `8082`.
+It implements queue join/status/activation, roster, leave/release and a router
+relay for exact-target page actions. The HTML shell is interactive; a live
+browser video stream and user/agent takeover protocol remain roadmap work.
 
 ## Boundary
 
@@ -31,5 +32,6 @@ session to a separately mediated browser stream. It accepts only an internal
 relative endpoint and requires a matching owner/generation readiness result.
 It does not expose a CDP socket or browser credentials.
 
-This is a source-built development slice. It does not claim a production
-viewer integration, external IdP validation, or live deployment approval.
+This source does not establish a live streaming viewer or current release
+qualification. See [status](../../specs/proposals/v0.2/IMPLEMENTATION-STATUS.md)
+and the proposed [roadmap](../../specs/proposals/v0.2/ROADMAP.md).

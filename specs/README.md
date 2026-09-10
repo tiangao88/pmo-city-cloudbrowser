@@ -12,10 +12,15 @@ This directory separates working proposals from approved, immutable baselines.
 
 ## Active work
 
+- [Product PRD](proposals/v0.2/PRODUCT-PRD.md), [roadmap](proposals/v0.2/ROADMAP.md),
+  and [implementation status](proposals/v0.2/IMPLEMENTATION-STATUS.md) are the
+  planning entrypoints added on 2026-09-11. The PRD consolidation and roadmap
+  await user validation; the status register distinguishes current source
+  evidence from historical deployment reports.
 - `proposals/v0.2/` — generic Credential Broker, frozen CloudFiles target,
   development plan, and current W3 status.
 - `contracts/` — compatibility-versioned API and event contracts, including
-  the proposed public `cloudfiles/v1` gateway and internal `downloads/v1`
+  the public `cloudfiles/v1` gateway and internal `downloads/v1`
   boundary.
 - `adr/` — decisions affecting multiple versions or installations.
 

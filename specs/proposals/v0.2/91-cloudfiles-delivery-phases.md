@@ -1,5 +1,10 @@
 # CloudFiles delivery phases
 
+> Historical delivery map. The Phase 5 label below concerns earlier source and
+> qualification evidence; it does not qualify current commit `430a066` or its
+> images. See [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md) and
+> [ROADMAP.md](ROADMAP.md) for the current evidence and rollout plan.
+
 > Status: **delivered through Phase 5 (2026-09-08); Phase 6 separately gated**
 
 This is the short, chronological map for implementing the frozen CloudFiles

@@ -1,5 +1,11 @@
 # Cloud Browser — Credential Broker PRD
 
+> Detailed broker requirements retained by the consolidated
+> [product PRD](PRODUCT-PRD.md). Current evidence and proposed delivery order
+> live in [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md) and
+> [ROADMAP.md](ROADMAP.md). The request schemas below express intent; use the
+> versioned contracts for implemented transport/capability details.
+
 > Version: **0.1 refactor baseline — 2026-09-01**  
 > Status: **PROPOSED FOR REVIEW — no implementation or deployment authorized by
 > this document**  
@@ -108,7 +114,7 @@ identity cookie from another user or silently use a shared/static credential.
 | Actor | Responsibility | Credential access |
 |---|---|---|
 | Employee | grants selected vault items; may complete human MFA | sees their own browser; may type directly |
-| Hermes agent | requests intent; drives page-state tools; asks for a code when required | no Vaultwarden grant or plaintext credential access |
+| Hermes agent | requests intent; drives page-state tools; directs the employee to secure MFA entry when required | no Vaultwarden grant or plaintext credential access |
 | Credential Broker | resolves policy, reads Vaultwarden through its capability, fills and verifies | only runtime plaintext holder |
 | Cloud Browser runtime | owns browser lifecycle and restricted CDP bridge | no grant-decryption capability |
 | Router/control plane | authenticates and authorizes requests; resolves owner/slot | no plaintext credential access |
@@ -146,8 +152,10 @@ enforces every separation. Enforcement is an acceptance criterion below.
 ### 6.3 Human MFA handoff
 
 If no TOTP seed is present, the broker pauses at a code-request state. The agent
-asks the employee for the one-time code. The code is submitted through a
-one-shot, broker-scoped endpoint and is never returned to the agent, logged, or
+directs the employee to an authenticated input surface; the employee must not
+send the one-time code in an agent chat or model-visible transcript.
+The code is submitted directly through a one-shot, broker-scoped endpoint
+and is never returned to the agent, logged, or
 stored. The broker verifies the result and invalidates the code request. This is
 a final-product requirement; it is not available in the current pre-login
 checkpoint.

@@ -49,16 +49,13 @@ remains the write path for publication.
   `CB_DOWNLOADS_INGEST_URL`, `CB_DOWNLOADS_INGEST_SECRET`) and is inert when
   the transport is not configured; `run_browser_service` starts and closes it
   with the service lifecycle.
-- Deployment wiring (still pending): the CloudFiles service must bind
-  `create_ingest_server(runtime.pipeline, ...)` on an internal address with a
-  trusted-secret env, the browser service must set the three watcher env
-  variables plus a real server-derived binding (`CB_PRINCIPAL_ID`,
-  `CB_BROWSER_ID`, `CB_PROFILE_ID`, `CB_BINDING_GENERATION`), Chrome must be
-  pointed at a watched download directory, and the durable downloads volume
-  must be shared with the CloudFiles service. Until that slice lands, the
-  transport is component-complete but not active in any deployed
-  configuration.
+- Source deployment wiring is present in the current service entrypoints and
+  Compose: a private ingest listener, browser watcher URL/secret/directory,
+  runtime binding and durable storage. Qualify the actual browser download,
+  scan and local attachment journey against current images before making a
+  deployed-product claim.
 
-The implementation does not make live changes and does not expose the
-internal downloads service or the ingest receiver as a public host. Public
-HTML and deployment wiring remain Phase 3 work.
+The internal downloads service and ingest receiver are private. Public HTML is
+implemented by CloudFiles. See the
+[status register](../../specs/proposals/v0.2/IMPLEMENTATION-STATUS.md) for current
+evidence and the [roadmap](../../specs/proposals/v0.2/ROADMAP.md) for qualification.

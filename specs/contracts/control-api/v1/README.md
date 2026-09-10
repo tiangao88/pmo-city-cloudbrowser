@@ -1,7 +1,8 @@
 # CloudBrowser control API v1
 
 This contract is the bounded HTTP control surface for the owner-bound router
-control plane. It accepts session and lifecycle intents only; it does not
+control plane. It accepts session/lifecycle intents, bounded page actions and
+credential-login intents; it does not
 expose raw CDP, credential material, arbitrary evaluation, filesystem access,
 or process control.
 
@@ -13,6 +14,10 @@ or process control.
   only `request_id`, `session_id`, `status`, optional `slot_id`, and offer or
   session TTLs. It never contains principal IDs, emails, or binding values.
 - `GET /v1/session` — the caller's own current session in the same bounded shape.
+- `POST /v1/credential/login` — accepts exactly `request_id`, `site_id`,
+  and `target_tab_id`; derives the active owner binding and forwards a signed
+  one-time capability to the private broker. Returns status only. See the
+  [broker contract](../../credential-broker/v1/contract.md) for both HTTP boundaries.
 - `POST /v1/session/leave` — leave the caller's own session.
 - `POST /v1/slot/<slot_id>/<operation>` — wake, suspend, or recreate a slot the
   caller's own active session is bound to; forwarded to the slot supervisor over

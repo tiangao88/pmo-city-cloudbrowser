@@ -1,26 +1,20 @@
-# CloudBrowser v0.2 proposal
+# CloudBrowser v0.2 proposals
 
-This is mutable work under review. It captures the generic Credential Broker,
-CloudFiles target, development plan, product boundaries, security model,
-current agent API, and W3 status.
+Start with the proposed [product PRD](PRODUCT-PRD.md),
+[development roadmap](ROADMAP.md), and
+[implementation status](IMPLEMENTATION-STATUS.md). The consolidation and forward
+plan await Tigo's validation; the existing approved security baseline remains
+unchanged.
 
-The current CloudFiles target is frozen in `89-cloudfiles-product-requirement.md`.
-The recommended new-structure implementation plan is in
-`90-cloudfiles-development-plan.md`. These documents freeze the desired product
-outcome and development approach; they do not authorize live deployment.
+Numbered specifications retain detailed requirements and contracts: 85–87 cover
+the broker and security boundaries, 89–94 cover CloudFiles, and 95–96 cover the
+broker integration and grant custody. CloudFiles phases 0–5 have source/test
+implementation; old Phase-0-only statements are historical planning text.
 
-**Phase 0 is the current pre-implementation gate.** It covers public-contract
-review, the route/threat matrix, and red security tests. Phase 1 begins only
-when Phase 0's exit criteria are met.
+`durable-plan.md` and `roadmap-w3-status.md` preserve historical references.
+Their old deployment claims are not current-source qualification. Consult the
+status register and release manifest before any readiness claim.
 
-The new public contract is `specs/contracts/cloudfiles/v1/README.md`.
-A concise phase-by-phase map is in `91-cloudfiles-delivery-phases.md`.
-
-Exit criteria before implementation:
-
-- product and trust boundaries approved;
-- broker capability and profile binding defined;
-- restricted browser-control contract versioned;
-- adversarial security tests written and red;
-- migration and rollback plan accepted;
-- no direct agent or slot access to credential material.
+Propose changes here, keep requirement IDs, review compatibility/security and
+migration effects, and create a new approved baseline when needed. Do not alter
+existing baseline snapshots or treat a plan as deployment authorization.

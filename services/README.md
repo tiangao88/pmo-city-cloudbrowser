@@ -1,46 +1,30 @@
 # CloudBrowser runtime services
 
-The repository contains independently deployable service images. The current
-release includes router, slot-supervisor, browser, viewer, agent-control,
-downloads, and credential-broker. The public CloudFiles gateway is introduced
-as a separate service in the later delivery phase.
+The source defines nine application services, plus ClamAV. The service map
+below describes responsibility, not current release qualification. See
+[implementation status](../specs/proposals/v0.2/IMPLEMENTATION-STATUS.md).
 
-## CloudFiles Phase 2 integration
+| Service | Responsibility | Main source |
+| --- | --- | --- |
+| router | Queue/session lifecycle, owner-derived routing, agent forwarding, signed login capabilities | `src/cloudbrowser/router/` |
+| slot-supervisor | Wake, stop, suspend, recreate and binding adoption | `src/cloudbrowser/browser_slots/supervisor.py` |
+| browser | Chromium process/profile, exact-target actions, private broker capabilities, completed-download watcher | `src/cloudbrowser/browser_service.py`, `browser_slots/` |
+| viewer | Authenticated queue/roster/control HTML and router relay | `src/cloudbrowser/viewer/` |
+| agent-control | Owner/generation checks and bounded tab/page operations | `src/cloudbrowser/agent_control.py` |
+| credential-broker | Deterministic login, private credential custody, replay/idempotency/deadline enforcement | `src/cloudbrowser/credential_broker/` |
+| cloudfiles | Public authenticated file gateway and private scan-before-publish ingest | `src/cloudbrowser/cloudfiles/` |
+| downloads | Private durable per-principal file listing/retrieval | `src/cloudbrowser/downloads/` |
+| identity-link | Durable mapping from trusted SSO subject to opaque PMO principal | `src/cloudbrowser/identity_link_service.py` |
 
-Phase 2 adds the owner-bound browser-download ingest seam and the typed
-internal `downloads/v1` client. The pipeline stages a bounded stream in a
-private temporary file, scans it before publication, and sends clean material
-to the internal downloads boundary. Non-clean material is kept in the
-owner-scoped quarantine namespace and is never published as a retrievable
-entry.
+Entrypoints configure dependencies; domain and policy behavior live under
+`src/cloudbrowser/`. See each service README and the
+[Compose guide](../deploy/coolify/README.md) for configuration.
 
-- `IngestPipeline` accepts only a server-derived `PrincipalBinding`; it has no
-  `principal_id` or destination-path argument.
-- `DownloadsClient` sends an allowlisted shared-secret and binding header set,
-  uses a timeout, and caps response bodies.
-- `DownloadsStoreAdapter` is the local integration seam for contract tests; the
-  production deployment uses the typed HTTP client over the internal network.
-- `FakeBrowserDownloadSource` models a completion event without allowing the
-  browser event to select a different owner.
+Browser downloads flow through the watcher and private ingest receiver into
+scan/quarantine policy and durable owner storage. CloudFiles supplies the public
+HTML/attachment surface and calls the internal downloads service with a trusted,
+server-derived binding. Both services and ingest wiring are present in source.
 
-## Production browser-download ingest transport
-
-See `services/downloads/PHASE2.md`. In short: the browser service's
-`BrowserDownloadWatcher` emits only completed, regular, confined files from
-the server-configured download directory (`CB_BROWSER_DOWNLOAD_DIR`) under its
-own server binding; `IngestClient` streams them over the internal network to
-the CloudFiles ingest receiver (`create_ingest_server`, `POST
-/ingest/complete`, trusted-secret auth, allowlisted `X-CB-*` headers, bounded
-Content-Length, capped responses); the receiver feeds the existing
-scan-before-publish `IngestPipeline`. Public routes and the downloads `v1`
-contract remain unchanged.
-
-> The transport is component-complete and green under contract/integration
-> tests, but the deployment wiring (receiver bound in the CloudFiles service,
-> watcher env + real server binding on the browser service, shared downloads
-> volume, Chrome download directory) is a pending slice — see PHASE2.md. It is
-> not yet active in any deployed configuration.
-
-The implementation does not make live changes and does not expose the
-internal downloads service as a public host. Public HTML and deployment
-wiring remain Phase 3 work.
+A viewer shell and broker capability implementation do not establish a complete
+employee journey. Live streaming/takeover, consent continuity, profile switching,
+and current-image qualification are explicit roadmap work.

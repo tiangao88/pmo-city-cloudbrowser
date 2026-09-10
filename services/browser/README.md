@@ -18,8 +18,9 @@ evaluation.
 - `CB_PRINCIPAL_ID` and `CB_BINDING_GENERATION` — server-owned identity binding.
 - `CB_PORT` — restricted browser service port, default `9230`.
 
-The browser service auto-starts Chromium at boot (owner/generation-bound) and
-recovers crashes through its watcher. The process manager starts Chromium with
+The Compose configuration defaults `CB_BROWSER_AUTOSTART=0`: Chromium starts
+after slot activation under the adopted owner/generation. Optional autostart and
+crash recovery are configuration/runtime behaviors. The process manager starts Chromium with
 a private debugging address and an
 explicit profile directory. It waits for a real `/json/version` response,
 marks readiness only after validating the browser identity and WebSocket URL,
@@ -30,3 +31,9 @@ The service uses a non-root image user and a per-install `CB_INSTANCE_ID`
 volume. The local source build is a development release gate; published
 immutable images and the runtime/security acceptance matrix are still required
 before `installable: true`.
+
+The restricted service has separate broker-only Basic and Authentik channels;
+the normal agent API cannot call them. Profile path selection across an owner
+change is an outstanding integrated acceptance gate; owner metadata alone is
+not proof of profile isolation. See
+[implementation status](../../specs/proposals/v0.2/IMPLEMENTATION-STATUS.md).
