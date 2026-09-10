@@ -1,4 +1,4 @@
-# CloudBrowser v2 — Durable Plan (status as of 2026-09-08)
+# CloudBrowser v2 — Durable Plan (status as of 2026-09-10)
 
 Repo: `https://github.com/tiangao88/pmo-city-cloudbrowser` (branch `main`).
 Dev-staging fleet: Coolify service `nievufka0cggf82cregyihav` (instance
@@ -28,7 +28,7 @@ relay; wire-level tests pin the exact path/method/headers/body it sends.
 
 Live fleet is healthy on the `2416673` build (digest sync `d693101`).
 
-Milestone 1 **confirmed by Tigo's public-host retest on 2026-09-08** (active
+**Milestone 1 confirmed by Tigo's public-host retest on 2026-09-08** (active
 session with countdown, navigate/page_info working, roster showing who holds
 the slot vs who is waiting, leave/release working). Closed.
 
@@ -81,6 +81,27 @@ the slot vs who is waiting, leave/release working). Closed.
 - Image digest sync to `949faea` build (run `34231460028`); viewer live on
   dev01 at digest `2968da87…` — `e4740e9`
 
+
+## Release sequencing and stale pins
+
+Image pins are expected to remain stale during this source/spec checkpoint; that
+is a release sequencing issue, not a production-code blocker. Do not edit the
+compose or manifest digest pins here.
+
+The release sequence is explicit:
+
+1. Commit the source, specs, README, and status-consistency tests.
+2. Have the user/operator trigger the approved GitHub Actions build from that
+   source commit. Current token limits prevent an automatic trigger.
+3. After CI passes, synchronize image digests and provenance/SBOM records in a
+   separate release change.
+4. Run provenance and full gates against the synchronized pins.
+5. Only after explicit approval perform deployment and live/closed-shadow
+   qualification.
+
+A local `make check` result cannot substitute for the user-triggered Actions
+build, immutable digest/provenance sync, or live Authentik evidence.
+
 ## Next milestones (dependency order)
 
 1. ~~Viewer frontend + interactive surface~~ — **DONE, confirmed 2026-09-08.**
@@ -121,9 +142,6 @@ single authoritative view of done vs open.
 
 ### Done (implemented, gated, pushed; live on dev01)
 
-- Generic Credential Broker per PRD 85 (replaces v1 `sso-broker.py`):
-  `src/cloudbrowser/credential_broker/` with authentik / generic_form /
-  http_basic / mfa adapters; broker service + compose wiring.
 - CloudFiles phases 0–5 (spec 89–94): identity-adapter gateway, ingest,
   quarantine, retention, GDPR erasure, ClamAV scan-before-publish, metrics,
   image qualification, release provenance.
@@ -137,38 +155,28 @@ single authoritative view of done vs open.
 - OpenAPI alignment for the shipped router surface (spec gate green, 701
   tests).
 
-- W3-1 broker login E2E proof — STARTING 2026-09-08 (Tigo approved).
-  Plan: `specs/proposals/v0.2/95-w3-1-broker-login-e2e.md`.
+### Shipped foundation (not a completed login product)
+
+- **Credential Broker source/runtime foundation (checkpoint only):**
+  server-derived bindings, principal-scoped durable grants,
+  idempotency/nonces, broker-only browser capabilities, and status-only
+  results are present in source. This is not a fully shipped product claim;
+  see the W3-1 pre-login checkpoint below for disabled/unqualified paths.
 
 ### Open — W3 packages carried over (register: `roadmap-w3-status.md`)
 
-- **W3-1 — broker login E2E proof — LAYERS 1-4 SHIPPED (form adapter).**
-  Commits: `1d9c17c` (crypto), `25d02e7` (vault client), `72f536e`
-  (runtime wiring), `f8ca15f` (form adapter E2E). Gate: `make check` →
-  **731 passed**; all validators PASS; `git diff --check` clean.
-  What is proven: Hermes intent → broker → per-call Vaultwarden unlock
-  (prelogin→grant→sync→decrypt) → SidecarFormBrowser (narrow FormBrowser
-  over HttpAgentBrowser) → FormLoginAdapter → broker returns
-  `authenticated` to the caller; no material in any response body; the
-  adapter cannot navigate or list pages (protocol is the boundary).
-  Fail-closed on unreachable sidecar and wrong success selector.
-
-  **Basic adapter SHIPPED locally (2026-09-09; live deployment not yet
-  attempted):** runtime dispatch now selects `BasicAuthAdapter` with a
-  `BasicAuthDeclaration`; the broker-only browser channel is separately
-  secret-gated at `/broker/basic/state` + `/broker/basic/submit` and is
-  unreachable from router/agent-control. Chrome challenge handling uses
-  bounded CDP `Fetch.authRequired` / `Fetch.continueWithAuth`, exact HTTPS
-  origins, one matching challenge, no URL credentials, foreign-origin
-  cancellation, challenge-loop/origin-change checks, and boolean-only
-  application proof. A disposable local HTTPS server provides a real 401
-  Basic challenge for the E2E gate. Verification: focused 25 passed;
-  `make check` **746 passed**, all validators PASS; CloudFiles boundary
-  80 passed; compileall and diff-check clean.
-
-  **Still to land for W3-1 close:** sso (Authentik pmoc-sso) adapter, then
-  live image qualification/deploy and E2E against the real browser/vault.
-  The shared per-call Vaultwarden producer is already complete.
+- **W3-1 pre-login checkpoint — NOT QUALIFIED (2026-09-10):** the secure
+  source/runtime boundary and local contract coverage are being reconciled with
+  the enabled runtime capabilities. The prior form proof is historical only;
+  production form mode now exits at startup and the three Layer 4 integration
+  tests are skipped. Authentik currently detects an MFA stage but has no TOTP
+  submission and no human one-time-code handoff. Live Authentik closed-shadow
+  qualification is not qualified and is outside this checkpoint unless an
+  approved plan explicitly makes it a blocking exit criterion.
+- **Final-product requirements remain unchanged:** ordinary form login, TOTP
+  submission, human one-time-code handoff, SSO application identity proof, and
+  owner-bound recovery remain required by PRD 85. The current milestone cannot
+  claim them as shipped.
 - **W3-2 — adapter task post-refactor:** Authentik broker-client hardening
   + audit enhancement (superseded form; revisit after W3-1 proves the
   generic path).

@@ -124,6 +124,27 @@ jobs:
             "$RUNNER_TEMP/image-qualification/${SERVICE}-registry.json"
 
           container="qualification-${SERVICE}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          broker_args=()
+          if [ "$SERVICE" = credential-broker ]; then
+            broker_args=(
+              --mount type=tmpfs,destination=/data/state,tmpfs-mode=1777
+              --env CB_CREDENTIAL_CAPABILITY_SECRET=qualification-capability-secret
+              --env CB_CREDENTIAL_BROKER_AUDIENCE=credential-broker
+              --env CB_CREDENTIAL_NONCE_DB_PATH=/data/state/nonces.sqlite3
+              --env CB_BROKER_IDEMPOTENCY_DB_PATH=/data/state/idempotency.sqlite3
+              --env CB_BROKER_GRANT_DB_PATH=/data/state/grant-custody-v1.sqlite3
+              --env CB_BROKER_GRANT_KEK_HEX=6c6162cafebabec0ffee1234567890abcdef0123456789abcdef0123456789ab
+              --env CB_BROKER_SUBMIT_SECRET=qualification-broker-submit-secret
+              --env CB_BROKER_SITE_ID=qualification-site
+              --env CB_BROKER_ADAPTER=basic
+              --env CB_BROKER_ORIGIN=https://qualification.example.test
+              --env CB_BROKER_SUCCESS_PATH=/authenticated
+              --env CB_BROKER_USERNAME_SELECTOR='#username'
+              --env CB_BROKER_PASSWORD_SELECTOR='#password'
+              --env CB_BROKER_SUBMIT_SELECTOR='button[type="submit"]'
+              --env CB_VAULT_BASE_URL=https://vault.qualification.test
+            )
+          fi
           docker create --name "$container" \
             --publish 18080:"$INTERNAL_PORT" \
             --env CB_INSTANCE_ID="$INSTANCE_ID" \
@@ -136,18 +157,6 @@ jobs:
             --env CB_VIEWER_TOKEN_SECRET=qualification-viewer-secret \
             --env CB_AGENT_CONTROL_SHARED_SECRET=qualification-agent-secret \
             --env CB_ROUTER_SHARED_SECRET=qualification-router-shared-secret \
-            --env CB_BROKER_SHARED_SECRET=qualification-broker-request-secret \
-            --env CB_BROKER_SUBMIT_SECRET=qualification-broker-submit-secret \
-            --env CB_BROKER_SITE_ID=qualification-site \
-            --env CB_BROKER_ADAPTER=basic \
-            --env CB_BROKER_ORIGIN=https://qualification.example.test \
-            --env CB_BROKER_SUCCESS_PATH=/authenticated \
-            --env CB_BROKER_USERNAME_SELECTOR='#username' \
-            --env CB_BROKER_PASSWORD_SELECTOR='#password' \
-            --env CB_BROKER_SUBMIT_SELECTOR='button[type="submit"]' \
-            --env CB_VAULT_BASE_URL=https://vault.qualification.test \
-            --env CB_VAULT_EMAIL=qualification@example.test \
-            --env CB_VAULT_PASSWORD=qualification-vault-password \
             --env CB_SLOT_SUPERVISOR_URLS=slot-1=http://127.0.0.1:8081 \
             --env CB_AGENT_CONTROL_URLS=slot-1=http://127.0.0.1:8087 \
             --env CB_AGENT_CONTROL_SHARED_SECRET=qualification-agent-forwarding-secret \
@@ -160,6 +169,7 @@ jobs:
             --env CB_CHROME_EXECUTABLE=/usr/bin/chromium \
             --env CB_CHROME_HTTP_PORT=9222 \
             --env CB_CHROME_HTTP_URL=http://127.0.0.1:9222 \
+            "${broker_args[@]}" \
             "$IMAGE" > /dev/null
           cleanup() { docker rm -f "$container" > /dev/null 2>&1 || true; }
           trap cleanup EXIT

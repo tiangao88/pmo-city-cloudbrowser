@@ -1,18 +1,58 @@
-"""Dependency-injected status-only transport for ``credential-broker/v1``."""
+"""Capability-only, status-only transport for ``credential-broker/v1``."""
 
 from __future__ import annotations
 
+import math
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Callable, Iterator, Mapping
+from typing import Callable, Iterator, Mapping, Protocol
 
-from .contracts import BrokerResult, LoginIntent
+from cloudbrowser.credential_capability import CapabilityCodec, CapabilityError
+
+from .contracts import BrokerResult, GrantAuthorization, LoginIntent, SiteDeclaration
 from .coordinator import BrokerCoordinator
+from .deadline import BrokerDeadline, BrokerDeadlineExceeded
+from .idempotency import DurableIdempotencyStore, IdempotencyStoreError, OperationScope
+from .nonce_store import DurableNonceStore, NonceStoreError
+from .service import ResolvedBinding
+
+_CAPABILITY_REQUEST_FIELDS = frozenset({"capability"})
+_OPERATION = "credential.login"
+
+
+class BindingProvider(Protocol):
+    """Resolve a current broker binding from server-owned state."""
+
+    def resolve(self, intent: LoginIntent) -> ResolvedBinding: ...
+
+
+class GrantAuthorizationProvider(Protocol):
+    """Resolve a grant item from server-owned principal/site/target state."""
+
+    def resolve(
+        self,
+        binding: ResolvedBinding,
+        site_id: str,
+        target_tab_id: str,
+    ) -> GrantAuthorization: ...
+
+
+class TargetPreflightProvider(Protocol):
+    """Probe the exact target without reading or returning credentials."""
+
+    def preflight(
+        self,
+        intent: LoginIntent,
+        declaration: SiteDeclaration,
+        *,
+        deadline: BrokerDeadline | None = None,
+    ) -> object: ...
 
 
 @dataclass(frozen=True)
 class AuthenticatedPrincipal:
-    """Server-derived identity attached to one broker request."""
+    """Compatibility test-only identity seam; production HTTP does not use it."""
 
     profile_id: str
     principal_id: str
@@ -37,114 +77,191 @@ CredentialFetcher = Callable[[str], object]
 
 
 class BrokerHttpServer:
-    """Small transport core; HTTP serving and authentication are injected."""
+    """Authenticate one exact capability request and execute its claims.
+
+    ``principal_for`` is retained only as an unreachable compatibility seam for
+    old direct unit construction. ``handle`` never accepts the obsolete auth-token
+    request shape and never invokes that resolver.
+    """
 
     def __init__(
         self,
         *,
         server_identity: ServerIdentity,
-        principal_for: PrincipalResolver,
+        capability_codec: CapabilityCodec | None = None,
+        capability_audience: str | None = None,
+        deployment: str | None = None,
+        nonce_store: DurableNonceStore | None = None,
+        idempotency_store: DurableIdempotencyStore | None = None,
         coordinator: BrokerCoordinator | None = None,
         fetch_credentials: CredentialFetcher | None = None,
+        clock: Callable[[], int | float] | None = None,
+        principal_for: PrincipalResolver | None = None,
+        binding_provider: BindingProvider | None = None,
+        monotonic_clock: Callable[[], float] = time.monotonic,
+        outer_timeout_s: float = 30.0,
     ) -> None:
         self._server_identity = server_identity
-        self._principal_for = principal_for
+        self._capability_codec = capability_codec
+        self._capability_audience = capability_audience
+        self._deployment = deployment
+        self._nonce_store = nonce_store
+        self._idempotency_store = idempotency_store
         self._coordinator = coordinator
         self._fetch_credentials = fetch_credentials
+        self._clock = clock
+        self._monotonic_clock = monotonic_clock
+        if not callable(monotonic_clock):
+            raise ValueError("monotonic_clock must be callable")
+        if (
+            isinstance(outer_timeout_s, bool)
+            or not isinstance(outer_timeout_s, (int, float))
+            or outer_timeout_s <= 0
+        ):
+            raise ValueError("outer_timeout_s must be positive")
+        self._outer_timeout_s = float(outer_timeout_s)
+        self._test_only_compatibility_principal_for = principal_for
+        self._test_only_compatibility_binding_provider = binding_provider
 
     @contextmanager
     def handle(self, path: str, payload: Mapping[str, object]) -> Iterator[BrokerResponse]:
         if path != "/v1/credential/login":
             raise LookupError("broker route not found")
-        request_id = _request_id(payload)
-        try:
-            principal = self._principal_for(str(payload.get("auth_token", "")))
-        except Exception:
-            yield BrokerResponse(
-                body=BrokerResult(request_id, "failed", "invalid_auth").to_public_dict()
-            )
+        if not isinstance(payload, Mapping) or set(payload) != _CAPABILITY_REQUEST_FIELDS:
+            yield _failure("missing", "invalid_request")
+            return
+        token = payload.get("capability")
+        if not isinstance(token, str) or not token:
+            yield _failure("missing", "invalid_request")
+            return
+        if (
+            self._capability_codec is None
+            or self._nonce_store is None
+            or self._idempotency_store is None
+            or not self._capability_audience
+            or not self._deployment
+            or self._clock is None
+        ):
+            yield _failure("missing", "broker_not_configured")
             return
 
-        mismatch = _caller_binding_mismatch(payload, principal)
-        if mismatch:
-            yield BrokerResponse(
-                body=BrokerResult(
-                    request_id, "failed", "binding_mismatch"
-                ).to_public_dict()
+        try:
+            now_raw = self._clock()
+            if isinstance(now_raw, bool) or not isinstance(now_raw, (int, float)):
+                raise CapabilityError("capability clock is invalid")
+            now = int(now_raw)
+            capability = self._capability_codec.decode(
+                token,
+                now=now_raw,
+                audience=self._capability_audience,
+                deployment=self._deployment,
+                operation=_OPERATION,
             )
+        except CapabilityError:
+            yield _failure("missing", "invalid_capability")
             return
-        if not request_id or request_id == "missing":
-            yield BrokerResponse(
-                body=BrokerResult("missing", "failed", "invalid_request").to_public_dict()
+
+        request_id = capability.request_id
+        try:
+            receipt_monotonic = float(self._monotonic_clock())
+            if not math.isfinite(receipt_monotonic):
+                raise ValueError("monotonic clock is invalid")
+            capability_budget_s = float(capability.expires_at) - float(now_raw)
+            deadline = BrokerDeadline.from_receipt(
+                receipt_monotonic=receipt_monotonic,
+                budget_s=min(self._outer_timeout_s, capability_budget_s),
+                monotonic_clock=self._monotonic_clock,
             )
+            deadline.check()
+        except (ValueError, BrokerDeadlineExceeded):
+            yield _failure(request_id, "deadline_exceeded")
             return
-        username_ref = payload.get("username_ref")
-        site_id = payload.get("site_id")
-        current_url = payload.get("current_url")
-        if (
-            not isinstance(username_ref, str)
-            or not username_ref
-            or not isinstance(site_id, str)
-            or not site_id
-        ):
-            yield BrokerResponse(
-                body=BrokerResult(request_id, "failed", "invalid_request").to_public_dict()
+        try:
+            if deadline is not None:
+                deadline.check()
+            consumed = self._nonce_store.consume(
+                deployment=capability.deployment,
+                audience=capability.audience,
+                nonce=capability.nonce,
+                expires_at=capability.expires_at,
+                now=now,
+                deadline=deadline,
             )
+        except BrokerDeadlineExceeded:
+            yield _failure(request_id, "deadline_exceeded")
             return
-        if not isinstance(current_url, str) or not current_url:
-            yield BrokerResponse(
-                body=BrokerResult(request_id, "failed", "invalid_request").to_public_dict()
-            )
+        except (NonceStoreError, OSError):
+            yield _failure(request_id, "replay_protection_unavailable")
             return
-        if not isinstance(payload.get("target_tab_id"), str) or not payload.get(
-            "target_tab_id"
-        ):
-            yield BrokerResponse(
-                body=BrokerResult(request_id, "failed", "invalid_request").to_public_dict()
-            )
+        if not consumed:
+            yield _failure(request_id, "capability_replayed")
             return
 
         if self._coordinator is None or self._fetch_credentials is None:
-            result = BrokerResult(request_id, "failed", "broker_not_configured")
-        else:
-            intent = LoginIntent(
-                request_id=request_id,
-                profile_id=principal.profile_id,
-                principal_id=principal.principal_id,
-                browser_id=principal.browser_id,
-                site_id=principal.site_id,
-                username_ref=username_ref,
-                target_tab_id=_optional_text(payload.get("target_tab_id")),
-                idempotency_key=_optional_text(payload.get("idempotency_key")),
-                binding_generation=principal.generation,
+            yield _failure(request_id, "broker_not_configured")
+            return
+        coordinator = self._coordinator
+        fetch_credentials = self._fetch_credentials
+        assert coordinator is not None
+        assert fetch_credentials is not None
+        idempotency_store = self._idempotency_store
+        assert idempotency_store is not None
+        intent = LoginIntent(
+            request_id=capability.request_id,
+            profile_id=capability.profile_id,
+            principal_id=capability.principal_id,
+            browser_id=capability.browser_id,
+            site_id=capability.site_id,
+            target_tab_id=capability.target_tab_id,
+            idempotency_key=capability.request_id,
+            binding_generation=capability.generation,
+        )
+        scope = OperationScope(
+            deployment=capability.deployment,
+            audience=capability.audience,
+            operation=capability.operation,
+            profile_id=capability.profile_id,
+            principal_id=capability.principal_id,
+            browser_id=capability.browser_id,
+            generation=capability.generation,
+            site_id=capability.site_id,
+            target_tab_id=capability.target_tab_id,
+            request_id=capability.request_id,
+        )
+        try:
+            if deadline is not None:
+                deadline.check()
+            result = idempotency_store.execute(
+                scope,
+                lambda: coordinator.execute(
+                    intent,
+                    fetch_credentials=fetch_credentials,
+                    deadline=deadline,
+                ),
+                deadline=deadline,
             )
-            result = self._coordinator.execute(intent, fetch_credentials=self._fetch_credentials)
-        # Only BrokerResult.to_public_dict() is allowed across this boundary.
+        except BrokerDeadlineExceeded:
+            yield _failure(request_id, "deadline_exceeded")
+            return
+        except (IdempotencyStoreError, OSError):
+            yield _failure(request_id, "idempotency_unavailable")
+            return
+        except Exception:
+            yield _failure(request_id, "internal_error")
+            return
         yield BrokerResponse(body=result.to_public_dict())
 
 
-def _request_id(payload: Mapping[str, object]) -> str:
-    value = payload.get("request_id")
-    return value.strip() if isinstance(value, str) and value.strip() and len(value.strip()) <= 128 else "missing"
+def _failure(request_id: str, error_code: str) -> BrokerResponse:
+    return BrokerResponse(BrokerResult(request_id, "failed", error_code).to_public_dict())
 
 
-def _optional_text(value: object) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value or len(value) > 128:
-        return None
-    return value
-
-
-def _caller_binding_mismatch(payload: Mapping[str, object], principal: AuthenticatedPrincipal) -> bool:
-    expected = {
-        "profile_id": principal.profile_id,
-        "principal_id": principal.principal_id,
-        "browser_id": principal.browser_id,
-        "site_id": principal.site_id,
-        "binding_generation": principal.generation,
-    }
-    return any(key in payload and payload[key] != value for key, value in expected.items())
-
-
-__all__ = ["AuthenticatedPrincipal", "BrokerHttpServer", "BrokerResponse", "ServerIdentity"]
+__all__ = [
+    "AuthenticatedPrincipal",
+    "BindingProvider",
+    "BrokerHttpServer",
+    "BrokerResponse",
+    "GrantAuthorizationProvider",
+    "ServerIdentity",
+    "TargetPreflightProvider",
+]

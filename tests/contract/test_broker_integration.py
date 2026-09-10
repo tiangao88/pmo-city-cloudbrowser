@@ -78,6 +78,7 @@ def test_transport_to_coordinator_round_trip_returns_status_only() -> None:
         declarations={"site-a": declaration},
         adapter_selector=lambda site, decl, intent: _run_adapter,
         emitter=emitter,
+        test_only_allow_compatibility_authorization=True,
     )
 
     intent = LoginIntent(

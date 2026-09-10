@@ -12,6 +12,38 @@ from __future__ import annotations
 import pytest
 
 from cloudbrowser.credential_broker import AdapterResult
+from cloudbrowser.credential_broker.deadline import BrokerDeadline, BrokerDeadlineExceeded
+
+
+def test_basic_adapter_stops_before_side_effect_when_budget_expires_during_probe() -> None:
+    class ExpiringBrowser:
+        def current_url(self, *, target_id: str) -> str:
+            return "https://basic.example.test/protected"
+
+        def challenge_origin(self, *, target_id: str) -> str:
+            clock[0] = 2.0
+            return "https://basic.example.test"
+
+        def submit_basic_auth(self, *args, **kwargs) -> None:
+            raise AssertionError("credential side effect must not start after deadline")
+
+    clock = [1.0]
+    deadline = BrokerDeadline(1.5, monotonic_clock=lambda: clock[0])
+    declaration = BasicAuthDeclaration(
+        site_id="basic",
+        origin="https://basic.example.test",
+        success_path="/home",
+    )
+    with pytest.raises(BrokerDeadlineExceeded):
+        BasicAuthAdapter().execute(
+            declaration,
+            CredentialMaterial("alice", "secret"),
+            ExpiringBrowser(),
+            target_id="target-1",
+            deadline=deadline,
+        )
+
+
 from cloudbrowser.credential_broker.adapters.basic import (
     BasicAuthAdapter,
     BasicAuthDeclaration,

@@ -77,7 +77,7 @@ def test_lease_rotation_updates_underlying_transports() -> None:
     server = AgentControlService.create_server(
         RestrictedAgentBrowser(
             readiness=lambda: _readiness(state),
-            page_info=lambda selector=None: PageState(url="https://example.test", title="Example", text="Hello"),
+            page_info=lambda target_tab_id, selector=None: PageState(url="https://example.test", title="Example", text="Hello"),
         ),
         principal_id="principal-unassigned",
         browser_id="browser-slot-1",
@@ -113,7 +113,7 @@ def test_lease_rotation_updates_underlying_transports() -> None:
                 "X-CB-Browser": "browser-slot-1",
                 "X-CB-Generation": "generation-q-abc123",
             },
-            body={"request_id": "r1", "operation": "page_info", "params": {}},
+            body={"request_id": "r1", "operation": "page_info", "params": {"target_tab_id": "tab-1"}},
         )
         payload = json.loads(action.read())
         assert payload["status"] == "ok", payload

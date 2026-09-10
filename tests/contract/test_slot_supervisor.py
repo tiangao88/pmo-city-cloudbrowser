@@ -1,4 +1,6 @@
 from pathlib import Path
+import threading
+import time
 
 import pytest
 
@@ -62,6 +64,49 @@ def supervisor(tmp_path: Path, browser: FakeBrowser) -> SlotSupervisor:
         clock=browser.clock.clock,
         sleep=browser.clock.sleep,
     )
+
+
+def test_stop_waits_for_in_flight_wake_and_converges_stopped(tmp_path: Path) -> None:
+    """Threading control requests cannot interleave lifecycle state transitions."""
+
+    start_entered = threading.Event()
+    release_start = threading.Event()
+
+    class BlockingBrowser(FakeBrowser):
+        def start(self) -> None:
+            self.started += 1
+            start_entered.set()
+            assert release_start.wait(2)
+
+    browser = BlockingBrowser(
+        [BrowserReadiness(BINDING.principal_id, BINDING.generation, True)]
+    )
+    value = supervisor(tmp_path, browser)
+    outcomes: dict[str, object] = {}
+
+    def wake() -> None:
+        outcomes["wake"] = value.wake(BINDING, timeout_s=1, poll_s=0.1)
+
+    def stop() -> None:
+        outcomes["stop"] = value.stop(BINDING)
+
+    waking = threading.Thread(target=wake)
+    stopping = threading.Thread(target=stop)
+    waking.start()
+    assert start_entered.wait(1)
+    stopping.start()
+    time.sleep(0.05)
+    assert stopping.is_alive()
+    release_start.set()
+    waking.join(2)
+    stopping.join(2)
+
+    assert not waking.is_alive()
+    assert not stopping.is_alive()
+    assert value.lifecycle.state is BrowserState.STOPPED
+    assert outcomes["wake"].state is BrowserState.READY
+    assert outcomes["stop"].state is BrowserState.STOPPED
+    assert browser.stopped == 1
 
 
 def test_wake_waits_for_matching_readiness_and_restores_last_good_tabs(tmp_path: Path):

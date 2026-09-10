@@ -362,6 +362,46 @@ def create_viewer_server(
                 return
             self._json(status, payload)
 
+        def _credential_login_call(self) -> None:
+            """Accept only site/tab intent fields; no credential references."""
+            assert session_surface is not None
+            request_id = self.headers.get("X-CB-Request-Id") or "ui-" + secrets.token_urlsafe(8)
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 4096:
+                    raise ValueError
+                raw = json.loads(self.rfile.read(length))
+                if not isinstance(raw, dict):
+                    raise ValueError
+                if set(raw) - {"request_id", "site_id", "target_tab_id"}:
+                    raise ValueError
+                body_request_id = raw.get("request_id", request_id)
+                site_id, target_tab_id = raw.get("site_id"), raw.get("target_tab_id")
+                if (
+                    not isinstance(body_request_id, str)
+                    or not body_request_id
+                    or len(body_request_id) > 128
+                    or any(ord(char) < 0x20 or ord(char) == 0x7F for char in body_request_id)
+                    or not isinstance(site_id, str)
+                    or not isinstance(target_tab_id, str)
+                ):
+                    raise ValueError
+                request_id = body_request_id
+            except (ValueError, TypeError, json.JSONDecodeError):
+                self._json(200, {"request_id": request_id, "status": "failed", "error_code": "invalid_request"})
+                return
+            try:
+                status, payload = session_surface.credential_login(
+                    headers=dict(self.headers.items()),
+                    site_id=site_id,
+                    target_tab_id=target_tab_id,
+                    request_id=request_id,
+                )
+            except Exception:
+                self._json(200, {"request_id": request_id, "status": "failed", "error_code": "surface_failed"})
+                return
+            self._json(status, payload)
+
         def _agent_call(self, operation: str) -> None:
             """Relay one allowlisted page action for the edge-authenticated caller."""
             assert session_surface is not None
@@ -415,6 +455,9 @@ def create_viewer_server(
                 return
             if session_surface is not None and self.path == "/ui/session/activate":
                 self._surface_call("activate")
+                return
+            if session_surface is not None and self.path == "/ui/credential/login":
+                self._credential_login_call()
                 return
             if session_surface is not None and self.path == "/ui/session/leave":
                 self._surface_call("leave")

@@ -42,7 +42,8 @@ def test_compose_files_require_owner_binding_and_shared_secret() -> None:
             "CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-dev01}",
             "CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-dev01}",
             "CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-dev01-g1}",
-            "CB_DOWNLOADS_SHARED_SECRET: ${SERVICE_PASSWORD_64_DLSECRET}",
+            "CB_DOWNLOADS_SHARED_SECRET: "
+            "${SERVICE_PASSWORD_64_DLSECRET:?SERVICE_PASSWORD_64_DLSECRET is required}",
         ),
     }
     for name, markers in variant_markers.items():

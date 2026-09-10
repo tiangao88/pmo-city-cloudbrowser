@@ -23,9 +23,22 @@ class ChromeHttpClient:
     """Small stdlib client for the local Chrome HTTP JSON endpoints."""
 
     def __init__(self, base_url: str = "http://127.0.0.1:9222", *, timeout_s: float = 5.0) -> None:
-        parsed = urlsplit(base_url)
-        if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.username:
-            raise ValueError("base_url must be an HTTP(S) origin without userinfo")
+        try:
+            parsed = urlsplit(base_url)
+            hostname = parsed.hostname
+            port = parsed.port
+        except (TypeError, ValueError) as exc:
+            raise ValueError("base_url must use a valid HTTP(S) origin") from exc
+        if (
+            parsed.netloc.endswith(":")
+            or parsed.scheme not in ("http", "https")
+            or hostname not in {"localhost", "127.0.0.1", "::1"}
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.netloc.count("@")
+            or (port is not None and not 1 <= port <= 65535)
+        ):
+            raise ValueError("base_url must be a local HTTP(S) origin without userinfo")
         if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
             raise ValueError("base_url must be an origin")
         if timeout_s <= 0:
@@ -70,15 +83,15 @@ class ChromeHttpClient:
 
 
 class PageActionAdapter(Protocol):
-    """Concrete page actions injected by browser runtime integration."""
+    """Exact-target page actions; every operation names one tab."""
 
-    def navigate(self, url: str) -> None: ...
+    def navigate(self, target_tab_id: str, url: str) -> None: ...
 
-    def click(self, selector: str) -> None: ...
+    def click(self, target_tab_id: str, selector: str) -> None: ...
 
-    def type_text(self, selector: str, text: str) -> None: ...
+    def type_text(self, target_tab_id: str, selector: str, text: str) -> None: ...
 
-    def page_info(self, selector: str | None = None) -> dict[str, str]: ...
+    def page_info(self, target_tab_id: str, selector: str | None = None) -> dict[str, str]: ...
 
 
 @dataclass
@@ -88,11 +101,20 @@ class ChromeBrowserAdapter:
     chrome: ChromeHttpClientProtocol
     owner: str
     generation: str
+    profile_id: str = "profile-unassigned"
+    browser_id: str = "browser-unassigned"
     start_callback: Callable[[], None] | None = None
     stop_callback: Callable[[], None] | None = None
     page_actions: PageActionAdapter | None = None
 
-    def rebind(self, owner: str, generation: str) -> None:
+    def rebind(
+        self,
+        owner: str,
+        generation: str,
+        *,
+        profile_id: str | None = None,
+        browser_id: str | None = None,
+    ) -> None:
         """Point the adapter's identity at a newly adopted binding."""
 
         for value in (owner, generation):
@@ -100,6 +122,21 @@ class ChromeBrowserAdapter:
                 raise ValueError("owner and generation must be bounded strings")
         self.owner = owner
         self.generation = generation
+        if profile_id:
+            self.profile_id = profile_id
+        if browser_id:
+            self.browser_id = browser_id
+
+    @property
+    def binding(self):
+        from .lifecycle import BrowserBinding
+
+        return BrowserBinding(
+            profile_id=self.profile_id,
+            principal_id=self.owner,
+            browser_id=self.browser_id,
+            generation=self.generation,
+        )
 
     def start(self) -> None:
         if self.start_callback is None:
@@ -153,17 +190,17 @@ class ChromeBrowserAdapter:
             if url in ("about:blank", "chrome://newtab/") and isinstance(target_id, str):
                 self.chrome.text_request("/json/close/" + quote(target_id, safe=""), method="GET")
 
-    def navigate(self, url: str) -> None:
-        self._actions().navigate(url)
+    def navigate(self, target_tab_id: str, url: str) -> None:
+        self._actions().navigate(target_tab_id, url)
 
-    def click(self, selector: str) -> None:
-        self._actions().click(selector)
+    def click(self, target_tab_id: str, selector: str) -> None:
+        self._actions().click(target_tab_id, selector)
 
-    def type_text(self, selector: str, text: str) -> None:
-        self._actions().type_text(selector, text)
+    def type_text(self, target_tab_id: str, selector: str, text: str) -> None:
+        self._actions().type_text(target_tab_id, selector, text)
 
-    def page_info(self, selector: str | None = None) -> dict[str, str]:
-        return self._actions().page_info(selector)
+    def page_info(self, target_tab_id: str, selector: str | None = None) -> dict[str, str]:
+        return self._actions().page_info(target_tab_id, selector)
 
     def _actions(self) -> PageActionAdapter:
         if self.page_actions is None:
@@ -203,8 +240,18 @@ def create_browser_server(
                     else:
                         self._send_json(200, {"pages": [{"tab_id": f"tab-{i}", "url": url, "title": "untitled"} for i, url in enumerate(urls, start=1)]})
                     return
-                if urlsplit(self.path).path == "/agent/pages/info":
-                    self._send_json(200, adapter.page_info())
+                parsed = urlsplit(self.path)
+                if parsed.path == "/agent/pages/info":
+                    from urllib.parse import parse_qs
+
+                    query = parse_qs(parsed.query, keep_blank_values=True, strict_parsing=True, max_num_fields=2)
+                    if set(query) - {"target_tab_id", "selector"}:
+                        raise ValueError("invalid page-info query")
+                    target_tab_id = query.get("target_tab_id", [None])[0]
+                    if not isinstance(target_tab_id, str):
+                        raise ValueError("target_tab_id is required")
+                    selector = query.get("selector", [None])[0]
+                    self._send_json(200, adapter.page_info(target_tab_id, selector))
                     return
                 self.send_error(404)
             except BrowserUnavailable:
@@ -221,12 +268,14 @@ def create_browser_server(
                 elif self.path == "/browser/pages/close-empty":
                     adapter.close_empty_pages()
                 elif self.path == "/agent/pages/navigate":
-                    adapter.navigate(self._read_text())
+                    payload = json.loads(self._read_text())
+                    adapter.navigate(payload["target_tab_id"], payload["value"])
                 elif self.path == "/agent/pages/click":
-                    adapter.click(self._read_text())
+                    payload = json.loads(self._read_text())
+                    adapter.click(payload["target_tab_id"], payload["value"])
                 elif self.path == "/agent/pages/type":
-                    selector, text = self._read_text().split("\n", 1)
-                    adapter.type_text(selector, text)
+                    payload = json.loads(self._read_text())
+                    adapter.type_text(payload["target_tab_id"], payload["selector"], payload["text"])
                 else:
                     self.send_error(404)
                     return

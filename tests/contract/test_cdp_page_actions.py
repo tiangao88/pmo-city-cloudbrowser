@@ -25,6 +25,7 @@ import struct
 import pytest
 
 from cloudbrowser.browser_slots.page_actions import CdpPageActionAdapter
+from cloudbrowser.browser_slots.transport import BrowserUnavailable
 
 
 def _page_target(tab_id: str, url: str) -> dict[str, object]:
@@ -34,6 +35,53 @@ def _page_target(tab_id: str, url: str) -> dict[str, object]:
         "id": tab_id,
         "webSocketDebuggerUrl": f"ws://127.0.0.1:9222/devtools/page/{tab_id}",
     }
+
+
+class RecordingWebSocket:
+    def __init__(self) -> None:
+        self.commands: list[str] = []
+        self._sent = False
+
+    def send(self, payload: str) -> None:
+        self._sent = True
+        self.commands.append(json.loads(payload)["method"])
+
+    def recv(self) -> bytes:
+        assert self._sent
+        return json.dumps(
+            {
+                "id": 1,
+                "result": {
+                    "result": {
+                        "value": {
+                            "url": "https://example.test/",
+                            "title": "",
+                            "text": "",
+                        }
+                    }
+                },
+            }
+        ).encode()
+
+    def close(self) -> None:
+        pass
+
+
+def test_cdp_page_info_caps_websocket_timeout_to_remaining_deadline() -> None:
+    from cloudbrowser.credential_broker.deadline import BrokerDeadline
+
+    chrome = _FakeChrome([_page_target("tab-1", "https://example.test/")])
+    observed: list[float] = []
+    websocket = RecordingWebSocket()
+    adapter = CdpPageActionAdapter(
+        chrome,
+        ws_factory=lambda url, timeout_s: observed.append(timeout_s) or websocket,
+    )
+    deadline = BrokerDeadline(9.2, monotonic_clock=lambda: 9.0)
+
+    adapter.page_info("tab-1", deadline=deadline)
+
+    assert observed == [pytest.approx(0.2)]
 
 
 class _FakeChrome:
@@ -63,7 +111,7 @@ def test_navigate_drives_the_live_page_target_via_cdp_page_navigate() -> None:
     chrome = _FakeChrome(targets=[_page_target("tab-1", "about:blank")])
     ws = _FakeWebSocket(responses=[{"id": 1, "result": {}}])
     adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: ws)
-    adapter.navigate("https://example.test/page")
+    adapter.navigate("tab-1", "https://example.test/page")
     # The live tab is reused — no new target is created.
     assert not any(path.startswith("/json/new") for _, path in chrome.calls)
     sent = json.loads(ws.sent[0])
@@ -71,12 +119,12 @@ def test_navigate_drives_the_live_page_target_via_cdp_page_navigate() -> None:
     assert sent["params"]["url"] == "https://example.test/page"
 
 
-def test_navigate_creates_a_target_when_no_page_exists() -> None:
+def test_navigate_rejects_unknown_target_instead_of_creating_a_tab() -> None:
     chrome = _FakeChrome(targets=[])
-    ws = _FakeWebSocket(responses=[{"id": 1, "result": {}}, {"id": 2, "result": {}}])
-    adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: ws)
-    adapter.navigate("https://example.test/page")
-    assert ("PUT", "/json/new?https%3A%2F%2Fexample.test%2Fpage") in chrome.calls
+    adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: _FakeWebSocket())
+    with pytest.raises(BrowserUnavailable):
+        adapter.navigate("tab-missing", "https://example.test/page")
+    assert not any(path.startswith("/json/new") for _, path in chrome.calls)
 
 
 def test_navigate_rejects_non_page_urls_before_touching_chrome() -> None:
@@ -90,7 +138,7 @@ def test_navigate_rejects_non_page_urls_before_touching_chrome() -> None:
     )
     for bad in bad_urls:
         with pytest.raises(ValueError):
-            adapter.navigate(bad)
+            adapter.navigate("tab-1", bad)
     assert chrome.calls == []
 
 
@@ -104,7 +152,7 @@ def test_page_info_captures_url_title_and_text_via_cdp() -> None:
         }}}}]
     )
     adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: ws)
-    info = adapter.page_info()
+    info = adapter.page_info("tab-9")
     assert info == {"url": "https://example.test/p", "title": "Example Page", "text": "Hello world"}
     # The evaluate payload asks for location/title/body-text only, bounded.
     sent = json.loads(ws.sent[0])
@@ -117,28 +165,113 @@ def test_page_info_is_bounded_and_fails_closed_without_a_page() -> None:
     chrome = _FakeChrome(targets=[{"type": "iframe", "url": "about:blank", "id": "x"}])
     adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: _FakeWebSocket())
     with pytest.raises(Exception) as excinfo:
-        adapter.page_info()
+        adapter.page_info("tab-1")
     assert type(excinfo.value).__name__ == "BrowserUnavailable"
 
 
 def test_click_and_type_are_not_implemented_and_stay_fail_closed() -> None:
-    chrome = _FakeChrome()
+    chrome = _FakeChrome(targets=[_page_target("tab-1", "https://example.test/p")])
     adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: _FakeWebSocket())
     with pytest.raises(Exception) as excinfo:
-        adapter.click("#submit")
+        adapter.click("tab-1", "#submit")
     assert type(excinfo.value).__name__ == "BrowserUnavailable"
     with pytest.raises(Exception) as excinfo:
-        adapter.type_text("#name", "Alice")
+        adapter.type_text("tab-1", "#name", "Alice")
     assert type(excinfo.value).__name__ == "BrowserUnavailable"
 
 
 def test_page_info_selector_argument_is_refused_for_now() -> None:
-    """Selector support is undecided (HttpJsonClient rejects query strings);
-    the adapter must refuse it loudly instead of silently ignoring it."""
-    chrome = _FakeChrome()
+    """Normal agent actions do not gain the broker selector capability."""
+    chrome = _FakeChrome(targets=[_page_target("tab-1", "https://example.test/p")])
     adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: _FakeWebSocket())
     with pytest.raises(ValueError):
-        adapter.page_info("#some-selector")
+        adapter.page_info("tab-1", "#some-selector")
+
+
+def test_broker_rejects_unknown_target_before_opening_a_websocket() -> None:
+    chrome = _FakeChrome(targets=[_page_target("target-present", "https://auth.example.test/")])
+    opened: list[str] = []
+
+    def ws_factory(url: str, timeout_s: float):
+        opened.append(url)
+        raise AssertionError("unknown target must be rejected before CDP")
+
+    adapter = CdpPageActionAdapter(chrome, ws_factory=ws_factory)
+    with pytest.raises(BrowserUnavailable):
+        adapter.broker_page_info("target-missing", "#uid")
+    assert opened == []
+
+
+def test_broker_uses_requested_same_origin_target_for_selector_read() -> None:
+    chrome = _FakeChrome(
+        targets=[
+            _page_target("target-other", "https://auth.example.test/other"),
+            _page_target("target-requested", "https://auth.example.test/login"),
+        ]
+    )
+    ws = _FakeWebSocket(
+        responses=[
+            {"id": 1, "result": {"result": {"type": "string", "value": {"found": True, "text": "uidField", "value": ""}}}}
+        ]
+    )
+    selected: list[str] = []
+    adapter = CdpPageActionAdapter(
+        chrome,
+        ws_factory=lambda url, timeout_s: (selected.append(url), ws)[1],
+    )
+
+    assert adapter.broker_page_info("target-requested", "#uid") == {
+        "found": True,
+        "text": "uidField",
+        "value": "",
+    }
+    assert selected == ["ws://127.0.0.1:9222/devtools/page/target-requested"]
+    command = json.loads(ws.sent[0])
+    assert command["method"] == "Runtime.evaluate"
+    assert command["params"]["returnByValue"] is True
+
+
+def test_parser_caps_selector_result_size_independently() -> None:
+    chrome = _FakeChrome(targets=[_page_target("target-1", "https://auth.example.test/login")])
+    ws = _FakeWebSocket(
+        responses=[
+            {
+                "id": 1,
+                "result": {
+                    "result": {
+                        "type": "string",
+                        "value": {"found": True, "text": "x" * 16385, "value": ""},
+                    }
+                },
+            }
+        ]
+    )
+    adapter = CdpPageActionAdapter(chrome, ws_factory=lambda _url, _timeout: ws)
+
+    with pytest.raises(BrowserUnavailable):
+        adapter.broker_page_info("target-1", "#uid")
+
+
+def test_broker_click_and_type_are_distinct_from_normal_agent_actions() -> None:
+    chrome = _FakeChrome(targets=[_page_target("target-1", "https://auth.example.test/login")])
+    responses = [
+        {"id": 1, "result": {"result": {"type": "string", "value": {"ok": True}}}},
+        {"id": 1, "result": {"result": {"type": "string", "value": {"ok": True}}}},
+    ]
+    sockets: list[_FakeWebSocket] = []
+
+    def ws_factory(url: str, timeout_s: float):
+        socket = _FakeWebSocket(responses=[responses.pop(0)])
+        sockets.append(socket)
+        return socket
+
+    adapter = CdpPageActionAdapter(chrome, ws_factory=ws_factory)
+    adapter.broker_type_text("target-1", "#uid", "alice")
+    adapter.broker_click("target-1", "button[type=submit]")
+    assert [json.loads(socket.sent[0])["method"] for socket in sockets] == [
+        "Runtime.evaluate",
+        "Runtime.evaluate",
+    ]
 
 
 def test_evaluate_result_is_validated_not_echoed_blindly() -> None:
@@ -147,7 +280,7 @@ def test_evaluate_result_is_validated_not_echoed_blindly() -> None:
     ws = _FakeWebSocket(responses=[bad])
     adapter = CdpPageActionAdapter(chrome, ws_factory=lambda url, timeout_s: ws)
     with pytest.raises(Exception) as excinfo:
-        adapter.page_info()
+        adapter.page_info("tab-1")
     assert type(excinfo.value).__name__ == "BrowserUnavailable"
 
 

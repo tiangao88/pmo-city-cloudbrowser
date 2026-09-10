@@ -56,7 +56,7 @@ def test_agent_control_health_endpoint_is_bounded() -> None:
 def test_agent_control_requires_trusted_router_header() -> None:
     browser = RestrictedAgentBrowser(
         readiness=lambda: BrowserReadiness("owner@example.test", "generation-1", True),
-        page_info=lambda: PageState("https://example.test", "Example", "Hello"),
+        page_info=lambda target_tab_id, selector=None: PageState("https://example.test", "Example", "Hello"),
     )
     server = AgentControlService.create_server(
         browser,
@@ -69,7 +69,7 @@ def test_agent_control_requires_trusted_router_header() -> None:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        body = json.dumps({"request_id": "r1", "operation": "page_info", "params": {}}).encode()
+        body = json.dumps({"request_id": "r1", "operation": "page_info", "params": {"target_tab_id": "tab-1"}}).encode()
         with pytest.raises(HTTPError) as denied:
             urlopen(
                 Request(

@@ -1,13 +1,19 @@
 # Deployed CloudBrowser dev staging compose (Coolify).
 #
-# Coolify provisioning contract (v4):
-#   - The six service secrets use Coolify magic env variables
-#     (${SERVICE_PASSWORD_64_<IDENTIFIER>}); Coolify auto-creates them in the
-#     service env list with a random 64-char alphanumeric value on first parse
-#     and keeps the value stable across redeploys (editable in the UI).
-#   - Configuration values carry deploy-safe defaults (${CB_X:-default}) so a
-#     fresh service deploy provisions itself with zero manual env setup; the
-#     defaults match dev01 and can be overridden per environment in the UI.
+# Coolify provisioning contract (v5):
+#   - Coolify magic env variables generate the eight service-to-service
+#     secrets below (${SERVICE_PASSWORD_64_<IDENTIFIER>}). They cover secret
+#     values only; they do not satisfy the required custody key or Vault URL.
+#   - A fresh deployment still requires two non-Coolify inputs:
+#       CB_BROKER_GRANT_KEK_HEX — 32-byte custody KEK, injected from the
+#         operator's secret manager; never generated or committed here.
+#       CB_VAULT_BASE_URL — the approved credential-source endpoint.
+#     Set both in Coolify's service environment before parsing/deploying this
+#     compose. Other CB_* values use deploy-safe dev01 defaults and may be
+#     overridden in the UI.
+#   - The magic env values are auto-created with random 64-character
+#     alphanumeric values on first parse and remain stable across redeploys
+#     (editable in the UI).
 # Image-based variant of deploy/coolify/compose.yaml: Coolify API-created
 # services cannot clone the private repo to satisfy `build:` contexts, so the
 # deployed compose pins the published dev images instead.
@@ -44,19 +50,24 @@ services:
       # Fail-closed control plane: the router dispatches slot lifecycle
       # commands to private slot supervisors and authenticates downstream
       # with its trusted secret; refuse to boot without either.
-      CB_ROUTER_SHARED_SECRET: ${SERVICE_PASSWORD_64_ROUTERSECRET}
+      CB_ROUTER_SHARED_SECRET: ${SERVICE_PASSWORD_64_ROUTERSECRET:?SERVICE_PASSWORD_64_ROUTERSECRET is required}
       CB_SLOT_SUPERVISOR_URLS: ${CB_SLOT_SUPERVISOR_URLS:-slot-1=http://slot-supervisor:8081}
       # §3.1: trusted forwarding targets for agent page-actions; the router
       # relays only allowlisted operations to slots the caller owns.
       CB_AGENT_CONTROL_URLS: ${CB_AGENT_CONTROL_URLS:-slot-1=http://agent-control:8090}
-      CB_AGENT_CONTROL_SHARED_SECRET: ${SERVICE_PASSWORD_64_AGENTCTRLSECRET}
+      CB_AGENT_CONTROL_SHARED_SECRET: ${SERVICE_PASSWORD_64_AGENTCTRLSECRET:?SERVICE_PASSWORD_64_AGENTCTRLSECRET is required}
+      CB_CREDENTIAL_BROKER_URL: ${CB_CREDENTIAL_BROKER_URL:-http://credential-broker:8084}
+      CB_CREDENTIAL_CAPABILITY_SECRET: ${SERVICE_PASSWORD_64_CREDENTIALCAPSECRET:?SERVICE_PASSWORD_64_CREDENTIALCAPSECRET is required}
+      CB_CREDENTIAL_BROKER_AUDIENCE: ${CB_CREDENTIAL_BROKER_AUDIENCE:-credential-broker}
+      CB_CREDENTIAL_BROKER_TIMEOUT_S: ${CB_CREDENTIAL_BROKER_TIMEOUT_S:-25}
+      CB_CREDENTIAL_CAPABILITY_TTL_S: ${CB_CREDENTIAL_CAPABILITY_TTL_S:-26}
       # Trust the Traefik/TinyAuth forward-auth identity headers
       # (remote-user/email/name/groups, copied by tinyauth-pmo@file) for the
       # authenticated edge. Must only be set behind the authenticated proxy;
       # unset keeps the bearer-token-only behavior.
       CB_EDGE_AUTH: ${CB_EDGE_AUTH:-traefik-forwardauth}
       CB_IDENTITY_LINK_BASE_URL: http://identity-link:8091
-      CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET}
+      CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET:?SERVICE_PASSWORD_64_IDLINKSECRET is required}
       CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:-https://auth.aikumi.app/application/o/pmoc-sso/}
       CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:-tinyauth-pmo}
     depends_on:
@@ -85,7 +96,7 @@ services:
       CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
       CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-slot-1}
       CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
-      CB_ROUTER_SHARED_SECRET: ${SERVICE_PASSWORD_64_ROUTERSECRET}
+      CB_ROUTER_SHARED_SECRET: ${SERVICE_PASSWORD_64_ROUTERSECRET:?SERVICE_PASSWORD_64_ROUTERSECRET is required}
     depends_on:
       browser:
         condition: service_started
@@ -119,11 +130,22 @@ services:
       CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-slot-1}
       # Supervisor binding pushes and broker→browser submission use distinct
       # one-way secrets; browser never receives caller→broker request auth.
-      CB_ROUTER_SHARED_SECRET: ${SERVICE_PASSWORD_64_ROUTERSECRET}
-      CB_BROKER_SUBMIT_SECRET: ${SERVICE_PASSWORD_64_BROKERSUBMIT}
+      CB_ROUTER_SHARED_SECRET: ${SERVICE_PASSWORD_64_ROUTERSECRET:?SERVICE_PASSWORD_64_ROUTERSECRET is required}
+      CB_BROKER_SUBMIT_SECRET: ${SERVICE_PASSWORD_64_BROKERSUBMIT:?SERVICE_PASSWORD_64_BROKERSUBMIT is required}
+      # Keep exact-target Authentik policy byte-for-byte aligned with broker.
+      CB_BROKER_ADAPTER: ${CB_BROKER_ADAPTER:-basic}
+      CB_BROKER_SSO_ENTRY_URL: ${CB_BROKER_SSO_ENTRY_URL:-}
+      CB_BROKER_SSO_IDP_ORIGINS: ${CB_BROKER_SSO_IDP_ORIGINS:-}
+      CB_BROKER_SSO_CALLBACK_ORIGINS: ${CB_BROKER_SSO_CALLBACK_ORIGINS:-}
+      CB_BROKER_SSO_APPLICATION_ORIGINS: ${CB_BROKER_SSO_APPLICATION_ORIGINS:-}
+      CB_BROKER_SSO_SUCCESS_PATHS: ${CB_BROKER_SSO_SUCCESS_PATHS:-}
+      CB_BROKER_SSO_ALLOWED_MFA: ${CB_BROKER_SSO_ALLOWED_MFA:-totp}
+      CB_BROKER_SSO_IDENTITY_SELECTOR: ${CB_BROKER_SSO_IDENTITY_SELECTOR:-}
+      CB_BROKER_SSO_IDENTITY_CLAIM: ${CB_BROKER_SSO_IDENTITY_CLAIM:-}
+      CB_BROKER_SSO_STAGE_TIMEOUT_S: ${CB_BROKER_SSO_STAGE_TIMEOUT_S:-24}
       CB_BROWSER_DOWNLOAD_DIR: /data/downloads-browser
       CB_DOWNLOADS_INGEST_URL: http://cloudfiles:8086
-      CB_DOWNLOADS_INGEST_SECRET: ${SERVICE_PASSWORD_64_INGESTSECRET}
+      CB_DOWNLOADS_INGEST_SECRET: ${SERVICE_PASSWORD_64_INGESTSECRET:?SERVICE_PASSWORD_64_INGESTSECRET is required}
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9230/browser/health', timeout=3)"]
       interval: 10s
@@ -144,7 +166,7 @@ services:
       CB_BROWSER_API_URL: http://browser:9230
       # The lease rotates to the server-minted session binding via
       # POST /agent-control/lease; no static binding pin here.
-      CB_AGENT_CONTROL_SHARED_SECRET: ${SERVICE_PASSWORD_64_AGENTCTRLSECRET}
+      CB_AGENT_CONTROL_SHARED_SECRET: ${SERVICE_PASSWORD_64_AGENTCTRLSECRET:?SERVICE_PASSWORD_64_AGENTCTRLSECRET is required}
     depends_on:
       browser:
         condition: service_started
@@ -164,14 +186,14 @@ services:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
       CB_PORT: 8082
-      CB_VIEWER_TOKEN_SECRET: ${SERVICE_PASSWORD_64_VIEWERSECRET}
+      CB_VIEWER_TOKEN_SECRET: ${SERVICE_PASSWORD_64_VIEWERSECRET:?SERVICE_PASSWORD_64_VIEWERSECRET is required}
       # Trust the Traefik/TinyAuth forward-auth identity headers
       # (remote-user/email/name/groups, copied by tinyauth-pmo@file) for the
       # public employee surface. Must only be set behind the authenticated
       # proxy; unset keeps the bearer-token-only behavior.
       CB_EDGE_AUTH: ${CB_EDGE_AUTH:-traefik-forwardauth}
       CB_IDENTITY_LINK_BASE_URL: http://identity-link:8091
-      CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET}
+      CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET:?SERVICE_PASSWORD_64_IDLINKSECRET is required}
       CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:-https://auth.aikumi.app/application/o/pmoc-sso/}
       CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:-tinyauth-pmo}
     healthcheck:
@@ -200,7 +222,7 @@ services:
       CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-dev01}
       CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-dev01}
       CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-dev01-g1}
-      CB_DOWNLOADS_SHARED_SECRET: ${SERVICE_PASSWORD_64_DLSECRET}
+      CB_DOWNLOADS_SHARED_SECRET: ${SERVICE_PASSWORD_64_DLSECRET:?SERVICE_PASSWORD_64_DLSECRET is required}
       CB_DOWNLOADS_ROOT: /data/downloads
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3)"]
@@ -225,18 +247,18 @@ services:
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
       CB_PORT: 8085
       CB_DOWNLOADS_BASE_URL: http://downloads:8083
-      CB_DOWNLOADS_SHARED_SECRET: ${SERVICE_PASSWORD_64_DLSECRET}
+      CB_DOWNLOADS_SHARED_SECRET: ${SERVICE_PASSWORD_64_DLSECRET:?SERVICE_PASSWORD_64_DLSECRET is required}
       # Translate the Traefik/TinyAuth forward-auth identity headers into the
       # validated gateway session. Must only be set behind the authenticated
       # proxy (tinyauth-pmo@file + PMOC_Users gate on this host); unset keeps
       # the gateway fail-closed for every protected route.
       CB_EDGE_AUTH: ${CB_EDGE_AUTH:-traefik-forwardauth}
       CB_IDENTITY_LINK_BASE_URL: http://identity-link:8091
-      CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET}
+      CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET:?SERVICE_PASSWORD_64_IDLINKSECRET is required}
       CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:-https://auth.aikumi.app/application/o/pmoc-sso/}
       CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:-tinyauth-pmo}
       CB_CLAMAV_HOST: clamav
-      CB_DOWNLOADS_INGEST_SECRET: ${SERVICE_PASSWORD_64_INGESTSECRET}
+      CB_DOWNLOADS_INGEST_SECRET: ${SERVICE_PASSWORD_64_INGESTSECRET:?SERVICE_PASSWORD_64_INGESTSECRET is required}
       CB_DOWNLOADS_INGEST_PORT: 8086
     depends_on:
       downloads:
@@ -278,7 +300,7 @@ services:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
       CB_PORT: 8091
-      CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET}
+      CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET:?SERVICE_PASSWORD_64_IDLINKSECRET is required}
       CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:-https://auth.aikumi.app/application/o/pmoc-sso/}
       CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:-tinyauth-pmo}
     healthcheck:
@@ -302,15 +324,29 @@ services:
       CB_PRINCIPAL_ID: ${CB_PRINCIPAL_ID:-principal-unassigned}
       CB_BROWSER_ID: ${CB_BROWSER_ID:-browser-slot-1}
       CB_BINDING_GENERATION: ${CB_BINDING_GENERATION:-generation-0}
-      CB_BROKER_SHARED_SECRET: ${SERVICE_PASSWORD_64_BROKERSECRET}
-      CB_BROKER_SUBMIT_SECRET: ${SERVICE_PASSWORD_64_BROKERSUBMIT}
+      CB_CREDENTIAL_CAPABILITY_SECRET: ${SERVICE_PASSWORD_64_CREDENTIALCAPSECRET:?SERVICE_PASSWORD_64_CREDENTIALCAPSECRET is required}
+      CB_CREDENTIAL_BROKER_AUDIENCE: ${CB_CREDENTIAL_BROKER_AUDIENCE:-credential-broker}
+      CB_CREDENTIAL_BROKER_TIMEOUT_S: ${CB_CREDENTIAL_BROKER_TIMEOUT_S:-25}
+      CB_CREDENTIAL_CAPABILITY_TTL_S: ${CB_CREDENTIAL_CAPABILITY_TTL_S:-26}
+      CB_BROKER_SUBMIT_SECRET: ${SERVICE_PASSWORD_64_BROKERSUBMIT:?SERVICE_PASSWORD_64_BROKERSUBMIT is required}
+      CB_CREDENTIAL_NONCE_DB_PATH: /data/state/nonces.sqlite3
+      CB_BROKER_IDEMPOTENCY_DB_PATH: /data/state/idempotency.sqlite3
+      CB_BROKER_GRANT_DB_PATH: /data/state/grant-custody-v1.sqlite3
+      CB_BROKER_GRANT_KEK_HEX: ${CB_BROKER_GRANT_KEK_HEX:?CB_BROKER_GRANT_KEK_HEX is required}
       CB_BROKER_ADAPTER: ${CB_BROKER_ADAPTER:-basic}
       CB_BROKER_SITE_ID: ${CB_BROKER_SITE_ID:-basic-local}
       CB_BROKER_ORIGIN: ${CB_BROKER_ORIGIN:-https://basic.local.invalid}
       CB_BROKER_SUCCESS_PATH: ${CB_BROKER_SUCCESS_PATH:-/authenticated}
-      CB_VAULT_BASE_URL: ${CB_VAULT_BASE_URL:-https://secrets.pmo.city}
-      CB_VAULT_EMAIL: ${CB_VAULT_EMAIL:-}
-      CB_VAULT_PASSWORD: ${CB_VAULT_PASSWORD:-}
+      CB_BROKER_SSO_ENTRY_URL: ${CB_BROKER_SSO_ENTRY_URL:-}
+      CB_BROKER_SSO_IDP_ORIGINS: ${CB_BROKER_SSO_IDP_ORIGINS:-}
+      CB_BROKER_SSO_CALLBACK_ORIGINS: ${CB_BROKER_SSO_CALLBACK_ORIGINS:-}
+      CB_BROKER_SSO_APPLICATION_ORIGINS: ${CB_BROKER_SSO_APPLICATION_ORIGINS:-}
+      CB_BROKER_SSO_SUCCESS_PATHS: ${CB_BROKER_SSO_SUCCESS_PATHS:-}
+      CB_BROKER_SSO_ALLOWED_MFA: ${CB_BROKER_SSO_ALLOWED_MFA:-totp}
+      CB_BROKER_SSO_IDENTITY_SELECTOR: ${CB_BROKER_SSO_IDENTITY_SELECTOR:-}
+      CB_BROKER_SSO_IDENTITY_CLAIM: ${CB_BROKER_SSO_IDENTITY_CLAIM:-}
+      CB_BROKER_SSO_STAGE_TIMEOUT_S: ${CB_BROKER_SSO_STAGE_TIMEOUT_S:-24}
+      CB_VAULT_BASE_URL: ${CB_VAULT_BASE_URL:?CB_VAULT_BASE_URL is required}
     depends_on:
       browser:
         condition: service_healthy

@@ -13,8 +13,14 @@ It is deliberately separate from the normal agent operations:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 from urllib.parse import urlsplit
+
+from cloudbrowser.credential_broker.deadline import accepts_keyword
+
+if TYPE_CHECKING:
+    from cloudbrowser.credential_broker.deadline import BrokerDeadline
+    from cloudbrowser.credential_broker.runtime import LiveBrowserBinding
 
 from .browser_slots.transport import BrowserUnavailable
 
@@ -27,6 +33,7 @@ class BasicAuthClient(Protocol):
         *,
         body: str | None = None,
         headers: dict[str, str] | None = None,
+        timeout_s: float | None = None,
     ) -> object: ...
 
 
@@ -36,35 +43,72 @@ class HttpBasicAuthBrowser:
 
     client: BasicAuthClient
     shared_secret: str
+    deadline: "BrokerDeadline | None" = None
     _last_state: dict[str, str | bool | None] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.shared_secret, str) or len(self.shared_secret) < 16:
             raise ValueError("Basic Auth browser secret must be at least 16 characters")
 
-    def live_binding(self) -> tuple[str, str]:
-        raw = self.client.request("GET", "/agent/readiness")
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: str | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> object:
+        timeout_s = self.deadline.check() if self.deadline is not None else None
+        if self.deadline is not None:
+            headers = dict(headers or {})
+            headers.update(self._headers())
+        if timeout_s is not None and accepts_keyword(self.client.request, "timeout_s"):
+            return self.client.request(
+                method,
+                path,
+                body=body,
+                headers=headers,
+                timeout_s=timeout_s,
+            )
+        return self.client.request(method, path, body=body, headers=headers)
+
+    def live_binding(self) -> "LiveBrowserBinding":
+        from cloudbrowser.credential_broker.runtime import LiveBrowserBinding
+
+        raw = self._request("GET", "/agent/readiness")
         if not isinstance(raw, dict):
             raise BrowserUnavailable("invalid Basic Auth browser readiness")
         owner = raw.get("owner")
         generation = raw.get("generation")
         cdp_ok = raw.get("cdp_ok")
+        profile_id = raw.get("profile_id", "profile-unassigned")
+        browser_id = raw.get("browser_id", "browser-unassigned")
         if (
             not isinstance(owner, str)
             or not owner
             or not isinstance(generation, str)
             or not generation
+            or not isinstance(profile_id, str)
+            or not isinstance(browser_id, str)
             or cdp_ok is not True
         ):
             raise BrowserUnavailable("Basic Auth browser is not ready")
-        return owner, generation
+        return LiveBrowserBinding(
+            profile_id=profile_id,
+            principal_id=owner,
+            browser_id=browser_id,
+            generation=generation,
+        )
 
     def _headers(self) -> dict[str, str]:
-        return {"X-CB-Broker-Secret": self.shared_secret}
+        headers = {"X-CB-Broker-Secret": self.shared_secret}
+        if self.deadline is not None:
+            headers["X-CB-Broker-Deadline-S"] = f"{self.deadline.check():.6f}"
+        return headers
 
     def _read_state(self, *, target_id: str) -> dict[str, str | bool | None]:
         _validate_target_id(target_id)
-        raw = self.client.request(
+        raw = self._request(
             "POST",
             "/broker/basic/state",
             body=_json_body({"target_id": target_id}),
@@ -116,7 +160,7 @@ class HttpBasicAuthBrowser:
             "target_id": target_id,
             "success_path": success_path,
         }
-        raw = self.client.request(
+        raw = self._request(
             "POST",
             "/broker/basic/submit",
             body=_json_body(payload),
@@ -158,11 +202,27 @@ def _state(raw: object) -> dict[str, str | bool | None]:
         raise BrowserUnavailable("invalid Basic Auth state")
     if challenge is not None and not isinstance(challenge, str):
         raise BrowserUnavailable("invalid Basic Auth state")
+    url = _redact_url(url)
+    challenge = _redact_origin(challenge) if challenge is not None else None
     return {
         "url": url,
         "challenge_origin": challenge,
         "application_authenticated": authenticated,
     }
+
+
+def _redact_url(url: str) -> str:
+    parsed = urlsplit(url)
+    if not parsed.scheme or not parsed.netloc:
+        raise BrowserUnavailable("invalid Basic Auth state URL")
+    return parsed._replace(query="", fragment="").geturl()
+
+
+def _redact_origin(url: str) -> str:
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise BrowserUnavailable("invalid Basic Auth challenge origin")
+    return f"https://{parsed.netloc}"
 
 
 def _https_origin(url: str) -> str | None:

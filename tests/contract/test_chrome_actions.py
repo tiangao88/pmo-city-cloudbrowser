@@ -24,16 +24,16 @@ class FakeChrome:
 class Actions:
     calls: list[tuple[str, object]]
 
-    def navigate(self, url: str) -> None:
-        self.calls.append(("navigate", url))
+    def navigate(self, target_tab_id: str, url: str) -> None:
+        self.calls.append(("navigate", (target_tab_id, url)))
 
-    def click(self, selector: str) -> None:
-        self.calls.append(("click", selector))
+    def click(self, target_tab_id: str, selector: str) -> None:
+        self.calls.append(("click", (target_tab_id, selector)))
 
-    def type_text(self, selector: str, text: str) -> None:
-        self.calls.append(("type", (selector, text)))
+    def type_text(self, target_tab_id: str, selector: str, text: str) -> None:
+        self.calls.append(("type", (target_tab_id, selector, text)))
 
-    def page_info(self, selector: str | None = None) -> dict[str, str]:
+    def page_info(self, target_tab_id: str, selector: str | None = None) -> dict[str, str]:
         return {"url": "https://example.test", "title": "Example", "text": "Hello"}
 
 
@@ -45,21 +45,21 @@ def test_chrome_adapter_exposes_injected_page_actions_only() -> None:
         generation="generation-1",
         page_actions=actions,
     )
-    adapter.navigate("https://example.test/next")
-    adapter.click("#submit")
-    adapter.type_text("#name", "Alice")
-    assert adapter.page_info() == {"url": "https://example.test", "title": "Example", "text": "Hello"}
+    adapter.navigate("tab-1", "https://example.test/next")
+    adapter.click("tab-1", "#submit")
+    adapter.type_text("tab-1", "#name", "Alice")
+    assert adapter.page_info("tab-1") == {"url": "https://example.test", "title": "Example", "text": "Hello"}
     assert actions.calls == [
-        ("navigate", "https://example.test/next"),
-        ("click", "#submit"),
-        ("type", ("#name", "Alice")),
+        ("navigate", ("tab-1", "https://example.test/next")),
+        ("click", ("tab-1", "#submit")),
+        ("type", ("tab-1", "#name", "Alice")),
     ]
 
 
 def test_chrome_adapter_has_no_page_action_fallback() -> None:
     adapter = ChromeBrowserAdapter(FakeChrome(), "owner@example.test", "generation-1")
     try:
-        adapter.click("#submit")
+        adapter.click("tab-1", "#submit")
     except Exception as exc:
         assert type(exc).__name__ == "BrowserUnavailable"
     else:

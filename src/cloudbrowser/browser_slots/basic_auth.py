@@ -23,8 +23,11 @@ import socket
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 from urllib.parse import urlsplit
+
+if TYPE_CHECKING:
+    from cloudbrowser.credential_broker.deadline import BrokerDeadline
 
 from .transport import BrowserUnavailable
 
@@ -47,9 +50,15 @@ class BasicAuthCapability:
         self._state = BasicAuthState("", "", None, False)
         self._lock = threading.Lock()
 
-    def state(self, *, target_id: str) -> dict[str, str | bool | None]:
-        """Return metadata for one exact Chrome page target."""
-        url = self._target_url_or_last(target_id)
+    def state(
+        self,
+        *,
+        target_id: str,
+        deadline: "BrokerDeadline | None" = None,
+    ) -> dict[str, str | bool | None]:
+        """Return public state with URL credentials stripped to origin/path."""
+        _check_deadline(deadline)
+        url = _redact_url(self._target_url_or_last(target_id, deadline=deadline))
         challenge_origin = (
             self._state.challenge_origin if self._state.target_id == target_id else None
         )
@@ -64,16 +73,22 @@ class BasicAuthCapability:
             "application_authenticated": authenticated,
         }
 
-    def probe(self, *, target_id: str) -> dict[str, str | bool | None]:
+    def probe(
+        self,
+        *,
+        target_id: str,
+        deadline: "BrokerDeadline | None" = None,
+    ) -> dict[str, str | bool | None]:
         """Detect and cancel a Basic challenge on one exact target."""
         if not self._lock.acquire(blocking=False):
             raise BrowserUnavailable("Basic Auth capability is busy")
         try:
             self._probe(
                 target_id=target_id,
-                current_url=self._current_url(target_id=target_id),
+                current_url=self._current_url(target_id=target_id, deadline=deadline),
+                deadline=deadline,
             )
-            return self.state(target_id=target_id)
+            return self.state(target_id=target_id, deadline=deadline)
         finally:
             self._lock.release()
 
@@ -96,6 +111,7 @@ class BasicAuthCapability:
         *,
         target_id: str,
         success_path: str,
+        deadline: "BrokerDeadline | None" = None,
     ) -> None:
         """Answer one declared-origin challenge on one exact target."""
         if not self._lock.acquire(blocking=False):
@@ -107,6 +123,7 @@ class BasicAuthCapability:
                 password,
                 target_id=target_id,
                 success_path=success_path,
+                deadline=deadline,
             )
         finally:
             self._lock.release()
@@ -119,14 +136,20 @@ class BasicAuthCapability:
         *,
         target_id: str,
         success_path: str,
+        deadline: "BrokerDeadline | None" = None,
     ) -> None:
         _validate_credential(origin, username, password)
         _validate_target_id(target_id)
         _validate_success_path(success_path)
-        current = self._target_url_or_last(target_id)
+        _check_deadline(deadline)
+        current = self._target_url_or_last(target_id, deadline=deadline)
         if _origin(current) != origin:
             raise ValueError("current page is not the declared Basic Auth origin")
-        ws = self._ws_factory(self._page_websocket(target_id), self._timeout_s)
+        timeout_s = min(
+            self._timeout_s,
+            deadline.check() if deadline is not None else self._timeout_s,
+        )
+        ws = self._ws_factory(self._page_websocket(target_id, deadline=deadline), timeout_s)
         challenge_seen = False
         credentials_sent = False
         challenge_loop = False
@@ -135,6 +158,8 @@ class BasicAuthCapability:
             self._send(ws, 3, "Page.navigate", {"url": current})
             replies = 0
             while replies < 128:
+                if deadline is not None:
+                    deadline.check()
                 try:
                     message = self._recv(ws)
                 except BrowserUnavailable as exc:
@@ -145,6 +170,8 @@ class BasicAuthCapability:
                     if challenge_seen and credentials_sent:
                         break
                     raise BrowserUnavailable("Basic Auth challenge timed out") from exc
+                if deadline is not None:
+                    deadline.check()
                 replies += 1
                 method = message.get("method")
                 raw_params = message.get("params")
@@ -169,6 +196,8 @@ class BasicAuthCapability:
                         challenge_loop = True
                         break
                     challenge_seen = True
+                    if deadline is not None:
+                        deadline.check()
                     credentials_sent = True
                     self._send(ws, 4, "Fetch.continueWithAuth", {
                         "requestId": request_id,
@@ -195,7 +224,7 @@ class BasicAuthCapability:
                 pass
             ws.close()
 
-        url = self._settled_target_url(target_id, fallback=current)
+        url = self._settled_target_url(target_id, fallback=current, deadline=deadline)
         self._state = BasicAuthState(
             target_id,
             url,
@@ -207,22 +236,36 @@ class BasicAuthCapability:
             ),
         )
 
-    def _probe(self, *, target_id: str, current_url: str) -> None:
+    def _probe(
+        self,
+        *,
+        target_id: str,
+        current_url: str,
+        deadline: "BrokerDeadline | None" = None,
+    ) -> None:
         _validate_target_id(target_id)
         page_origin = _origin(current_url)
         if page_origin is None:
             raise ValueError("Basic Auth probing requires an HTTPS page")
-        ws = self._ws_factory(self._page_websocket(target_id), self._timeout_s)
+        timeout_s = min(
+            self._timeout_s,
+            deadline.check() if deadline is not None else self._timeout_s,
+        )
+        ws = self._ws_factory(self._page_websocket(target_id, deadline=deadline), timeout_s)
         challenge_origin: str | None = None
         try:
             self._enable_interception(ws, page_origin)
             self._send(ws, 3, "Page.navigate", {"url": current_url})
             replies = 0
             while replies < 128:
+                if deadline is not None:
+                    deadline.check()
                 try:
                     message = self._recv(ws)
                 except (TimeoutError, OSError) as exc:
                     raise BrowserUnavailable("Basic Auth probe timed out") from exc
+                if deadline is not None:
+                    deadline.check()
                 replies += 1
                 if message.get("method") != "Fetch.authRequired":
                     raw_params = message.get("params")
@@ -271,45 +314,81 @@ class BasicAuthCapability:
                 "authChallengeResponse": {"response": "CancelAuth"},
             })
 
-    def _target_url_or_last(self, target_id: str) -> str:
+    def _target_url_or_last(
+        self,
+        target_id: str,
+        *,
+        deadline: "BrokerDeadline | None" = None,
+    ) -> str:
+        _check_deadline(deadline)
         try:
-            return self._current_url(target_id=target_id)
+            return self._current_url(target_id=target_id, deadline=deadline)
         except BrowserUnavailable:
             if self._state.target_id == target_id and self._state.url:
                 return self._state.url
             raise
 
-    def _settled_target_url(self, target_id: str, *, fallback: str) -> str:
-        deadline = time.monotonic() + min(self._timeout_s, 1.0)
+    def _settled_target_url(
+        self,
+        target_id: str,
+        *,
+        fallback: str,
+        deadline: "BrokerDeadline | None" = None,
+    ) -> str:
+        end = time.monotonic() + min(
+            self._timeout_s,
+            deadline.check() if deadline is not None else 1.0,
+        )
         while True:
-            observed = self._target_url_or_last(target_id)
+            _check_deadline(deadline)
+            observed = self._target_url_or_last(target_id, deadline=deadline)
             if _origin(observed) is not None:
                 return observed
-            if time.monotonic() >= deadline:
+            if time.monotonic() >= end:
                 return fallback
             time.sleep(0.02)
 
-    def _current_url(self, *, target_id: str) -> str:
+    def _current_url(
+        self,
+        *,
+        target_id: str,
+        deadline: "BrokerDeadline | None" = None,
+    ) -> str:
+        _check_deadline(deadline)
         target = self._target(target_id)
         url = target.get("url")
         if not isinstance(url, str) or not url:
             raise BrowserUnavailable("target URL is unavailable")
         return url
 
-    def _page_websocket(self, target_id: str) -> str:
+    def _page_websocket(
+        self,
+        target_id: str,
+        *,
+        deadline: "BrokerDeadline | None" = None,
+    ) -> str:
+        _check_deadline(deadline)
         target = self._target(target_id)
+        _check_deadline(deadline)
         ws_url = target.get("webSocketDebuggerUrl")
-        if not isinstance(ws_url, str) or not ws_url.startswith("ws://"):
-            deadline = time.monotonic() + min(self._timeout_s, 1.0)
-            while time.monotonic() < deadline:
-                target = self._target(target_id)
-                ws_url = target.get("webSocketDebuggerUrl")
-                if isinstance(ws_url, str) and ws_url.startswith("ws://"):
-                    break
-                time.sleep(0.02)
-        if not isinstance(ws_url, str) or not ws_url.startswith("ws://"):
+        if isinstance(ws_url, str):
+            if _is_local_websocket(ws_url):
+                return ws_url
             raise BrowserUnavailable("target DevTools endpoint is unavailable")
-        return ws_url
+        retry_end = time.monotonic() + min(
+            self._timeout_s,
+            deadline.check() if deadline is not None else 1.0,
+        )
+        while time.monotonic() < retry_end:
+            _check_deadline(deadline)
+            target = self._target(target_id)
+            ws_url = target.get("webSocketDebuggerUrl")
+            if isinstance(ws_url, str):
+                if _is_local_websocket(ws_url):
+                    return ws_url
+                raise BrowserUnavailable("target DevTools endpoint is unavailable")
+            time.sleep(0.02)
+        raise BrowserUnavailable("target DevTools endpoint is unavailable")
 
     def _target(self, target_id: str) -> dict[str, Any]:
         _validate_target_id(target_id)
@@ -354,6 +433,11 @@ class BasicAuthState:
     application_authenticated: bool
 
 
+def _check_deadline(deadline: "BrokerDeadline | None") -> None:
+    if deadline is not None:
+        deadline.check()
+
+
 def _is_receive_timeout(exc: BaseException) -> bool:
     current: BaseException | None = exc
     while current is not None:
@@ -396,6 +480,49 @@ def _validate_credential(origin: str, username: str, password: str) -> None:
             raise ValueError(f"Basic Auth {label} is invalid")
         if any(char in value for char in ("\r", "\n", "\x00")):
             raise ValueError(f"Basic Auth {label} contains forbidden characters")
+
+
+def _redact_url(url: str) -> str:
+    """Keep URL path for broker state; never expose query or fragment."""
+    if not isinstance(url, str) or len(url.encode("utf-8")) > 2048:
+        raise BrowserUnavailable("invalid Basic Auth state URL")
+    try:
+        parsed = urlsplit(url)
+        hostname = parsed.hostname
+        port = parsed.port
+    except (TypeError, ValueError) as exc:
+        raise BrowserUnavailable("invalid Basic Auth state URL") from exc
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or (port is not None and not 1 <= port <= 65535)
+    ):
+        raise BrowserUnavailable("invalid Basic Auth state URL")
+    redacted = parsed._replace(query="", fragment="").geturl()
+    if len(redacted.encode("utf-8")) > 2048:
+        raise BrowserUnavailable("Basic Auth state URL is too large")
+    return redacted
+
+
+def _is_local_websocket(url: str) -> bool:
+    try:
+        parsed = urlsplit(url)
+        hostname = parsed.hostname
+        port = parsed.port
+    except (TypeError, ValueError):
+        return False
+    return (
+        parsed.scheme == "ws"
+        and hostname in {"127.0.0.1", "localhost", "::1"}
+        and port is not None
+        and 1 <= port <= 65535
+        and bool(parsed.path)
+        and parsed.username is None
+        and parsed.password is None
+        and not parsed.fragment
+    )
 
 
 def _origin(url: str) -> str | None:

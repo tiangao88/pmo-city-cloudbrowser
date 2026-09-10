@@ -56,6 +56,15 @@ class _RouterPort(Protocol):
         request_id: str,
     ) -> tuple[int, dict[str, object]]: ...
 
+    def credential_login(
+        self,
+        *,
+        headers: Mapping[str, str],
+        site_id: str,
+        target_tab_id: str,
+        request_id: str,
+    ) -> tuple[int, dict[str, object]]: ...
+
 
 _UNAUTHORIZED: tuple[int, dict[str, object]] = (401, {"ok": False, "error_code": "unauthorized"})
 
@@ -66,6 +75,7 @@ _AGENT_ALLOWED_OPERATIONS = frozenset({"navigate", "click", "type", "page_info",
 # Param bounds enforced before relay; oversized or non-string values are
 # invalid requests, never truncated.
 _MAX_AGENT_URL = 2048
+_MAX_AGENT_TARGET_ID = 256
 _MAX_AGENT_SELECTOR = 512
 _MAX_AGENT_TEXT = 4096
 
@@ -187,6 +197,24 @@ class RouterHttpClient:
             f"/v1/agent/{operation}",
             headers=headers,
             body={"request_id": request_id, "params": dict(params)},
+        )
+
+    def credential_login(
+        self,
+        *,
+        headers: Mapping[str, str],
+        site_id: str,
+        target_tab_id: str,
+        request_id: str,
+    ) -> tuple[int, dict[str, object]]:
+        return self.post_json(
+            "/v1/credential/login",
+            headers=headers,
+            body={
+                "request_id": request_id,
+                "site_id": site_id,
+                "target_tab_id": target_tab_id,
+            },
         )
 
     def _call(
@@ -398,22 +426,67 @@ class ViewerSessionSurface:
             )
         return status, dict(payload)
 
+    def credential_login(
+        self,
+        *,
+        headers: Mapping[str, object],
+        site_id: str,
+        target_tab_id: str,
+        request_id: str,
+    ) -> tuple[int, dict[str, object]]:
+        """Relay only the intent fields; the router derives all bindings."""
+        principal = self._principal_from_headers(headers)
+        if principal is None:
+            return _UNAUTHORIZED
+        if (
+            not isinstance(site_id, str)
+            or not site_id
+            or len(site_id) > 256
+            or not isinstance(target_tab_id, str)
+            or not target_tab_id
+            or len(target_tab_id) > 256
+        ):
+            return 200, {
+                "request_id": request_id if isinstance(request_id, str) else "",
+                "status": "failed",
+                "error_code": "invalid_request",
+            }
+        try:
+            status, payload = self._router.credential_login(
+                headers=_relay_headers(headers),
+                site_id=site_id,
+                target_tab_id=target_tab_id,
+                request_id=request_id,
+            )
+        except Exception:
+            return (
+                200,
+                {
+                    "request_id": request_id,
+                    "status": "failed",
+                    "error_code": "login_failed",
+                },
+            )
+        return status, dict(payload)
+
     @staticmethod
     def _agent_params_valid(
         operation: str, params: Mapping[str, object]
     ) -> bool:
         limits = {
-            "navigate": {"url": _MAX_AGENT_URL},
-            "click": {"selector": _MAX_AGENT_SELECTOR},
-            "type": {"selector": _MAX_AGENT_SELECTOR, "text": _MAX_AGENT_TEXT},
-            "page_info": {},
+            "navigate": {"target_tab_id": _MAX_AGENT_TARGET_ID, "url": _MAX_AGENT_URL},
+            "click": {"target_tab_id": _MAX_AGENT_TARGET_ID, "selector": _MAX_AGENT_SELECTOR},
+            "type": {"target_tab_id": _MAX_AGENT_TARGET_ID, "selector": _MAX_AGENT_SELECTOR, "text": _MAX_AGENT_TEXT},
+            "page_info": {"target_tab_id": _MAX_AGENT_TARGET_ID, "selector": _MAX_AGENT_SELECTOR},
             "tabs_list": {},
         }
         allowed = limits[operation]
+        if operation != "tabs_list" and "target_tab_id" not in params:
+            return False
         for key, value in params.items():
             if key not in allowed or not isinstance(value, str):
                 return False
-            if len(value) > allowed[key]:
+            if len(value.encode("utf-8")) > allowed[key]:
                 return False
         if operation == "navigate":
             from urllib.parse import urlsplit

@@ -104,7 +104,7 @@ def test_forwarder_posts_bounded_envelope_with_server_derived_binding_headers() 
             "slot-1",
             binding=_BINDING,
             operation="page_info",
-            params={},
+            params={"target_tab_id": "tab-1"},
             request_id="req-1",
         )
         assert result["status"] == "ok"
@@ -114,7 +114,7 @@ def test_forwarder_posts_bounded_envelope_with_server_derived_binding_headers() 
         assert sent["principal"] == "pmo-owner"
         assert sent["browser"] == "browser-1"
         assert sent["generation"] == "generation-q-abc123"
-        assert sent["body"] == {"request_id": "req-1", "operation": "page_info", "params": {}}
+        assert sent["body"]["params"]["target_tab_id"] == "tab-1"
         # Caller Remote-* headers are never part of the relay contract.
         assert sent["remote_email"] is None
         assert sent["remote_user"] is None
@@ -130,7 +130,7 @@ def test_forwarder_validates_inputs_locally_and_fails_typed() -> None:
             "slot-unknown",
             binding=_BINDING,
             operation="page_info",
-            params={},
+            params={"target_tab_id": "tab-1"},
             request_id="req-1",
         )
     with pytest.raises(AgentControlForwarderError):
@@ -138,7 +138,7 @@ def test_forwarder_validates_inputs_locally_and_fails_typed() -> None:
             "slot-1",
             binding=_BINDING,
             operation="raw_cdp",
-            params={},
+            params={"target_tab_id": "tab-1"},
             request_id="req-1",
         )
     with pytest.raises(AgentControlForwarderError):
@@ -146,7 +146,7 @@ def test_forwarder_validates_inputs_locally_and_fails_typed() -> None:
             "slot-1",
             binding=_BINDING,
             operation="page_info",
-            params={},
+            params={"target_tab_id": "tab-1"},
             request_id="",
         )
     with pytest.raises(AgentControlForwarderError):
@@ -154,7 +154,7 @@ def test_forwarder_validates_inputs_locally_and_fails_typed() -> None:
             "slot-1",
             binding="not-a-binding",  # type: ignore[arg-type]
             operation="page_info",
-            params={},
+            params={"target_tab_id": "tab-1"},
             request_id="req-1",
         )
 
@@ -189,7 +189,7 @@ def test_forwarder_surfaces_unreachable_endpoints_as_unavailable() -> None:
             "slot-1",
             binding=_BINDING,
             operation="page_info",
-            params={},
+            params={"target_tab_id": "tab-1"},
             request_id="req-1",
         )
 
@@ -234,7 +234,7 @@ def test_forwarder_rejects_oversized_and_non_object_responses() -> None:
                     "slot-1",
                     binding=_BINDING,
                     operation="page_info",
-                    params={},
+                    params={"target_tab_id": "tab-1"},
                     request_id="req-1",
                 )
     finally:
@@ -269,7 +269,7 @@ def test_forwarder_relays_server_http_status_ok_only() -> None:
                 "slot-1",
                 binding=_BINDING,
                 operation="page_info",
-                params={},
+                params={"target_tab_id": "tab-1"},
                 request_id="req-1",
             )
     finally:

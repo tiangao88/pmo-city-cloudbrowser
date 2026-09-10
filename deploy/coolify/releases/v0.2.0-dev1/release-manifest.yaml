@@ -5,13 +5,18 @@ metadata:
 spec:
   productVersion: 0.2.0-dev1
   specificationBaseline: v0.2.0
-  status: qualified-installable
-  installable: true
+  status: pre-build-not-installable
+  installable: false
+  # This manifest retains the last published image evidence only; the current
+  # source/spec tree is not yet built or digest-synchronized.
+  sourceState: pending-build
+  imageState: stale-pre-change
   qualification:
     workflow: .github/workflows/build-images.yml
     run: https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/34402569940
     commit: 50ce1984448ddf79621d4114f81c6a2b2b83d5fa
     records: deploy/coolify/image-qualification/<service>.md
+    note: prior qualification records and digests are retained for provenance only; they do not qualify the current source
   contracts:
     controlApi: v1
     agentControl: v1

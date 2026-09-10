@@ -39,10 +39,15 @@ from urllib.parse import urlsplit
 
 from cloudbrowser.edge_auth import parse_edge_identity
 from cloudbrowser.identity_links import IdentityLinkClient, IdentityLinkClientError
+from cloudbrowser.credential_capability import CapabilityCodec, CredentialCapability
 
 from .agent_control_forwarder import (
     AgentControlForwarderError,
     AgentControlUnavailable,
+)
+from .credential_broker_forwarder import (
+    CredentialBrokerForwarderError,
+    CredentialBrokerUnavailable,
 )
 from .sessions import RouterSession, RouterSessionStore, SessionStatus
 from .supervisor_client import (
@@ -67,6 +72,10 @@ class _RouterIdentity:
     principal_id: str
 
 
+class _CredentialBrokerPort(Protocol):
+    def forward(self, capability: str, *, request_id: str) -> dict[str, object]: ...
+
+
 class _SupervisorPort(Protocol):
     """Subset of ``SupervisorClient`` the router API depends on."""
 
@@ -89,6 +98,12 @@ class _AgentControlPort(Protocol):
     ) -> dict[str, object]: ...
 
 
+_CREDENTIAL_OPERATION = "credential.login"
+_CREDENTIAL_ALLOWED_FIELDS = frozenset({"request_id", "site_id", "target_tab_id"})
+_CREDENTIAL_REFERENCE_FIELDS = frozenset({"username_ref", "grant_ref"})
+_MAX_SITE_ID = 256
+_MAX_TARGET_TAB_ID = 256
+
 _AGENT_ALLOWED_OPERATIONS = frozenset({"navigate", "click", "type", "page_info", "tabs_list"})
 _AGENT_FORBIDDEN_OPERATIONS = frozenset(
     {
@@ -106,7 +121,7 @@ _AGENT_FORBIDDEN_OPERATIONS = frozenset(
 
 
 def _bounded_text(value: str, *, limit: int) -> bool:
-    if not isinstance(value, str) or not value or len(value) > limit:
+    if not isinstance(value, str) or not value or len(value.encode("utf-8")) > limit:
         return False
     return all(ord(char) >= 0x20 and ord(char) != 0x7F for char in value)
 
@@ -198,12 +213,26 @@ class RouterApi:
         supervisor_client: _SupervisorPort,
         identity_client: IdentityLinkClient | None,
         agent_control_forwarder: _AgentControlPort | None = None,
+        credential_broker_forwarder: _CredentialBrokerPort | None = None,
+        capability_codec: CapabilityCodec | None = None,
+        capability_audience: str = "credential-broker",
+        deployment: str = "",
+        capability_ttl_s: int = 60,
+        clock=None,
+        nonce_factory=None,
         component: str = "router",
     ) -> None:
         self._store = session_store
         self._supervisor = supervisor_client
         self._identity = identity_client
         self._agent_forwarder = agent_control_forwarder
+        self._credential_broker = credential_broker_forwarder
+        self._capability_codec = capability_codec
+        self._capability_audience = capability_audience
+        self._deployment = deployment or "unknown-deployment"
+        self._capability_ttl_s = capability_ttl_s
+        self._clock = clock
+        self._nonce_factory = nonce_factory
         self._component = component
 
     # ---- HTTP handlers (one method per route) ----------------------------
@@ -387,6 +416,10 @@ class RouterApi:
         params = body.get("params", {})
         if not isinstance(params, dict):
             return 200, _envelope(request_id, status="failed", error_code="invalid_request")
+        required_target = operation != "tabs_list"
+        target_tab_id = params.get("target_tab_id")
+        if required_target and (not isinstance(target_tab_id, str) or not _bounded_text(target_tab_id, limit=_MAX_TARGET_TAB_ID)):
+            return 200, _envelope(request_id, status="failed", error_code="invalid_request")
         try:
             session = self._store.for_principal(resolved.principal_id)
         except Exception:
@@ -435,6 +468,102 @@ class RouterApi:
                 if isinstance(key, str) and isinstance(value, str)
             }
         return 200, payload
+
+    def credential_login(
+        self,
+        *,
+        headers: Mapping[str, object],
+        body: Mapping[str, object],
+    ) -> tuple[int, dict[str, object]]:
+        """Mint and forward one server-bound, opaque login capability."""
+        request_id = body.get("request_id")
+        site_id = body.get("site_id")
+        target_tab_id = body.get("target_tab_id")
+        if (
+            not _bounded_text(request_id, limit=_MAX_REQUEST_ID)  # type: ignore[arg-type]
+            or not _bounded_text(site_id, limit=_MAX_SITE_ID)  # type: ignore[arg-type]
+            or not _bounded_text(target_tab_id, limit=_MAX_TARGET_TAB_ID)  # type: ignore[arg-type]
+            or set(body) - _CREDENTIAL_ALLOWED_FIELDS
+            or _CREDENTIAL_REFERENCE_FIELDS.intersection(body)
+        ):
+            safe_request_id = (
+                str(request_id)
+                if _bounded_text(request_id, limit=_MAX_REQUEST_ID)  # type: ignore[arg-type]
+                else ""
+            )
+            return 200, _envelope(
+                safe_request_id,
+                status="failed",
+                error_code="invalid_request",
+            )
+        request_id = request_id  # type: ignore[assignment]
+        site_id = site_id  # type: ignore[assignment]
+        target_tab_id = target_tab_id  # type: ignore[assignment]
+        resolved = _resolve_identity(headers=headers, client=self._identity)
+        if resolved is None:
+            return 401, _envelope(request_id, status="failed", error_code="unauthorized")
+        if self._credential_broker is None or self._capability_codec is None:
+            return 200, _envelope(request_id, status="failed", error_code="broker_unavailable")
+        try:
+            session = self._store.for_principal(resolved.principal_id)
+        except Exception:
+            return 200, _envelope(request_id, status="failed", error_code="lookup_failed")
+        if session is None or session.status is not SessionStatus.ACTIVE:
+            return 200, _envelope(request_id, status="failed", error_code="session_not_found")
+        binding = session.binding
+        if binding is None or session.slot_id is None:
+            return 200, _envelope(request_id, status="failed", error_code="no_binding")
+        if binding.principal_id != resolved.principal_id:
+            return 200, _envelope(request_id, status="failed", error_code="owner_mismatch")
+        now = self._capability_now()
+        try:
+            capability = CredentialCapability(
+                profile_id=binding.profile_id,
+                principal_id=resolved.principal_id,
+                browser_id=binding.browser_id,
+                generation=binding.generation,
+                site_id=site_id,
+                target_tab_id=target_tab_id,
+                operation=_CREDENTIAL_OPERATION,
+                request_id=request_id,
+                audience=self._capability_audience,
+                deployment=self._deployment,
+                issued_at=now,
+                expires_at=now + self._capability_ttl_s,
+                nonce=self._new_nonce(),
+            )
+            token = self._capability_codec.encode(capability)
+            result = self._credential_broker.forward(token, request_id=request_id)
+        except (ValueError, CredentialBrokerForwarderError):
+            return 200, _envelope(request_id, status="failed", error_code="invalid_request")
+        except CredentialBrokerUnavailable:
+            return 200, _envelope(request_id, status="failed", error_code="broker_unavailable")
+        except Exception:
+            return 200, _envelope(request_id, status="failed", error_code="broker_unavailable")
+        if not isinstance(result, dict):
+            return 200, _envelope(request_id, status="failed", error_code="broker_unavailable")
+        payload = {
+            "request_id": request_id,
+            "status": result.get("status", "failed"),
+            "error_code": result.get("error_code"),
+            "duration_ms": result.get("duration_ms", 0),
+        }
+        if not isinstance(payload["status"], str) or not isinstance(payload["duration_ms"], int):
+            return 200, _envelope(request_id, status="failed", error_code="broker_unavailable")
+        return 200, payload
+
+    def _capability_now(self) -> int:
+        import time
+
+        return int(self._clock() if callable(self._clock) else time.time())
+
+    def _new_nonce(self) -> str:
+        import secrets
+
+        value = self._nonce_factory() if callable(self._nonce_factory) else secrets.token_urlsafe(24)
+        if not isinstance(value, str) or not value:
+            raise ValueError("nonce is invalid")
+        return value
 
     def slot_command(
         self,
@@ -556,6 +685,9 @@ def create_router_server(
                 status, payload = api.roster(headers=dict(self.headers.items()))
                 self._send_json(status, payload)
                 return
+            if path == "/v1/credential/login":
+                self.send_error(405)
+                return
             self.send_error(404)
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib HTTP handler contract
@@ -564,19 +696,26 @@ def create_router_server(
                 if path == "/v1/session":
                     body = self._read_body()
                     status, payload = api.open_session(
-                        headers=self.headers, body=body
+                        headers=dict(self.headers.items()), body=body
                     )
                     self._send_json(status, payload)
                     return
                 if path == "/v1/session/leave":
                     status, payload = api.leave_session(
-                        headers=self.headers, request_id="req-1"
+                        headers=dict(self.headers.items()), request_id="req-1"
                     )
                     self._send_json(status, payload)
                     return
                 if path == "/v1/session/activate":
                     status, payload = api.activate_session(
-                        headers=self.headers, request_id="req-1"
+                        headers=dict(self.headers.items()), request_id="req-1"
+                    )
+                    self._send_json(status, payload)
+                    return
+                if path == "/v1/credential/login":
+                    body = self._read_body()
+                    status, payload = api.credential_login(
+                        headers=dict(self.headers.items()), body=body
                     )
                     self._send_json(status, payload)
                     return
@@ -595,7 +734,7 @@ def create_router_server(
                         return
                     slot_id, operation = parts
                     status, payload = api.slot_command(
-                        headers=self.headers,
+                        headers=dict(self.headers.items()),
                         slot_id=slot_id,
                         operation=operation,
                         request_id="req-1",
@@ -609,7 +748,7 @@ def create_router_server(
                     except ValueError:
                         body = {}
                     status, payload = api.agent_action(
-                        headers=self.headers,
+                        headers=dict(self.headers.items()),
                         operation=operation,
                         body=body,
                     )

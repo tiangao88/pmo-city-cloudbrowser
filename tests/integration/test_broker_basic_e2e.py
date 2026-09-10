@@ -22,6 +22,7 @@ import ssl
 import subprocess
 import tempfile
 import threading
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -31,7 +32,9 @@ from pathlib import Path
 import pytest
 
 from cloudbrowser.credential_broker.adapters.form import CredentialMaterial
-from cloudbrowser.credential_broker.runtime import build_broker_api
+from cloudbrowser.credential_broker.grant_store import DurableGrantStore
+from cloudbrowser.credential_broker.runtime import LiveBrowserBinding, build_broker_api
+from cloudbrowser.credential_capability import CapabilityCodec, CredentialCapability
 
 
 class _BasicHandler(BaseHTTPRequestHandler):
@@ -96,8 +99,13 @@ class RealBasicBrowser:
         self.submitted = []
         self._probe()
 
-    def live_binding(self) -> tuple[str, str]:
-        return "pmo-a", "g1"
+    def live_binding(self) -> LiveBrowserBinding:
+        return LiveBrowserBinding(
+            profile_id="profile-a",
+            principal_id="pmo-a",
+            browser_id="browser-1",
+            generation="g1",
+        )
 
     def _context(self) -> ssl.SSLContext:
         return ssl.create_default_context(cafile=self.cafile)
@@ -151,7 +159,7 @@ class RealBasicBrowser:
 
 
 @pytest.fixture()
-def basic_env(monkeypatch, local_basic_https):
+def basic_env(monkeypatch, local_basic_https, tmp_path):
     server, cert = local_basic_https
     origin = f"https://localhost:{server.server_address[1]}"
     monkeypatch.setenv("CB_INSTANCE_ID", "basic-test")
@@ -160,40 +168,73 @@ def basic_env(monkeypatch, local_basic_https):
     monkeypatch.setenv("CB_PRINCIPAL_ID", "pmo-a")
     monkeypatch.setenv("CB_BROWSER_ID", "browser-1")
     monkeypatch.setenv("CB_BINDING_GENERATION", "g1")
-    monkeypatch.setenv("CB_BROKER_SHARED_SECRET", "broker-secret-0123456789abcdef")
+    monkeypatch.setenv("CB_CREDENTIAL_CAPABILITY_SECRET", "capability-secret-0123456789")
+    monkeypatch.setenv("CB_CREDENTIAL_BROKER_AUDIENCE", "credential-broker")
+    monkeypatch.setenv("CB_BROKER_GRANT_DB_PATH", str(tmp_path / "grants.sqlite3"))
+    monkeypatch.setenv("CB_BROKER_IDEMPOTENCY_DB_PATH", str(tmp_path / "idempotency.sqlite3"))
+    monkeypatch.setenv("CB_CREDENTIAL_NONCE_DB_PATH", str(tmp_path / "nonces.sqlite3"))
     monkeypatch.setenv("CB_BROKER_SUBMIT_SECRET", "submit-secret-0123456789abcdef")
     monkeypatch.setenv("CB_BROKER_SITE_ID", "basic-site")
     monkeypatch.setenv("CB_BROKER_ADAPTER", "basic")
     monkeypatch.setenv("CB_BROKER_ORIGIN", origin)
     monkeypatch.setenv("CB_BROKER_SUCCESS_PATH", "/home")
     monkeypatch.setenv("CB_VAULT_BASE_URL", "https://vault.example.invalid")
-    monkeypatch.setenv("CB_VAULT_EMAIL", "broker@example.test")
-    monkeypatch.setenv("CB_VAULT_PASSWORD", "not-used-by-injected-fetcher")
-    return origin, str(cert)
+    monkeypatch.delenv("CB_VAULT_EMAIL", raising=False)
+    monkeypatch.delenv("CB_VAULT_PASSWORD", raising=False)
+    grants = DurableGrantStore(tmp_path / "grants.sqlite3")
+    grants.put(
+        profile_id="profile-a",
+        principal_id="pmo-a",
+        site_id="basic-site",
+        target_tab_id="target-basic-1",
+        browser_id="browser-1",
+        generation="g1",
+        username_ref="basic-vault-item",
+    )
+    return origin, str(cert), grants
 
 
-def _run(api, *, username_ref: str = "basic-vault-item") -> dict:
+def _run(
+    api,
+    *,
+    username_ref: str = "basic-vault-item",
+    profile_id: str = "profile-a",
+    principal_id: str = "pmo-a",
+    browser_id: str = "browser-1",
+    generation: str = "g1",
+    nonce: str = "nonce-basic-1",
+) -> dict:
+    del username_ref
+    now = int(time.time())
+    capability = CredentialCapability(
+        profile_id=profile_id,
+        principal_id=principal_id,
+        browser_id=browser_id,
+        generation=generation,
+        site_id="basic-site",
+        target_tab_id="target-basic-1",
+        operation="credential.login",
+        request_id="req-basic-1",
+        audience="credential-broker",
+        deployment="basic-test",
+        issued_at=now,
+        expires_at=now + 30,
+        nonce=nonce,
+    )
     with api.handle(
         "/v1/credential/login",
-        {
-            "request_id": "req-basic-1",
-            "auth_token": "broker-secret-0123456789abcdef",
-            "usernamefinder_ref": username_ref,
-            "username_ref": username_ref,
-            "site_id": "basic-site",
-            "current_url": "https://caller.example.invalid/ignored",
-            "target_tab_id": "target-basic-1",
-        },
+        {"capability": CapabilityCodec("capability-secret-0123456789").encode(capability)},
     ) as response:
         return dict(response.body)
 
 
 def test_basic_adapter_real_local_https_challenge_authenticated(basic_env) -> None:
-    origin, cert = basic_env
+    origin, cert, grants = basic_env
     browser = RealBasicBrowser(origin, cert)
     api = build_broker_api(
         browser_factory=lambda: browser,
         credential_fetcher=lambda ref: CredentialMaterial("alice", "secret-pw"),
+        grant_resolver=grants,
     )
 
     body = _run(api)
@@ -212,11 +253,12 @@ def test_basic_adapter_real_local_https_challenge_authenticated(basic_env) -> No
 
 
 def test_basic_adapter_wrong_vault_password_fails_closed(basic_env) -> None:
-    origin, cert = basic_env
+    origin, cert, grants = basic_env
     browser = RealBasicBrowser(origin, cert)
     api = build_broker_api(
         browser_factory=lambda: browser,
         credential_fetcher=lambda ref: CredentialMaterial("alice", "wrong-pw"),
+        grant_resolver=grants,
     )
 
     body = _run(api)
@@ -226,12 +268,17 @@ def test_basic_adapter_wrong_vault_password_fails_closed(basic_env) -> None:
     assert "wrong-pw" not in json.dumps(body)
 
 
-def test_basic_adapter_rejects_live_binding_mismatch_before_credentials(
+def test_basic_adapter_rejects_capability_owner_that_differs_from_live_binding(
     basic_env, monkeypatch
 ) -> None:
-    origin, cert = basic_env
+    origin, cert, grants = basic_env
     browser = RealBasicBrowser(origin, cert)
-    browser.live_binding = lambda: ("pmo-other", "g1")  # type: ignore[method-assign]
+    browser.live_binding = lambda: LiveBrowserBinding(
+        profile_id="profile-a",
+        principal_id="pmo-other",
+        browser_id="browser-1",
+        generation="g1",
+    )  # type: ignore[method-assign]
     fetched = False
 
     def fetch(_ref: str) -> CredentialMaterial:
@@ -239,26 +286,31 @@ def test_basic_adapter_rejects_live_binding_mismatch_before_credentials(
         fetched = True
         return CredentialMaterial("alice", "secret-pw")
 
-    api = build_broker_api(browser_factory=lambda: browser, credential_fetcher=fetch)
+    api = build_broker_api(
+        browser_factory=lambda: browser,
+        credential_fetcher=fetch,
+        grant_resolver=grants,
+    )
     body = _run(api)
 
     assert body["status"] == "failed"
-    assert body["error_code"] == "internal"
-    assert fetched is True
+    assert body["error_code"] == "binding_mismatch"
+    assert fetched is False
     assert browser.submitted == []
 
 
 def test_basic_adapter_declared_origin_is_exact(basic_env, monkeypatch) -> None:
-    origin, cert = basic_env
+    origin, cert, grants = basic_env
     browser = RealBasicBrowser(origin, cert)
     monkeypatch.setenv("CB_BROKER_ORIGIN", "https://localhost:1")
     api = build_broker_api(
         browser_factory=lambda: browser,
         credential_fetcher=lambda ref: CredentialMaterial("alice", "secret-pw"),
+        grant_resolver=grants,
     )
 
     body = _run(api)
 
     assert body["status"] == "failed"
-    assert body["error_code"] == "adapter_invalid_target"
+    assert body["error_code"] == "invalid_target"
     assert browser.submitted == []

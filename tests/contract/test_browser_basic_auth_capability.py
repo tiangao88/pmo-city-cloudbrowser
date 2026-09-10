@@ -8,6 +8,8 @@ import pytest
 
 from cloudbrowser.browser_slots.basic_auth import BasicAuthCapability
 from cloudbrowser.browser_slots.transport import BrowserUnavailable
+from cloudbrowser.credential_broker.deadline import BrokerDeadline
+
 
 
 class FakeChrome:
@@ -55,6 +57,83 @@ class FakeWebSocket:
 
     def close(self) -> None:
         self.closed = True
+
+
+class DeadlineWebSocket(FakeWebSocket):
+    def __init__(self, chrome: FakeChrome, events: list[dict[str, object]], clock: list[float]) -> None:
+        super().__init__(chrome, events)
+        self.clock = clock
+
+    def recv(self) -> bytes:
+        self.clock[0] = 5.0
+        return super().recv()
+
+
+def test_basic_capability_checks_shared_deadline_inside_event_loop() -> None:
+    chrome = FakeChrome()
+    clock = [1.0]
+    ws = DeadlineWebSocket(chrome, [_auth_event()], clock)
+    capability = BasicAuthCapability(chrome, ws_factory=lambda url, timeout: ws)
+    deadline = BrokerDeadline(2.0, monotonic_clock=lambda: clock[0])
+
+    with pytest.raises(TimeoutError, match="deadline"):
+        capability.probe(target_id=_target_id(chrome), deadline=deadline)
+
+
+def test_basic_probe_checks_deadline_after_target_lookup_before_websocket() -> None:
+    clock = [1.0]
+
+    class SlowChrome(FakeChrome):
+        lookups = 0
+
+        def json_request(self, path: str, *, method: str = "GET") -> object:
+            self.lookups += 1
+            if self.lookups == 2:
+                clock[0] = 5.0
+            return super().json_request(path, method=method)
+
+    chrome = SlowChrome()
+    ws_opened = False
+
+    def ws_factory(url, timeout):  # noqa: ANN001
+        nonlocal ws_opened
+        ws_opened = True
+        raise AssertionError("expired target lookup must not open websocket")
+
+    capability = BasicAuthCapability(chrome, ws_factory=ws_factory)
+    with pytest.raises(TimeoutError, match="deadline"):
+        capability.probe(
+            target_id=_target_id(chrome),
+            deadline=BrokerDeadline(2.0, monotonic_clock=lambda: clock[0]),
+        )
+    assert ws_opened is False
+
+
+def test_basic_submit_does_not_send_cdp_command_after_receive_deadline() -> None:
+    chrome = FakeChrome()
+    clock = [1.0]
+    ws = DeadlineWebSocket(
+        chrome,
+        [
+            {
+                "method": "Fetch.requestPaused",
+                "params": {"requestId": "late-request"},
+            }
+        ],
+        clock,
+    )
+    capability = BasicAuthCapability(chrome, ws_factory=lambda url, timeout: ws)
+
+    with pytest.raises(TimeoutError, match="deadline"):
+        capability.submit(
+            "https://basic.example.test",
+            "alice",
+            "secret-pw",
+            target_id=_target_id(chrome),
+            success_path="/home",
+            deadline=BrokerDeadline(2.0, monotonic_clock=lambda: clock[0]),
+        )
+    assert not any(message["method"] == "Fetch.continueRequest" for message in ws.sent)
 
 
 def _auth_event(origin: str = "https://basic.example.test") -> dict[str, object]:
@@ -155,6 +234,55 @@ def test_capability_probe_reports_a_real_challenge_without_credentials() -> None
         "response": "CancelAuth"
     }
     assert "password" not in json.dumps(ws.sent).lower()
+
+
+def test_capability_probe_redacts_query_and_fragment_from_public_state() -> None:
+    chrome = FakeChrome("https://basic.example.test/protected?code=secret#state")
+    ws = FakeWebSocket(chrome, [_auth_event()])
+    capability = BasicAuthCapability(chrome, ws_factory=lambda url, timeout: ws)
+
+    state = capability.probe(target_id=_target_id(chrome))
+
+    assert state["url"] == "https://basic.example.test/protected"
+    assert capability._state.url == "https://basic.example.test/protected?code=secret#state"
+
+
+def test_capability_state_rejects_userinfo_and_bounds_redacted_url() -> None:
+    for url in (
+        "https://user:password@basic.example.test/protected",
+        "https://basic.example.test/" + "a" * 2048,
+    ):
+        chrome = FakeChrome(url)
+        capability = BasicAuthCapability(chrome, ws_factory=lambda _url, _timeout: None)
+        with pytest.raises(BrowserUnavailable):
+            capability.state(target_id=_target_id(chrome))
+
+
+@pytest.mark.parametrize(
+    "websocket_url",
+    (
+        "ws://192.0.2.1:9222/devtools/page/1",
+        "ws://user:password@127.0.0.1:9222/devtools/page/1",
+        "ws://127.0.0.1/devtools/page/1",
+        "ws://127.0.0.1:not-a-port/devtools/page/1",
+        "ws://127.0.0.1:9222/devtools/page/1#fragment",
+        "wss://127.0.0.1:9222/devtools/page/1",
+    ),
+)
+def test_page_websocket_revalidates_the_local_endpoint(websocket_url: str) -> None:
+    chrome = FakeChrome()
+    chrome.targets = [
+        {
+            "id": chrome.target_id,
+            "type": "page",
+            "url": chrome.url,
+            "webSocketDebuggerUrl": websocket_url,
+        }
+    ]
+    capability = BasicAuthCapability(chrome, ws_factory=lambda _url, _timeout: None)
+
+    with pytest.raises(BrowserUnavailable):
+        capability._page_websocket(chrome.target_id)
 
 
 def test_capability_reports_a_second_matching_challenge_for_broker_failure() -> None:

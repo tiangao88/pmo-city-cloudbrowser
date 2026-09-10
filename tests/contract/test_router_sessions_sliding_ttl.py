@@ -99,7 +99,7 @@ def test_agent_activity_extends_session_expiry(tmp_path):
     # at the original t=4600 mark.
     clock.now = 3000.0
     status, payload = api.agent_action(
-        headers=_HEADERS, operation="page_info", body={"request_id": "r3", "params": {}}
+        headers=_HEADERS, operation="page_info", body={"request_id": "r3", "params": {"target_tab_id": "tab-1"}}
     )
     assert status == 200
     assert payload["status"] == "ok"

@@ -24,22 +24,23 @@ def _browser() -> RestrictedAgentBrowser:
     def readiness() -> BrowserReadiness:
         return BrowserReadiness("owner@example.test", "generation-1", True)
 
-    def navigate(url: str) -> None:
-        calls.append(("navigate", url))
+    def navigate(target_tab_id: str, url: str) -> None:
+        calls.append(("navigate", (target_tab_id, url)))
 
     browser = RestrictedAgentBrowser(
         readiness=readiness,
         list_pages=lambda: [{"tab_id": "tab-1", "url": "https://example.test", "title": "Example"}],
         navigate=navigate,
-        click=lambda selector: calls.append(("click", selector)),
-        type_text=lambda selector, text: calls.append(("type", (selector, text))),
-        page_info=lambda selector=None: PageState(url="https://example.test", title="Example", text="Hello"),
+        click=lambda target_tab_id, selector: calls.append(("click", (target_tab_id, selector))),
+        type_text=lambda target_tab_id, selector, text: calls.append(("type", (target_tab_id, selector, text))),
+        page_info=lambda target_tab_id, selector=None: PageState(url="https://example.test", title="Example", text="Hello"),
     )
     browser.calls = calls  # type: ignore[attr-defined]
     return browser
 
 
 def _request(op: str, **params: object) -> AgentControlRequest:
+    params.setdefault("target_tab_id", "tab-1")
     return AgentControlRequest(
         request_id="request-1",
         principal_id="owner@example.test",
@@ -54,7 +55,7 @@ def test_page_state_operations_are_bounded_and_owner_bound() -> None:
     browser = _browser()
     service = AgentControlService(browser, principal_id="owner@example.test", browser_id="browser-1", generation="generation-1")
 
-    assert service.handle(_request("page_info")) == {
+    assert service.handle(_request("page_info", target_tab_id="tab-1")) == {
         "request_id": "request-1",
         "status": "ok",
         "page": {"url": "https://example.test", "title": "Example", "text": "Hello"},
@@ -63,9 +64,9 @@ def test_page_state_operations_are_bounded_and_owner_bound() -> None:
     assert service.handle(_request("click", selector="#submit"))["status"] == "ok"
     assert service.handle(_request("type", selector="#name", text="Alice"))["status"] == "ok"
     assert browser.calls == [
-        ("navigate", "https://example.test/next"),
-        ("click", "#submit"),
-        ("type", ("#name", "Alice")),
+        ("navigate", ("tab-1", "https://example.test/next")),
+        ("click", ("tab-1", "#submit")),
+        ("type", ("tab-1", "#name", "Alice")),
     ]
 
 
@@ -107,7 +108,7 @@ def test_agent_fails_closed_when_browser_readiness_changes() -> None:
     browser = RestrictedAgentBrowser(
         readiness=lambda: state["ready"],
         list_pages=lambda: [],
-        page_info=lambda: PageState("https://example.test", "Example", "Hello"),
+        page_info=lambda target_tab_id, selector=None: PageState("https://example.test", "Example", "Hello"),
     )
     service = AgentControlService(browser, principal_id="owner@example.test", browser_id="browser-1", generation="generation-1")
     state["ready"] = BrowserReadiness("other@example.test", "generation-2", True)
@@ -131,7 +132,7 @@ def test_agent_http_server_never_exposes_raw_cdp_or_sensitive_page_fields() -> N
     thread.start()
     try:
         url = f"http://127.0.0.1:{server.server_port}/agent-control/v1"
-        body = json.dumps({"request_id": "request-1", "operation": "page_info", "params": {}}).encode()
+        body = json.dumps({"request_id": "request-1", "operation": "page_info", "params": {"target_tab_id": "tab-1"}}).encode()
         response = urlopen(
             Request(
                 url,

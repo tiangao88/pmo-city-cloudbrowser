@@ -72,6 +72,7 @@ def test_coordinator_audits_accepted_login() -> None:
         declarations={"site-a": _FakeDeclaration()},
         adapter_selector=lambda site, decl, intent: adapter,
         audit_emit=lambda event_type, fields: trace.events.append((event_type, fields)),
+        test_only_allow_compatibility_authorization=True,
     )
 
     result = coordinator.execute(make_intent(), fetch_credentials=lambda ref: object())
@@ -89,6 +90,7 @@ def test_coordinator_re_runs_binding_resolution_pre_fill_and_rejects_change() ->
         declarations={"site-a": _FakeDeclaration()},
         adapter_selector=lambda site, decl, intent: adapter,
         audit_emit=lambda event_type, fields: trace.events.append((event_type, fields)),
+        test_only_allow_compatibility_authorization=True,
     )
 
     result = coordinator.execute(make_intent(), fetch_credentials=lambda ref: object())
@@ -107,6 +109,7 @@ def test_coordinator_emits_mfa_required_audit_when_adapter_returns_mfa() -> None
         declarations={"site-a": _FakeDeclaration()},
         adapter_selector=lambda site, decl, intent: adapter,
         audit_emit=lambda event_type, fields: trace.events.append((event_type, fields)),
+        test_only_allow_compatibility_authorization=True,
     )
 
     result = coordinator.execute(make_intent(), fetch_credentials=lambda ref: object())
@@ -138,6 +141,7 @@ def test_coordinator_masks_credential_in_audit_fields() -> None:
         declarations={"site-a": _FakeDeclaration()},
         adapter_selector=lambda site, decl, intent: adapter,
         audit_emit=emit,
+        test_only_allow_compatibility_authorization=True,
     )
 
     coordinator.execute(make_intent(), fetch_credentials=lambda ref: object())
@@ -163,6 +167,7 @@ def test_coordinator_returns_not_shared_when_credential_unavailable() -> None:
         declarations={"site-a": _FakeDeclaration()},
         adapter_selector=lambda site, decl, intent: adapter,
         audit_emit=lambda *_: None,
+        test_only_allow_compatibility_authorization=True,
     )
 
     def fetch(ref):

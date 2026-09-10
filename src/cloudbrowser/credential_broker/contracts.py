@@ -1,5 +1,9 @@
+"""Intent/result contracts for the credential broker."""
+
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Mapping, Protocol
+from typing import Mapping
 from urllib.parse import urlsplit
 
 from ..security import BROKER_STATUS_VALUES
@@ -14,10 +18,72 @@ class LoginIntent:
     principal_id: str
     browser_id: str
     site_id: str
-    username_ref: str
+    # Deprecated transport assertion. Authorization must use GrantResolver;
+    # callers cannot select a vault item by supplying this value.
+    username_ref: str = ""
     target_tab_id: str | None = None
     idempotency_key: str | None = None
     binding_generation: str | None = None
+
+
+class AuthorizationChanged(LookupError):
+    """The grant authorization epoch changed before the gated side effect."""
+
+    def __init__(self, message: str = "grant changed") -> None:
+        super().__init__(message)
+
+
+@dataclass(frozen=True)
+class GrantAuthorization:
+    """Server-owned grant item authorization for one exact live binding.
+
+    ``username_ref`` is resolved by the broker authorization seam, never copied
+    from a caller request. Every binding field is mandatory so an authorization
+    cannot silently become a partial wildcard.
+    """
+
+    username_ref: str
+    profile_id: str
+    principal_id: str
+    browser_id: str
+    generation: str
+    site_id: str
+    target_tab_id: str
+    # Durable grant authorization epoch. Every authorization carries a positive
+    # epoch; a changed epoch is a changed grant even when all scope fields match.
+    epoch: int = 1
+
+    def __post_init__(self) -> None:
+        if isinstance(self.epoch, bool) or not isinstance(self.epoch, int) or self.epoch <= 0:
+            raise ValueError("epoch must be a non-negative integer")
+        for name in (
+            "username_ref",
+            "profile_id",
+            "principal_id",
+            "browser_id",
+            "generation",
+            "site_id",
+            "target_tab_id",
+        ):
+            value = getattr(self, name)
+            if (
+                not isinstance(value, str)
+                or not value
+                or len(value.encode("utf-8")) > 256
+                or any(ord(char) < 0x20 or ord(char) == 0x7F for char in value)
+            ):
+                raise ValueError(f"{name} must be bounded non-empty text")
+
+    def matches(self, binding: object, site_id: str, target_tab_id: str) -> bool:
+        """Return whether this authorization names the complete live scope."""
+        return (
+            getattr(binding, "profile_id", None) == self.profile_id
+            and getattr(binding, "principal_id", None) == self.principal_id
+            and getattr(binding, "browser_id", None) == self.browser_id
+            and getattr(binding, "generation", None) == self.generation
+            and getattr(binding, "site_id", None) == self.site_id == site_id
+            and self.target_tab_id == target_tab_id
+        )
 
 
 @dataclass(frozen=True)

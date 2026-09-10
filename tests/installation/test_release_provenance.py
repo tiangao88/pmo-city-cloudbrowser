@@ -23,7 +23,7 @@ def _provenance(manifest: str) -> tuple[str, str]:
     return run_match.group(1), commit_match.group(1)
 
 
-def test_manifest_provenance_is_not_stale() -> None:
+def test_manifest_retains_prior_qualification_provenance() -> None:
     manifest = MANIFEST.read_text(encoding="utf-8")
     run_url, commit = _provenance(manifest)
     assert run_url.endswith("/actions/runs/34402569940")

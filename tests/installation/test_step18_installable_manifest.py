@@ -38,17 +38,19 @@ def _provenance(manifest: str) -> tuple[str, str]:
     return run_match.group(1), commit_match.group(1)
 
 
-def test_release_has_an_explicit_identity_link_publication_gate() -> None:
+def test_release_manifest_marks_the_current_source_as_pre_build() -> None:
     manifest = _manifest()
     assert "productVersion: 0.2.0-dev1" in manifest
     assert "specificationBaseline: v0.2.0" in manifest
-    assert "status: qualified-installable" in manifest
-    assert "installable: true" in manifest
+    assert "status: pre-build-not-installable" in manifest
+    assert "installable: false" in manifest
+    assert "sourceState: pending-build" in manifest
+    assert "imageState: stale-pre-change" in manifest
     assert "identityLink: 0.2.0-dev1" in manifest
     assert re.search(r"identityLink: sha256:[0-9a-f]{64}", manifest)
 
 
-def test_qualification_records_are_present_and_match_manifest() -> None:
+def test_prior_qualification_records_are_present_and_match_manifest() -> None:
     manifest = _manifest()
     run_url, commit = _provenance(manifest)
     for service, component in SERVICES:
@@ -72,7 +74,11 @@ def test_both_compose_variants_require_the_viewer_secret() -> None:
     # provisions it via a Coolify magic env (auto-generated, stable value).
     for relative_path, marker in (
         ("deploy/coolify/compose.yaml", "CB_VIEWER_TOKEN_SECRET: ${CB_VIEWER_TOKEN_SECRET:?CB_VIEWER_TOKEN_SECRET is required}"),
-        ("deploy/coolify/compose.coolify.yaml", "CB_VIEWER_TOKEN_SECRET: ${SERVICE_PASSWORD_64_VIEWERSECRET}"),
+        (
+            "deploy/coolify/compose.coolify.yaml",
+            "CB_VIEWER_TOKEN_SECRET: "
+            "${SERVICE_PASSWORD_64_VIEWERSECRET:?SERVICE_PASSWORD_64_VIEWERSECRET is required}",
+        ),
     ):
         compose = (ROOT / relative_path).read_text(encoding="utf-8")
         viewer_section = compose.split("  viewer:\n", 1)[1].split("\n  downloads:", 1)[0]

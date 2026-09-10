@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import threading
 import time
 from typing import Callable
 from urllib.parse import urlsplit
@@ -27,6 +28,8 @@ class BrowserProcessConfig:
     http_port: int
     owner: str
     generation: str
+    profile_id: str = "profile-unassigned"
+    browser_id: str = "browser-unassigned"
     extra_args: tuple[str, ...] = field(default_factory=tuple)
     download_dir: Path | None = None
     startup_timeout_s: float = 30.0
@@ -45,6 +48,9 @@ class BrowserProcessConfig:
             raise ValueError("owner is required")
         if not isinstance(self.generation, str) or not self.generation:
             raise ValueError("generation is required")
+        for value, name in ((self.profile_id, "profile_id"), (self.browser_id, "browser_id")):
+            if not isinstance(value, str) or not value or len(value) > 256:
+                raise ValueError(f"{name} is invalid")
         if self.startup_timeout_s <= 0 or self.stop_timeout_s <= 0:
             raise ValueError("timeouts must be positive")
         forbidden_prefixes = (
@@ -97,104 +103,156 @@ class BrowserProcess:
         self._process: object | None = None
         self._state = "stopped"
         self._recovering = False
+        self._lock = threading.RLock()
+        self._start_epoch = 0
 
     @property
     def state(self) -> str:
-        process = self._process
-        if process is not None and self._poll(process) is not None and self._state == "ready":
-            self._state = "failed"
-        return self._state
+        with self._lock:
+            process = self._process
+            if process is not None and self._poll(process) is not None and self._state == "ready":
+                self._state = "failed"
+            return self._state
 
     @property
     def binding(self) -> tuple[str, str]:
-        return self.config.owner, self.config.generation
+        with self._lock:
+            return self.config.owner, self.config.generation
 
     @property
     def pid(self) -> int | None:
-        value = getattr(self._process, "pid", None)
-        return value if isinstance(value, int) else None
+        with self._lock:
+            value = getattr(self._process, "pid", None)
+            return value if isinstance(value, int) else None
 
-    def rebind(self, owner: str, generation: str) -> None:
-        """Adopt a server-minted owner/generation while the browser is stopped.
+    def rebind(
+        self,
+        owner: str,
+        generation: str,
+        *,
+        profile_id: str | None = None,
+        browser_id: str | None = None,
+    ) -> None:
+        """Adopt a server-minted binding while the browser is stopped."""
 
-        ``BrowserProcessConfig`` is frozen, so a new instance is built with
-        the same service-owned paths and flags but the new identity.
-        """
-
-        if self.state != "stopped":
-            raise BrowserProcessError("browser must be stopped to rebind")
-        for value in (owner, generation):
-            if not isinstance(value, str) or not value or len(value) > 256:
-                raise ValueError("owner and generation must be bounded strings")
-        self.config = replace(self.config, owner=owner, generation=generation)
-
-    def start(self, *, owner: str | None = None, generation: str | None = None) -> bool:
-        if owner is not None and owner != self.config.owner:
-            raise BrowserProcessError("browser owner binding mismatch")
-        if generation is not None and generation != self.config.generation:
-            raise BrowserProcessError("browser generation binding mismatch")
-        if self.state == "ready":
-            return True
-        if self.state == "starting":
-            raise BrowserProcessError("browser is already starting")
-        self.config.profile_dir.mkdir(parents=True, exist_ok=True)
-        self._clear_stale_profile_locks()
-        self._state = "starting"
-        try:
-            self._process = self._popen(
-                self.config.command(),
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                close_fds=True,
-                start_new_session=True,
+        with self._lock:
+            if self.state != "stopped":
+                raise BrowserProcessError("browser must be stopped to rebind")
+            for value in (owner, generation):
+                if not isinstance(value, str) or not value or len(value) > 256:
+                    raise ValueError("owner and generation must be bounded strings")
+            self.config = replace(
+                self.config,
+                owner=owner,
+                generation=generation,
+                profile_id=profile_id if profile_id is not None else self.config.profile_id,
+                browser_id=browser_id if browser_id is not None else self.config.browser_id,
             )
-        except (OSError, TypeError) as exc:
-            self._process = None
-            self._state = "failed"
-            raise BrowserProcessError("browser process failed to start") from exc
-        deadline = self._monotonic() + self.config.startup_timeout_s
-        while self._monotonic() < deadline:
-            process = self._process
-            if process is None or self._poll(process) is not None:
-                self._state = "failed"
-                raise BrowserProcessError("browser process exited during startup")
+
+    def start(
+        self,
+        *,
+        owner: str | None = None,
+        generation: str | None = None,
+        _expected_epoch: int | None = None,
+    ) -> bool:
+        with self._lock:
+            if _expected_epoch is not None and _expected_epoch != self._start_epoch:
+                raise BrowserProcessError("browser start was cancelled")
+            if owner is not None and owner != self.config.owner:
+                raise BrowserProcessError("browser owner binding mismatch")
+            if generation is not None and generation != self.config.generation:
+                raise BrowserProcessError("browser generation binding mismatch")
+            if self.state == "ready":
+                return True
+            if self.state == "starting":
+                raise BrowserProcessError("browser is already starting")
+            self.config.profile_dir.mkdir(parents=True, exist_ok=True)
+            self._clear_stale_profile_locks()
+            self._state = "starting"
+            self._start_epoch += 1
+            start_epoch = self._start_epoch
             try:
-                if self._probe():
+                process = self._popen(
+                    self.config.command(),
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    close_fds=True,
+                    start_new_session=True,
+                )
+            except (OSError, TypeError) as exc:
+                self._process = None
+                self._state = "failed"
+                raise BrowserProcessError("browser process failed to start") from exc
+            self._process = process
+            deadline = self._monotonic() + self.config.startup_timeout_s
+
+        while self._monotonic() < deadline:
+            with self._lock:
+                if start_epoch != self._start_epoch or self._process is not process:
+                    raise BrowserProcessError("browser start was cancelled")
+                if self._poll(process) is not None:
+                    self._state = "failed"
+                    raise BrowserProcessError("browser process exited during startup")
+            try:
+                ready = bool(self._probe())
+            except Exception:
+                ready = False
+            with self._lock:
+                if start_epoch != self._start_epoch or self._process is not process:
+                    raise BrowserProcessError("browser start was cancelled")
+                if ready:
                     self._state = "ready"
                     return True
-            except Exception:
-                pass
             remaining = max(0.0, deadline - self._monotonic())
             self._sleep(min(0.1, remaining))
-        self._state = "failed"
-        self._terminate_process()
+
+        with self._lock:
+            if start_epoch != self._start_epoch or self._process is not process:
+                raise BrowserProcessError("browser start was cancelled")
+            self._state = "failed"
+            self._terminate_process(process)
+            if self._process is process:
+                self._process = None
         raise BrowserProcessError("browser readiness timed out")
 
     def stop(self) -> None:
-        process = self._process
-        if process is None:
+        with self._lock:
+            self._start_epoch += 1
+            process = self._process
+            self._process = None
             self._state = "stopped"
-            return
-        self._terminate_process()
-        self._process = None
-        self._state = "stopped"
+            if process is not None:
+                # Keep the process gate through termination. A concurrent
+                # start must not launch a new browser/profile while the old
+                # child still owns the profile and endpoint.
+                self._terminate_process(process)
 
     def recover_if_crashed(self) -> bool:
         """Restart once after an observed crash; never changes identity binding."""
-        process = self._process
-        if process is None or self._poll(process) is None:
-            return False
-        if self._recovering:
-            self._state = "failed"
-            return False
-        self._recovering = True
-        try:
+        with self._lock:
+            process = self._process
+            if process is None or self._poll(process) is None:
+                return False
+            if self._recovering:
+                self._state = "failed"
+                return False
+            self._recovering = True
+            self._start_epoch += 1
+            recovery_epoch = self._start_epoch
             self._process = None
             self._state = "failed"
-            return self.start(owner=self.config.owner, generation=self.config.generation)
+            owner, generation = self.config.owner, self.config.generation
+        try:
+            return self.start(
+                owner=owner,
+                generation=generation,
+                _expected_epoch=recovery_epoch,
+            )
         finally:
-            self._recovering = False
+            with self._lock:
+                self._recovering = False
 
     def watch(self, stop_event: object, *, interval_s: float = 1.0) -> None:
         """Monitor the child and attempt recovery until ``stop_event`` is set."""
@@ -204,21 +262,29 @@ class BrowserProcess:
         if not callable(wait):
             raise TypeError("stop_event must provide wait(seconds)")
         while not wait(interval_s):
-            process = self._process
-            if process is None or self._poll(process) is None:
+            with self._lock:
+                process = self._process
+                crashed = process is not None and self._poll(process) is not None
+            if not crashed:
                 continue
             try:
                 self.recover_if_crashed()
             except BrowserProcessError:
-                self._state = "failed"
+                with self._lock:
+                    if self._state != "stopped":
+                        self._state = "failed"
 
     def readiness(self) -> bool:
-        if self.state != "ready":
-            return False
+        with self._lock:
+            if self.state != "ready":
+                return False
+            process = self._process
         try:
-            return bool(self._probe())
+            ready = bool(self._probe())
         except Exception:
             return False
+        with self._lock:
+            return ready and self._state == "ready" and self._process is process
 
     @staticmethod
     def _poll(process: object) -> int | None:
@@ -228,8 +294,8 @@ class BrowserProcess:
         result = poll()
         return result if isinstance(result, int) else None
 
-    def _terminate_process(self) -> None:
-        process = self._process
+    def _terminate_process(self, process: object | None = None) -> None:
+        process = self._process if process is None else process
         if process is None:
             return
         terminate = getattr(process, "terminate", None)
@@ -271,8 +337,22 @@ def chrome_version_is_ready(raw: object) -> bool:
         return False
     if not isinstance(websocket, str):
         return False
-    parsed = urlsplit(websocket)
-    return parsed.scheme in {"ws", "wss"} and bool(parsed.netloc)
+    try:
+        parsed = urlsplit(websocket)
+        hostname = parsed.hostname
+        port = parsed.port
+    except (TypeError, ValueError):
+        return False
+    return (
+        parsed.scheme == "ws"
+        and hostname in {"127.0.0.1", "localhost", "::1"}
+        and port is not None
+        and 1 <= port <= 65535
+        and bool(parsed.path)
+        and parsed.username is None
+        and parsed.password is None
+        and not parsed.fragment
+    )
 
 
 def browser_process_health(

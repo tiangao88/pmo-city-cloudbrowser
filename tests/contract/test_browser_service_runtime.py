@@ -229,6 +229,150 @@ def _forbidden_server_factory(api, *, address):
     raise AssertionError("server must not be created when the config is invalid")
 
 
+def test_router_wires_credential_deadline_and_capability_ttl_from_env(monkeypatch):
+    captured = {}
+
+    class FakeNamespace:
+        def __init__(self, instance_id):
+            pass
+
+    class FakeStore:
+        def __init__(self, path, *, slots, clock, **kwargs):
+            pass
+
+    class FakeForwarder:
+        def __init__(self, base_url, *, timeout_s, capability_ttl_s):
+            captured["base_url"] = base_url
+            captured["timeout_s"] = timeout_s
+            captured["forwarder_ttl_s"] = capability_ttl_s
+
+    class FakeApi:
+        def __init__(self, *, capability_ttl_s, credential_broker_forwarder, **kwargs):
+            captured["api_ttl_s"] = capability_ttl_s
+            captured["forwarder"] = credential_broker_forwarder
+
+    class FakeServer:
+        def serve_forever(self):
+            pass
+
+        def server_close(self):
+            pass
+
+    monkeypatch.setattr(service_runtime, "InstanceNamespace", FakeNamespace)
+    monkeypatch.setenv("CB_INSTANCE_ID", "test-instance")
+    monkeypatch.setenv("CB_RELEASE_VERSION", "test-release")
+    monkeypatch.setenv("CB_PORT", "8080")
+    monkeypatch.setenv("CB_ROUTER_SHARED_SECRET", "router-test-secret-0123456789")
+    monkeypatch.setenv("CB_SLOT_SUPERVISOR_URLS", "slot-1=http://slot-1:8081")
+    monkeypatch.setenv("CB_CREDENTIAL_BROKER_URL", "http://credential-broker:8084")
+    monkeypatch.setenv("CB_CREDENTIAL_CAPABILITY_SECRET", "capability-secret-0123456789")
+    monkeypatch.setenv("CB_CREDENTIAL_BROKER_TIMEOUT_S", "29.5")
+    monkeypatch.setenv("CB_CREDENTIAL_CAPABILITY_TTL_S", "30")
+    monkeypatch.delenv("CB_EDGE_AUTH", raising=False)
+    monkeypatch.delenv("CB_AGENT_CONTROL_URLS", raising=False)
+
+    monkeypatch.setattr("cloudbrowser.router.sessions.RouterSessionStore", FakeStore)
+    monkeypatch.setattr(
+        "cloudbrowser.router.credential_broker_forwarder.CredentialBrokerForwarder",
+        FakeForwarder,
+    )
+    monkeypatch.setattr("cloudbrowser.router.router_api.RouterApi", FakeApi)
+    monkeypatch.setattr(
+        "cloudbrowser.router.router_api.create_router_server",
+        lambda api, *, address: FakeServer(),
+    )
+
+    service_runtime.run_service("router")
+
+    assert captured["base_url"] == "http://credential-broker:8084"
+    assert captured["timeout_s"] == 29.5
+    assert captured["forwarder_ttl_s"] == 30
+    assert captured["api_ttl_s"] == 30
+    assert isinstance(captured["forwarder"], FakeForwarder)
+
+
+def test_router_default_deadline_is_covered_by_capability_ttl(monkeypatch):
+    captured = {}
+
+    class FakeNamespace:
+        def __init__(self, instance_id):
+            pass
+
+    class FakeStore:
+        def __init__(self, path, *, slots, clock, **kwargs):
+            pass
+
+    class FakeForwarder:
+        def __init__(self, base_url, *, timeout_s, capability_ttl_s):
+            captured["timeout_s"] = timeout_s
+            captured["forwarder_ttl_s"] = capability_ttl_s
+
+    class FakeApi:
+        def __init__(self, *, capability_ttl_s, **kwargs):
+            captured["api_ttl_s"] = capability_ttl_s
+
+    class FakeServer:
+        def serve_forever(self):
+            pass
+
+        def server_close(self):
+            pass
+
+    monkeypatch.setattr(service_runtime, "InstanceNamespace", FakeNamespace)
+    monkeypatch.setenv("CB_INSTANCE_ID", "test-instance")
+    monkeypatch.setenv("CB_RELEASE_VERSION", "test-release")
+    monkeypatch.setenv("CB_PORT", "8080")
+    monkeypatch.setenv("CB_ROUTER_SHARED_SECRET", "router-test-secret-0123456789")
+    monkeypatch.setenv("CB_SLOT_SUPERVISOR_URLS", "slot-1=http://slot-1:8081")
+    monkeypatch.setenv("CB_CREDENTIAL_BROKER_URL", "http://credential-broker:8084")
+    monkeypatch.setenv("CB_CREDENTIAL_CAPABILITY_SECRET", "capability-secret-0123456789")
+    monkeypatch.delenv("CB_CREDENTIAL_BROKER_TIMEOUT_S", raising=False)
+    monkeypatch.delenv("CB_CREDENTIAL_CAPABILITY_TTL_S", raising=False)
+    monkeypatch.delenv("CB_EDGE_AUTH", raising=False)
+    monkeypatch.delenv("CB_AGENT_CONTROL_URLS", raising=False)
+
+    monkeypatch.setattr("cloudbrowser.router.sessions.RouterSessionStore", FakeStore)
+    monkeypatch.setattr(
+        "cloudbrowser.router.credential_broker_forwarder.CredentialBrokerForwarder",
+        FakeForwarder,
+    )
+    monkeypatch.setattr("cloudbrowser.router.router_api.RouterApi", FakeApi)
+    monkeypatch.setattr(
+        "cloudbrowser.router.router_api.create_router_server",
+        lambda api, *, address: FakeServer(),
+    )
+
+    service_runtime.run_service("router")
+
+    assert captured == {
+        "timeout_s": 25.0,
+        "forwarder_ttl_s": 26,
+        "api_ttl_s": 26,
+    }
+
+
+def test_router_rejects_credential_timeout_larger_than_capability_ttl(monkeypatch):
+    monkeypatch.setattr(service_runtime, "InstanceNamespace", lambda instance_id: None)
+    monkeypatch.setenv("CB_INSTANCE_ID", "test-instance")
+    monkeypatch.setenv("CB_RELEASE_VERSION", "test-release")
+    monkeypatch.setenv("CB_PORT", "8080")
+    monkeypatch.setenv("CB_ROUTER_SHARED_SECRET", "router-test-secret-0123456789")
+    monkeypatch.setenv("CB_SLOT_SUPERVISOR_URLS", "slot-1=http://slot-1:8081")
+    monkeypatch.setenv("CB_CREDENTIAL_BROKER_URL", "http://credential-broker:8084")
+    monkeypatch.setenv("CB_CREDENTIAL_CAPABILITY_SECRET", "capability-secret-0123456789")
+    monkeypatch.setenv("CB_CREDENTIAL_BROKER_TIMEOUT_S", "30")
+    monkeypatch.setenv("CB_CREDENTIAL_CAPABILITY_TTL_S", "29")
+    monkeypatch.delenv("CB_EDGE_AUTH", raising=False)
+    monkeypatch.delenv("CB_AGENT_CONTROL_URLS", raising=False)
+
+    try:
+        service_runtime.run_service("router")
+    except SystemExit as exc:
+        assert "capability TTL" in str(exc)
+    else:
+        raise AssertionError("router must reject a deadline beyond capability expiry")
+
+
 def test_router_wires_agent_control_forwarder_from_env(monkeypatch):
     # §3.1: when CB_AGENT_CONTROL_URLS is configured, the router runtime must
     # build an AgentControlForwarder with the trusted secret and inject it

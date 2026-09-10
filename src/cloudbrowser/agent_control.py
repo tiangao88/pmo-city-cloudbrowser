@@ -71,11 +71,11 @@ class PageState:
     text: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.url, str) or not _safe_observed_url(self.url) or len(self.url) > _MAX_URL:
+        if not isinstance(self.url, str) or not _safe_observed_url(self.url) or len(self.url.encode("utf-8")) > _MAX_URL:
             raise ValueError("page url is invalid")
         for name in ("title", "text"):
             value = getattr(self, name)
-            if not isinstance(value, str) or len(value) > _MAX_TEXT:
+            if not isinstance(value, str) or len(value.encode("utf-8")) > _MAX_TEXT:
                 raise ValueError("page state is invalid")
             if _contains_sensitive_marker(value):
                 raise ValueError("page state contains blocked sensitive content")
@@ -104,10 +104,10 @@ class RestrictedAgentBrowser:
         *,
         readiness: Callable[[], BrowserReadiness],
         list_pages: Callable[[], list[dict[str, str]]] | None = None,
-        navigate: Callable[[str], None] | None = None,
-        click: Callable[[str], None] | None = None,
-        type_text: Callable[[str, str], None] | None = None,
-        page_info: Callable[[str | None], PageState] | Callable[[], PageState] | None = None,
+        navigate: Callable[[str, str], None] | None = None,
+        click: Callable[[str, str], None] | None = None,
+        type_text: Callable[[str, str, str], None] | None = None,
+        page_info: Callable[[str, str | None], PageState] | None = None,
     ) -> None:
         self._readiness = readiness
         self._list_pages = list_pages
@@ -130,35 +130,32 @@ class RestrictedAgentBrowser:
             if not isinstance(page, dict):
                 raise BrowserUnavailable("page listing is invalid")
             tab_id, url, title = page.get("tab_id"), page.get("url"), page.get("title")
-            if not all(isinstance(value, str) and value and len(value) <= _MAX_TEXT for value in (tab_id, url, title)):
+            if not all(isinstance(value, str) and value and len(value.encode("utf-8")) <= _MAX_TEXT for value in (tab_id, url, title)):
                 raise BrowserUnavailable("page listing is invalid")
             if not _safe_observed_url(url) or _contains_sensitive_marker(title):
                 raise BrowserUnavailable("page listing contains blocked content")
             bounded.append({"tab_id": tab_id, "url": url, "title": title})
         return bounded
 
-    def navigate(self, url: str) -> None:
+    def navigate(self, target_tab_id: str, url: str) -> None:
         if self._navigate is None:
             raise BrowserUnavailable("navigation is unavailable")
-        self._navigate(url)
+        self._navigate(target_tab_id, url)
 
-    def click(self, selector: str) -> None:
+    def click(self, target_tab_id: str, selector: str) -> None:
         if self._click is None:
             raise BrowserUnavailable("click is unavailable")
-        self._click(selector)
+        self._click(target_tab_id, selector)
 
-    def type_text(self, selector: str, text: str) -> None:
+    def type_text(self, target_tab_id: str, selector: str, text: str) -> None:
         if self._type_text is None:
             raise BrowserUnavailable("typing is unavailable")
-        self._type_text(selector, text)
+        self._type_text(target_tab_id, selector, text)
 
-    def page_info(self, selector: str | None = None) -> PageState:
+    def page_info(self, target_tab_id: str, selector: str | None = None) -> PageState:
         if self._page_info is None:
             raise BrowserUnavailable("page state is unavailable")
-        try:
-            state = self._page_info(selector)
-        except TypeError:
-            state = self._page_info()  # type: ignore[call-arg]
+        state = self._page_info(target_tab_id, selector)
         if not isinstance(state, PageState):
             raise BrowserUnavailable("page state is invalid")
         return state
@@ -267,30 +264,48 @@ class AgentControlService:
 
     def _dispatch(self, operation: str, params: Mapping[str, object]) -> PageState | list[dict[str, str]] | None:
         if operation == "page_info":
+            target_tab_id = params.get("target_tab_id")
+            if not isinstance(target_tab_id, str):
+                raise ValueError("target_tab_id is required")
+            _require_target_tab_id(target_tab_id)
             selector = params.get("selector")
             if selector is not None:
                 _require_selector(selector)
-            return self._browser.page_info(selector if isinstance(selector, str) else None)
+            return self._browser.page_info(
+                target_tab_id, selector if isinstance(selector, str) else None
+            )
         if operation == "tabs_list":
             return self._browser.list_pages()
         if operation == "navigate":
+            target_tab_id = params.get("target_tab_id")
             url = params.get("url")
-            if not isinstance(url, str) or not _safe_navigation_url(url):
+            if not isinstance(target_tab_id, str) or not isinstance(url, str):
+                raise ValueError("target_tab_id and url are required")
+            _require_target_tab_id(target_tab_id)
+            if not _safe_navigation_url(url):
                 raise ValueError("url is invalid")
-            self._browser.navigate(url)
+            self._browser.navigate(target_tab_id, url)
             return None
         if operation == "click":
+            target_tab_id = params.get("target_tab_id")
+            if not isinstance(target_tab_id, str):
+                raise ValueError("target_tab_id is required")
+            _require_target_tab_id(target_tab_id)
             selector = _require_selector(params.get("selector"))
-            self._browser.click(selector)
+            self._browser.click(target_tab_id, selector)
             return None
         if operation == "type":
+            target_tab_id = params.get("target_tab_id")
+            if not isinstance(target_tab_id, str):
+                raise ValueError("target_tab_id is required")
+            _require_target_tab_id(target_tab_id)
             selector = _require_selector(params.get("selector"))
             if _is_sensitive_selector(selector):
                 raise ValueError("sensitive input is broker-only")
             text = params.get("text")
-            if not isinstance(text, str) or not text or len(text) > _MAX_TEXT or _contains_sensitive_marker(text):
+            if not isinstance(text, str) or not text or len(text.encode("utf-8")) > _MAX_TEXT or _contains_sensitive_marker(text):
                 raise ValueError("text is invalid")
-            self._browser.type_text(selector, text)
+            self._browser.type_text(target_tab_id, selector, text)
             return None
         raise ValueError("unsupported operation")
 
@@ -459,8 +474,16 @@ def _matches(readiness: BrowserReadiness, principal_id: str, generation: str) ->
     return isinstance(readiness, BrowserReadiness) and readiness.owner == principal_id and readiness.generation == generation
 
 
+def _require_target_tab_id(value: object) -> str:
+    if not isinstance(value, str) or not value or len(value.encode("utf-8")) > _MAX_IDENTITY:
+        raise ValueError("target_tab_id is invalid")
+    if any(ord(char) < 0x20 or ord(char) == 0x7F for char in value):
+        raise ValueError("target_tab_id is invalid")
+    return value
+
+
 def _require_selector(value: object) -> str:
-    if not isinstance(value, str) or not value or len(value) > _MAX_SELECTOR:
+    if not isinstance(value, str) or not value or len(value.encode("utf-8")) > _MAX_SELECTOR:
         raise ValueError("selector is invalid")
     return value
 
@@ -479,7 +502,7 @@ def _safe_navigation_url(url: str) -> bool:
     parsed = urlsplit(url)
     return (
         isinstance(url, str)
-        and len(url) <= _MAX_URL
+        and len(url.encode("utf-8")) <= _MAX_URL
         and parsed.scheme in {"http", "https"}
         and bool(parsed.netloc)
         and parsed.username is None

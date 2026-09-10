@@ -28,8 +28,28 @@ if "REPLACE_BEFORE_DEPLOY" not in text:
 
 release = ROOT / "deploy" / "coolify" / "releases" / "v0.2.0-dev1" / "release-manifest.yaml"
 release_text = release.read_text(encoding="utf-8")
-if "installable: true" not in release_text:
-    print("v0.2.0-dev1 release must be installable after Step 18")
+for marker in (
+    "status: pre-build-not-installable",
+    "installable: false",
+    "sourceState: pending-build",
+    "imageState: stale-pre-change",
+):
+    if marker not in release_text:
+        print(f"release manifest missing {marker}")
+        raise SystemExit(1)
+prior_run = re.search(
+    r"^    run: (https://github\.com/[^\s]+/actions/runs/[0-9]+)$",
+    release_text,
+    re.MULTILINE,
+)
+prior_commit = re.search(
+    r"^    commit: ([0-9a-f]{40})$", release_text, re.MULTILINE
+)
+if not prior_run:
+    print("release manifest is missing the prior qualification run")
+    raise SystemExit(1)
+if not prior_commit:
+    print("release manifest is missing the prior qualification commit")
     raise SystemExit(1)
 for component in (
     "router",

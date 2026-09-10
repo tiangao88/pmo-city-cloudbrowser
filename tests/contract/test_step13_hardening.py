@@ -310,6 +310,7 @@ def test_coordinator_revalidates_after_credential_fetch() -> None:
         resolve_pre_fill=resolve_pre_fill,
         declarations={"site-a": declaration},
         adapter_selector=lambda site, decl, intent: lambda declaration, material: AdapterResult("authenticated", True),
+        test_only_allow_compatibility_authorization=True,
     )
     result = coordinator.execute(intent, fetch_credentials=fetch)
     assert result == BrokerResult("req-hardening", "failed", "stale_binding")

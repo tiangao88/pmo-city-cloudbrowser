@@ -88,12 +88,15 @@ for a qualified release. See `deploy/coolify/README.md`.
   been imported from `pmo-city-builds` under explicit `legacy/` and
   `specs/archive/` paths.
 - The generic Credential Broker is implemented as the first v0.2 vertical
-  slice, including the controlled ordinary form adapter; it is not yet a
-  deployable service.
-- The v0.2.0-dev1 release now has a digest-pinned, installable manifest after
-  runtime image publication and qualification. Coolify deployment, runtime /
-  security acceptance, and live-fleet mutation remain Step 19+ work and require
-  separate approval.
+  slice. Production form mode is disabled until a broker-only exact-target
+  capability and its qualification evidence exist; Basic and approved SSO
+  paths remain gated by runtime qualification.
+- The current v0.2.0-dev1 manifest is pre-build and not installable. It retains
+  digests and provenance from the prior qualification run for traceability
+  only; the current source must be built, qualified, and digest-synchronized
+  before deployment can be considered. Coolify deployment, runtime/security
+  acceptance, and live-fleet mutation remain Step 19+ work and require separate
+  approval.
 - The current W3-1 status remains partial: owner-bound recovery passes, while
   strict authenticated-surface continuity through the intended broker path is
   not proven.
@@ -107,6 +110,8 @@ uv sync --dev
 make check
 ```
 
-The release is now digest-pinned and installable after image publication and
-qualification. Coolify deployment and runtime/security acceptance remain
-separate Step 19 work.
+The release preview is pre-build and not installable. The retained digests and
+qualification metadata apply only to the prior qualified commit; build and
+qualify the current source, synchronize all image digests and provenance, and
+rerun the gates before any deployment decision. Coolify deployment and
+runtime/security acceptance remain separate Step 19 work.

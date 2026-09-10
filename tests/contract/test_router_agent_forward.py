@@ -212,7 +212,7 @@ def test_agent_route_relays_page_info_to_session_slot(stack) -> None:
         conn,
         method="POST",
         path="/v1/agent/page_info",
-        body=json.dumps({"request_id": "req-agent", "params": {}}).encode("utf-8"),
+        body=json.dumps({"request_id": "req-agent", "params": {"target_tab_id": "tab-1"}}).encode("utf-8"),
         headers=_identity_headers(),
     )
     conn.close()
@@ -232,7 +232,7 @@ def test_agent_route_requires_resolvable_identity(stack) -> None:
         conn,
         method="POST",
         path="/v1/agent/page_info",
-        body=json.dumps({"request_id": "req-1", "params": {}}).encode("utf-8"),
+        body=json.dumps({"request_id": "req-1", "params": {"target_tab_id": "tab-1"}}).encode("utf-8"),
         # Email-only identity is non-authoritative by design → unresolvable.
         headers={"Remote-Email": "nobody@example.com"},
     )
@@ -273,7 +273,7 @@ def test_agent_route_without_session_or_unbound_fails_closed(stack, setup) -> No
         conn,
         method="POST",
         path="/v1/agent/page_info",
-        body=json.dumps({"request_id": "req-1", "params": {}}).encode("utf-8"),
+        body=json.dumps({"request_id": "req-1", "params": {"target_tab_id": "tab-1"}}).encode("utf-8"),
         headers=_identity_headers(),
     )
     conn.close()
@@ -297,7 +297,7 @@ def test_agent_route_with_active_session_without_binding_fails_no_binding(stack)
         conn,
         method="POST",
         path="/v1/agent/page_info",
-        body=json.dumps({"request_id": "req-1", "params": {}}).encode("utf-8"),
+        body=json.dumps({"request_id": "req-1", "params": {"target_tab_id": "tab-1"}}).encode("utf-8"),
         headers=_identity_headers(),
     )
     conn.close()
@@ -323,7 +323,7 @@ def test_agent_route_forbidden_or_unknown_operations_are_denied_before_forward(s
         conn,
         method="POST",
         path=path,
-        body=json.dumps({"request_id": "req-1", "params": {}}).encode("utf-8"),
+        body=json.dumps({"request_id": "req-1", "params": {"target_tab_id": "tab-1"}}).encode("utf-8"),
         headers=_identity_headers(),
     )
     conn.close()
@@ -346,7 +346,7 @@ def test_agent_route_unknown_slot_fails_without_forwarding(stack) -> None:
         conn,
         method="POST",
         path="/v1/agent/page_info",
-        body=json.dumps({"request_id": "req-1", "params": {}}).encode("utf-8"),
+        body=json.dumps({"request_id": "req-1", "params": {"target_tab_id": "tab-1"}}).encode("utf-8"),
         headers=_identity_headers(),
     )
     conn.close()
@@ -366,7 +366,7 @@ def test_agent_route_forwards_only_for_callers_own_session(stack) -> None:
         conn,
         method="POST",
         path="/v1/agent/page_info",
-        body=json.dumps({"request_id": "req-1", "params": {}}).encode("utf-8"),
+        body=json.dumps({"request_id": "req-1", "params": {"target_tab_id": "tab-1"}}).encode("utf-8"),
         headers=_identity_headers(sub="oidc-sub-other", user="other-owner", email="other@example.com"),
     )
     conn.close()
@@ -382,7 +382,7 @@ def test_agent_route_responses_never_leak_identity_or_binding(stack) -> None:
         conn,
         method="POST",
         path="/v1/agent/page_info",
-        body=json.dumps({"request_id": "req-1", "params": {}}).encode("utf-8"),
+        body=json.dumps({"request_id": "req-1", "params": {"target_tab_id": "tab-1"}}).encode("utf-8"),
         headers=_identity_headers(),
     )
     conn.close()
@@ -424,7 +424,7 @@ def test_agent_route_maps_forwarder_unavailability_to_bounded_error(stack) -> No
         conn,
         method="POST",
         path="/v1/agent/page_info",
-        body=json.dumps({"request_id": "req-1", "params": {}}).encode("utf-8"),
+        body=json.dumps({"request_id": "req-1", "params": {"target_tab_id": "tab-1"}}).encode("utf-8"),
         headers=_identity_headers(),
     )
     conn.close()

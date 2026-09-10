@@ -68,6 +68,7 @@ class _FakeRouterClient:
 
     def agent_action(self, *, headers, operation, params, request_id):  # noqa: ANN001
         self.calls.append(("agent:" + operation, dict(headers), dict(params)))
+        assert operation == "page_info" or "target_tab_id" in params
         return 200, dict(self.agent_response)
 
 
@@ -102,7 +103,7 @@ class TestSurfaceAgentRelay:
     def test_page_info_relays_to_router_with_identity_headers(self) -> None:
         surface, router = _surface()
         status, payload = surface.agent(
-            "page_info", headers=_EDGE_HEADERS, params={}, request_id="r1"
+            "page_info", headers=_EDGE_HEADERS, params={"target_tab_id": "tab-1"}, request_id="r1"
         )
         assert status == 200
         assert payload["status"] == "ok"
@@ -205,7 +206,7 @@ class TestSurfaceAgentRelay:
 
         surface, _ = _surface(router=_Exploding())
         status, payload = surface.agent(
-            "page_info", headers=_EDGE_HEADERS, params={}, request_id="r1"
+            "page_info", headers=_EDGE_HEADERS, params={"target_tab_id": "tab-1"}, request_id="r1"
         )
         assert status == 200
         assert payload["status"] == "failed"
@@ -220,7 +221,7 @@ class TestAgentHttpRoutes:
         try:
             request = Request(
                 base + "/ui/agent/page_info",
-                data=json.dumps({"params": {}}).encode(),
+                data=json.dumps({"params": {"target_tab_id": "tab-1"}}).encode(),
                 method="POST",
                 headers={**_EDGE_HEADERS, "Content-Type": "application/json"},
             )
@@ -238,7 +239,7 @@ class TestAgentHttpRoutes:
         try:
             request = Request(
                 base + "/ui/agent/page_info",
-                data=json.dumps({"params": {}}).encode(),
+                data=json.dumps({"params": {"target_tab_id": "tab-1"}}).encode(),
                 method="POST",
                 headers={"Content-Type": "application/json"},
             )
@@ -282,7 +283,7 @@ class TestAgentHttpRoutes:
         try:
             request = Request(
                 base + "/ui/agent/cookies",
-                data=json.dumps({"params": {}}).encode(),
+                data=json.dumps({"params": {"target_tab_id": "tab-1"}}).encode(),
                 method="POST",
                 headers={**_EDGE_HEADERS, "Content-Type": "application/json"},
             )

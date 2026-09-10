@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 from urllib.parse import urlsplit
+
+from cloudbrowser.credential_broker.deadline import BrokerDeadline, invoke_transport
+
+if TYPE_CHECKING:
+    from .lifecycle import BrowserBinding
 
 from .transport import BrowserReadiness, BrowserUnavailable
 
@@ -12,7 +17,13 @@ class HttpClient(Protocol):
     """Internal request contract; callers never receive raw browser control."""
 
     def request(
-        self, method: str, path: str, *, body: str | None = None, headers: "dict[str, str] | None" = None
+        self,
+        method: str,
+        path: str,
+        *,
+        body: str | None = None,
+        headers: "dict[str, str] | None" = None,
+        timeout_s: float | None = None,
     ) -> object: ...
 
 
@@ -57,14 +68,33 @@ class HttpBrowserTransport:
         self._expected_owner = principal_id
         self._expected_generation = generation
 
-    def start(self) -> None:
-        self._expect_ok(self._client.request("POST", "/browser/start"))
+    def start(self, *, deadline: BrokerDeadline | None = None) -> None:
+        self._expect_ok(
+            invoke_transport(
+                self._client.request,
+                "POST",
+                "/browser/start",
+                deadline=deadline,
+            )
+        )
 
-    def stop(self) -> None:
-        self._expect_ok(self._client.request("POST", "/browser/stop"))
+    def stop(self, *, deadline: BrokerDeadline | None = None) -> None:
+        self._expect_ok(
+            invoke_transport(
+                self._client.request,
+                "POST",
+                "/browser/stop",
+                deadline=deadline,
+            )
+        )
 
-    def readiness(self) -> BrowserReadiness:
-        raw = self._client.request("GET", "/browser/readiness")
+    def readiness(self, *, deadline: BrokerDeadline | None = None) -> BrowserReadiness:
+        raw = invoke_transport(
+            self._client.request,
+            "GET",
+            "/browser/readiness",
+            deadline=deadline,
+        )
         if not isinstance(raw, dict):
             raise BrowserUnavailable("invalid browser readiness response")
         owner = raw.get("owner")
@@ -80,8 +110,13 @@ class HttpBrowserTransport:
             raise BrowserUnavailable("browser readiness binding mismatch")
         return BrowserReadiness(owner, generation, cdp_ok)
 
-    def list_page_urls(self) -> list[str]:
-        raw = self._client.request("GET", "/browser/pages")
+    def list_page_urls(self, *, deadline: BrokerDeadline | None = None) -> list[str]:
+        raw = invoke_transport(
+            self._client.request,
+            "GET",
+            "/browser/pages",
+            deadline=deadline,
+        )
         if not isinstance(raw, dict) or not isinstance(raw.get("urls"), list):
             raise BrowserUnavailable("invalid browser pages response")
         urls = raw["urls"]
@@ -89,12 +124,27 @@ class HttpBrowserTransport:
             raise BrowserUnavailable("invalid browser page URL")
         return urls
 
-    def open_page(self, url: str) -> None:
+    def open_page(self, url: str, *, deadline: BrokerDeadline | None = None) -> None:
         self._validate_page_url(url)
-        self._expect_ok(self._client.request("POST", "/browser/pages/open", body=url))
+        self._expect_ok(
+            invoke_transport(
+                self._client.request,
+                "POST",
+                "/browser/pages/open",
+                body=url,
+                deadline=deadline,
+            )
+        )
 
-    def close_empty_pages(self) -> None:
-        self._expect_ok(self._client.request("POST", "/browser/pages/close-empty"))
+    def close_empty_pages(self, *, deadline: BrokerDeadline | None = None) -> None:
+        self._expect_ok(
+            invoke_transport(
+                self._client.request,
+                "POST",
+                "/browser/pages/close-empty",
+                deadline=deadline,
+            )
+        )
 
     def push_binding(self, binding: "BrowserBinding") -> None:
         """Push a server-minted binding to the browser service (secret-gated)."""

@@ -7,6 +7,13 @@
 > complete FR-9 product. Existing W2/D15 behavior remains a compatibility
 > adapter until the refactor is agreed.
 
+> **Milestone status clarification — 2026-09-10:** The requirements below remain
+> required for the final Credential Broker product. The current pre-login
+> checkpoint cannot claim form login, TOTP submission, human one-time-code
+> handoff, or live Authentik closed-shadow qualification: production form mode
+> exits at startup, SSO currently detects an MFA stage but does not submit TOTP
+> or hand off a human code, and no live closed-shadow qualification is approved.
+
 ## 1. Executive decision
 
 Cloud Browser consists of two related but separate products:
@@ -141,7 +148,9 @@ enforces every separation. Enforcement is an acceptance criterion below.
 If no TOTP seed is present, the broker pauses at a code-request state. The agent
 asks the employee for the one-time code. The code is submitted through a
 one-shot, broker-scoped endpoint and is never returned to the agent, logged, or
-stored. The broker verifies the result and invalidates the code request.
+stored. The broker verifies the result and invalidates the code request. This is
+a final-product requirement; it is not available in the current pre-login
+checkpoint.
 
 ### 6.4 Recovery
 
@@ -200,6 +209,9 @@ reviewed adapter. It must:
 - verify both successful authentication and requested account identity;
 - return `unsupported` or `failed` on ambiguity.
 
+The form adapter is not a current milestone claim: production form mode exits
+at startup until a broker-only exact-target form capability is qualified.
+
 ### PRD-BR-04 — HTTP Basic adapter
 
 The adapter handles a browser HTTP-auth challenge without placing credentials
@@ -225,7 +237,9 @@ The first release supports:
 - unsupported push, SMS, email-link, WebAuthn/passkey, security-key, CAPTCHA,
   and recovery flows → explicit human handoff or `unsupported`.
 
-The broker must never guess, brute-force, or silently downgrade MFA.
+The broker must never guess, brute-force, or silently downgrade MFA. The current
+SSO runtime detects an Authentik MFA stage but does not yet submit TOTP or
+perform the human one-time-code handoff.
 
 ### PRD-BR-07 — Success verification
 

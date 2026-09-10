@@ -241,7 +241,8 @@ def _block(filename: str, service: str, nxt: str) -> str:
 def test_compose_cloudfiles_declares_ingest_secret_and_port(filename):
     block = _block(filename, "cloudfiles:", "clamav:")
     marker = (
-        "CB_DOWNLOADS_INGEST_SECRET: ${SERVICE_PASSWORD_64_INGESTSECRET}"
+        "CB_DOWNLOADS_INGEST_SECRET: "
+        "${SERVICE_PASSWORD_64_INGESTSECRET:?SERVICE_PASSWORD_64_INGESTSECRET is required}"
         if filename == "compose.coolify.yaml"
         else "CB_DOWNLOADS_INGEST_SECRET: ${CB_DOWNLOADS_INGEST_SECRET"
     )
@@ -260,7 +261,8 @@ def test_compose_shares_downloads_volume_with_cloudfiles(filename):
 def test_compose_browser_wires_watcher_envs(filename):
     block = _block(filename, "browser:", "agent-control:")
     marker = (
-        "CB_DOWNLOADS_INGEST_SECRET: ${SERVICE_PASSWORD_64_INGESTSECRET}"
+        "CB_DOWNLOADS_INGEST_SECRET: "
+        "${SERVICE_PASSWORD_64_INGESTSECRET:?SERVICE_PASSWORD_64_INGESTSECRET is required}"
         if filename == "compose.coolify.yaml"
         else "CB_DOWNLOADS_INGEST_SECRET: ${CB_DOWNLOADS_INGEST_SECRET"
     )

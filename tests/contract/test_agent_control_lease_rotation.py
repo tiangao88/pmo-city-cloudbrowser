@@ -61,19 +61,19 @@ class _Browser:
             bool(self.state["cdp_ok"]),
         )
 
-    def page_info(self, selector: str | None = None) -> PageState:
+    def page_info(self, target_tab_id: str, selector: str | None = None) -> PageState:
         assert self.state["calls"] is not None
         self.state["calls"].append(("page_info", selector))
         return PageState("https://example.test", "Example", "Hello")
 
-    def navigate(self, url: str) -> None:
-        self.state["calls"].append(("navigate", url))
+    def navigate(self, target_tab_id: str, url: str) -> None:
+        self.state["calls"].append(("navigate", target_tab_id, url))
 
 
 def _server(state: dict[str, object]):
     browser = RestrictedAgentBrowser(
         readiness=lambda: _Browser(state).readiness(),
-        page_info=lambda selector=None: _Browser(state).page_info(selector),
+        page_info=lambda target_tab_id, selector=None: _Browser(state).page_info(target_tab_id, selector),
     )
     return AgentControlService.create_server(
         browser,
@@ -123,7 +123,7 @@ def test_lease_rotation_accepts_trusted_binding_and_enables_page_action() -> Non
         assert response.status == 200
         assert json.loads(response.read())["status"] == "ok"
         # Forwarded page action with the new binding envelope now succeeds.
-        action = _post(server, "/agent-control/v1", headers={"X-CB-Trusted-Secret": _SECRET, **_BINDING}, body={"request_id": "r1", "operation": "page_info", "params": {}})
+        action = _post(server, "/agent-control/v1", headers={"X-CB-Trusted-Secret": _SECRET, **_BINDING}, body={"request_id": "r1", "operation": "page_info", "params": {"target_tab_id": "tab-1"}})
         assert json.loads(action.read())["status"] == "ok"
     finally:
         server.shutdown()
@@ -183,7 +183,7 @@ def test_stale_generation_envelope_is_rejected_after_lease_rotation() -> None:
         _rotate_lease(server)
         stale = dict(_BINDING, **{"X-CB-Generation": "generation-old"})
         with pytest.raises(HTTPError) as denied:
-            _post(server, "/agent-control/v1", headers={"X-CB-Trusted-Secret": _SECRET, **stale}, body={"request_id": "r1", "operation": "page_info", "params": {}})
+            _post(server, "/agent-control/v1", headers={"X-CB-Trusted-Secret": _SECRET, **stale}, body={"request_id": "r1", "operation": "page_info", "params": {"target_tab_id": "tab-1"}})
         assert denied.value.code == 401
     finally:
         server.shutdown()
@@ -200,7 +200,7 @@ def test_lease_never_substitutes_for_browser_holding_the_binding() -> None:
     thread.start()
     try:
         _rotate_lease(server)
-        action = _post(server, "/agent-control/v1", headers={"X-CB-Trusted-Secret": _SECRET, **_BINDING}, body={"request_id": "r1", "operation": "page_info", "params": {}})
+        action = _post(server, "/agent-control/v1", headers={"X-CB-Trusted-Secret": _SECRET, **_BINDING}, body={"request_id": "r1", "operation": "page_info", "params": {"target_tab_id": "tab-1"}})
         payload = json.loads(action.read())
         assert payload["status"] == "failed"
         assert payload["error_code"] == "owner_mismatch"
@@ -217,7 +217,7 @@ def test_unready_browser_fails_closed_even_with_valid_lease() -> None:
     thread.start()
     try:
         _rotate_lease(server)
-        action = _post(server, "/agent-control/v1", headers={"X-CB-Trusted-Secret": _SECRET, **_BINDING}, body={"request_id": "r1", "operation": "page_info", "params": {}})
+        action = _post(server, "/agent-control/v1", headers={"X-CB-Trusted-Secret": _SECRET, **_BINDING}, body={"request_id": "r1", "operation": "page_info", "params": {"target_tab_id": "tab-1"}})
         payload = json.loads(action.read())
         assert payload["status"] == "failed"
         assert payload["error_code"] == "browser_unavailable"
@@ -234,7 +234,7 @@ def test_forbidden_operations_remain_denied_after_lease_rotation() -> None:
     thread.start()
     try:
         _rotate_lease(server)
-        action = _post(server, "/agent-control/v1", headers={"X-CB-Trusted-Secret": _SECRET, **_BINDING}, body={"request_id": "r1", "operation": "raw_cdp", "params": {}})
+        action = _post(server, "/agent-control/v1", headers={"X-CB-Trusted-Secret": _SECRET, **_BINDING}, body={"request_id": "r1", "operation": "raw_cdp", "params": {"target_tab_id": "tab-1"}})
         payload = json.loads(action.read())
         assert payload["status"] == "unsupported"
         assert payload["error_code"] == "capability_denied"

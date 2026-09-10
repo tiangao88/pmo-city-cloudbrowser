@@ -20,6 +20,7 @@ from cloudbrowser.browser_slots.browser_process import (
 )
 from cloudbrowser.browser_slots.browser_server import create_browser_server
 from cloudbrowser.browser_slots.chrome_adapter import ChromeBrowserAdapter, ChromeHttpClient
+from cloudbrowser.security.policy import parse_authentik_policy, validate_deadline_policy
 
 
 def build_browser_service() -> tuple[
@@ -45,6 +46,8 @@ def build_browser_service() -> tuple[
             http_port=chrome_port,
             owner=owner,
             generation=generation,
+            profile_id=os.environ.get("CB_PROFILE_ID", "profile-unassigned"),
+            browser_id=os.environ.get("CB_BROWSER_ID", "browser-unassigned"),
             extra_args=tuple(shlex.split(os.environ.get("CB_CHROME_EXTRA_ARGS", ""))),
             download_dir=(
                 Path(download_dir)
@@ -70,11 +73,48 @@ def build_browser_service() -> tuple[
         chrome,
         owner=owner,
         generation=generation,
+        profile_id=os.environ.get("CB_PROFILE_ID", "profile-unassigned"),
+        browser_id=os.environ.get("CB_BROWSER_ID", "browser-unassigned"),
         start_callback=process.start,
         stop_callback=process.stop,
         page_actions=page_actions,
     )
     registry = DownloadWatcherRegistry()
+    policy = parse_authentik_policy(os.environ)
+    if policy is not None:
+        try:
+            validate_deadline_policy(
+                ttl_s=float(os.environ.get("CB_CREDENTIAL_CAPABILITY_TTL_S", "31")),
+                outer_timeout_s=float(os.environ.get("CB_CREDENTIAL_BROKER_TIMEOUT_S", "30")),
+                stage_timeout_s=policy.stage_timeout_s,
+            )
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+    authentik = None
+    idp_origins = policy.idp_origins if policy is not None else ()
+    sso_selected = policy is not None
+    if sso_selected:
+        for name in (
+            "CB_BROKER_SSO_IDP_ORIGINS",
+            "CB_BROKER_SSO_APPLICATION_ORIGINS",
+            "CB_BROKER_SSO_SUCCESS_PATHS",
+            "CB_BROKER_SSO_IDENTITY_SELECTOR",
+            "CB_BROKER_SSO_IDENTITY_CLAIM",
+        ):
+            if not os.environ.get(name, "").strip():
+                raise SystemExit(f"{name} is required when SSO is selected")
+    if idp_origins:
+        from cloudbrowser.browser_slots.authentik import AuthentikCapability
+
+        authentik = AuthentikCapability(
+            page_actions,
+            idp_origins,
+            policy.application_origins if policy is not None else tuple(item.strip() for item in os.environ.get("CB_BROKER_SSO_APPLICATION_ORIGINS", "").split(",") if item.strip()),
+            policy.success_paths if policy is not None else tuple(item.strip() for item in os.environ.get("CB_BROKER_SSO_SUCCESS_PATHS", "").split(",") if item.strip()),
+            identity_selector=policy.identity_selector if policy is not None else os.environ.get("CB_BROKER_SSO_IDENTITY_SELECTOR") or None,
+            identity_claim=policy.identity_claim if policy is not None else os.environ.get("CB_BROKER_SSO_IDENTITY_CLAIM") or None,
+            stage_timeout_s=policy.stage_timeout_s if policy is not None else float(os.environ.get("CB_BROKER_SSO_STAGE_TIMEOUT_S", "30")),
+        )
     server = create_browser_server(
         adapter,
         process,
@@ -83,6 +123,7 @@ def build_browser_service() -> tuple[
         address=("0.0.0.0", service_port),
         binding_listener=registry.on_binding,
         basic_auth=basic_auth,
+        authentik=authentik,
         broker_submit_secret=os.environ.get("CB_BROKER_SUBMIT_SECRET", ""),
     )
     return process, server, threading.Event(), registry

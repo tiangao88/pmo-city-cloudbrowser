@@ -36,7 +36,15 @@ slots, sessions without a binding, or slots outside the configured forwarding
 map fail closed without network egress. Health (`GET /health`) remains
 unauthenticated.
 
-## Allowed operations
+## Exact-target page operations
+
+Every agent page action (`navigate`, `click`, `type`, and `page_info`) must carry
+`target_tab_id`; missing, unknown, or stale targets fail closed. `tabs_list` is
+the only operation that enumerates tabs and returns Chrome's bounded target IDs.
+The browser sidecar resolves the requested ID under a per-target lock and never
+falls back to the first page. Page-info URL, title, and text are bounded in the
+page JavaScript expression and re-validated at the browser, HTTP, agent-control,
+and router/viewer boundaries; oversized values are rejected, never truncated.
 
 The baseline surface may expose:
 

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import time
+import threading
 from dataclasses import dataclass
+from functools import wraps
 from typing import Callable
 
 from .lifecycle import BrowserBinding, BrowserState, LifecycleError, OwnerBoundLifecycle
@@ -17,6 +19,17 @@ from .transport import (
 
 class ReadinessTimeout(BrowserUnavailable):
     """Raised when a started browser never becomes ready within the deadline."""
+
+
+def _serialized(operation: Callable) -> Callable:
+    """Hold the supervisor's re-entrant gate for one complete transition."""
+
+    @wraps(operation)
+    def guarded(self: "SlotSupervisor", *args: object, **kwargs: object) -> object:
+        with self._lifecycle_gate:
+            return operation(self, *args, **kwargs)
+
+    return guarded
 
 
 @dataclass(frozen=True)
@@ -43,11 +56,13 @@ class SlotSupervisor:
         self._transport = transport
         self._clock = clock
         self._sleep = sleep
+        self._lifecycle_gate = threading.RLock()
 
     @property
     def lifecycle(self) -> OwnerBoundLifecycle:
         return self._lifecycle
 
+    @_serialized
     def wake(
         self,
         binding: BrowserBinding,
@@ -86,6 +101,7 @@ class SlotSupervisor:
             self._safe_stop(binding)
             raise
 
+    @_serialized
     def suspend(self, binding: BrowserBinding) -> OrchestrationResult:
         """Capture current page URLs, then stop the browser cleanly."""
         self._require_transport_owner(binding)
@@ -95,6 +111,7 @@ class SlotSupervisor:
         self._lifecycle.suspend(binding)
         return OrchestrationResult("suspended", self._lifecycle.state, captured.urls)
 
+    @_serialized
     def stop(self, binding: BrowserBinding) -> OrchestrationResult:
         """Stop the browser without accepting a different owner binding."""
         self._require_transport_owner(binding)
@@ -102,6 +119,7 @@ class SlotSupervisor:
         snapshot = self._lifecycle.stop(binding)
         return OrchestrationResult("stopped", snapshot.state)
 
+    @_serialized
     def adopt_binding(self, binding: BrowserBinding) -> OrchestrationResult:
         """Rebind a slot to a new server-minted binding, taking over if needed.
 
@@ -133,6 +151,7 @@ class SlotSupervisor:
             raise ValueError(str(exc)) from exc
         return OrchestrationResult("adopted", snapshot.state)
 
+    @_serialized
     def recreate(
         self,
         binding: BrowserBinding,

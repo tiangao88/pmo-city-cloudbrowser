@@ -92,7 +92,7 @@ class TestRealRouterClientWire:
             status, payload = surface.agent(
                 "navigate",
                 headers={"Remote-Sub": "sub-1", "Remote-Groups": "PMOC_Users"},
-                params={"url": "https://example.com/"},
+                params={"target_tab_id": "tab-1", "url": "https://example.com/"},
                 request_id="ui-r1",
             )
             assert status == 200
@@ -102,7 +102,7 @@ class TestRealRouterClientWire:
             assert captured["path"] == "/v1/agent/navigate"
             body = captured["body"]
             assert body["request_id"] == "ui-r1"
-            assert body["params"] == {"url": "https://example.com/"}
+            assert body["params"] == {"target_tab_id": "tab-1", "url": "https://example.com/"}
             # Only allowlisted identity headers are forwarded.
             sent = captured["headers"]
             assert sent.get("remote-sub") == "sub-1"
@@ -124,7 +124,7 @@ class TestRealRouterClientWire:
                 status, payload = surface.agent(
                     op,
                     headers={"Remote-Sub": "sub-1"},
-                    params={} if op in ("page_info", "tabs_list") else {"selector": "#q"},
+                    params={"target_tab_id": "tab-1"} if op == "page_info" else ({} if op == "tabs_list" else {"target_tab_id": "tab-1", "selector": "#q"}),
                     request_id="ui-r1",
                 )
                 assert status == 200

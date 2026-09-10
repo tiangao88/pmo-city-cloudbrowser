@@ -18,21 +18,69 @@ def _block(filename: str, start: str, end: str) -> str:
 
 
 @pytest.mark.parametrize("filename", ["compose.yaml", "compose.coolify.yaml"])
-def test_credential_broker_compose_wires_browser_and_required_secrets(filename: str) -> None:
+def test_credential_broker_compose_wires_browser_and_custody_secrets(filename: str) -> None:
     block = _block(filename, "credential-broker:", "networks:")
     for marker in (
         "CB_BROWSER_API_URL: http://browser:9230",
-        "CB_BROKER_SHARED_SECRET:",
+        "CB_CREDENTIAL_CAPABILITY_SECRET:",
         "CB_BROKER_SUBMIT_SECRET:",
+        "CB_BROKER_GRANT_KEK_HEX:",
         "CB_BROKER_ADAPTER:",
         "CB_BROKER_SITE_ID:",
         "CB_BROKER_ORIGIN:",
         "CB_VAULT_BASE_URL:",
-        "CB_VAULT_EMAIL:",
-        "CB_VAULT_PASSWORD:",
     ):
         assert marker in block
+    assert "CB_BROKER_SHARED_SECRET:" not in block
     assert "browser:" in block
+
+
+@pytest.mark.parametrize("filename", ["compose.yaml", "compose.coolify.yaml"])
+def test_production_compose_excludes_deployment_wide_vault_credentials(filename: str) -> None:
+    text = (COMPOSE / filename).read_text(encoding="utf-8")
+    for forbidden in ("CB_VAULT_EMAIL", "CB_VAULT_PASSWORD"):
+        assert forbidden not in text
+
+
+def test_production_runtime_has_no_legacy_password_grant_client_reachability() -> None:
+    runtime_paths = (
+        ROOT / "src/cloudbrowser/credential_broker/runtime.py",
+        ROOT / "src/cloudbrowser/service_runtime.py",
+        ROOT / "services/credential-broker/entrypoint.py",
+        ROOT / "services/credential-broker/Dockerfile",
+    )
+    for path in runtime_paths:
+        text = path.read_text(encoding="utf-8")
+        assert "vault_client" not in text
+        assert "CB_VAULT_EMAIL" not in text
+        assert "CB_VAULT_PASSWORD" not in text
+    assert not (ROOT / "src/cloudbrowser/security/vault_client.py").exists()
+
+
+def test_deployment_env_contract_lists_coolify_and_source_inputs() -> None:
+    env_example = (COMPOSE / ".env.example").read_text(encoding="utf-8")
+    for required in (
+        "SERVICE_PASSWORD_64_ROUTERSECRET",
+        "SERVICE_PASSWORD_64_CREDENTIALCAPSECRET",
+        "SERVICE_PASSWORD_64_BROKERSUBMIT",
+        "CB_CREDENTIAL_CAPABILITY_SECRET",
+        "CB_BROKER_GRANT_KEK_HEX",
+        "CB_VAULT_BASE_URL",
+        "CB_BROKER_SITE_ID",
+        "CB_BROKER_ORIGIN",
+        "CB_BROKER_SUCCESS_PATH",
+    ):
+        assert required in env_example
+    assert "CB_BROKER_GRANT_DB_PATH" in env_example or "grant-custody-v1.sqlite3" in env_example
+    for forbidden in ("CB_VAULT_EMAIL", "CB_VAULT_PASSWORD"):
+        assert forbidden not in env_example
+
+
+def test_coolify_compose_requires_non_magic_custody_inputs() -> None:
+    compose = (COMPOSE / "compose.coolify.yaml").read_text(encoding="utf-8")
+    assert "CB_CREDENTIAL_CAPABILITY_SECRET: ${SERVICE_PASSWORD_64_CREDENTIALCAPSECRET:?SERVICE_PASSWORD_64_CREDENTIALCAPSECRET is required}" in compose
+    assert "CB_BROKER_GRANT_KEK_HEX: ${CB_BROKER_GRANT_KEK_HEX:?CB_BROKER_GRANT_KEK_HEX is required}" in compose
+    assert "CB_VAULT_BASE_URL: ${CB_VAULT_BASE_URL:?CB_VAULT_BASE_URL is required}" in compose
 
 
 @pytest.mark.parametrize("filename", ["compose.yaml", "compose.coolify.yaml"])

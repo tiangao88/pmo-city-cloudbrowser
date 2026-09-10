@@ -21,6 +21,8 @@ KNOWN_COMPONENTS = {
     "identity-link",
 }
 _REQUIRED_BINDING_ENV = ("CB_PRINCIPAL_ID", "CB_BROWSER_ID", "CB_BINDING_GENERATION")
+_DEFAULT_CREDENTIAL_DEADLINE_S = "25"
+_DEFAULT_CREDENTIAL_CAPABILITY_TTL_S = "26"
 
 
 def _required_env(name: str) -> str:
@@ -206,6 +208,8 @@ def run_service(component: str) -> None:
         from cloudbrowser.router.router_api import RouterApi, create_router_server
         from cloudbrowser.router.sessions import RouterSessionStore, SlotDescriptor
         from cloudbrowser.router.supervisor_client import SupervisorClient
+        from cloudbrowser.router.credential_broker_forwarder import CredentialBrokerForwarder
+        from cloudbrowser.credential_capability import CapabilityCodec
 
         shared_secret = _required_env("CB_ROUTER_SHARED_SECRET")
         if len(shared_secret) < 16:
@@ -243,6 +247,44 @@ def run_service(component: str) -> None:
         if edge_mode == "traefik-forwardauth":
             identity_client = build_identity_link_client()
         supervisor_client = SupervisorClient(supervisor_map, trusted_secret=shared_secret)
+        credential_broker_url = os.environ.get("CB_CREDENTIAL_BROKER_URL", "").strip()
+        capability_secret = os.environ.get("CB_CREDENTIAL_CAPABILITY_SECRET", "")
+        capability_audience = os.environ.get("CB_CREDENTIAL_BROKER_AUDIENCE", "credential-broker")
+        try:
+            credential_broker_timeout_s = float(
+                os.environ.get(
+                    "CB_CREDENTIAL_BROKER_TIMEOUT_S", _DEFAULT_CREDENTIAL_DEADLINE_S
+                )
+            )
+        except ValueError as exc:
+            raise SystemExit("CB_CREDENTIAL_BROKER_TIMEOUT_S must be a number") from exc
+        try:
+            capability_ttl_s = int(
+                os.environ.get(
+                    "CB_CREDENTIAL_CAPABILITY_TTL_S",
+                    _DEFAULT_CREDENTIAL_CAPABILITY_TTL_S,
+                )
+            )
+        except ValueError as exc:
+            raise SystemExit("CB_CREDENTIAL_CAPABILITY_TTL_S must be an integer") from exc
+        credential_broker_forwarder = None
+        capability_codec = None
+        if credential_broker_url or capability_secret:
+            if not credential_broker_url:
+                raise SystemExit("CB_CREDENTIAL_BROKER_URL is required when credential forwarding is configured")
+            if not capability_secret:
+                raise SystemExit("CB_CREDENTIAL_CAPABILITY_SECRET is required when credential forwarding is configured")
+            if not capability_audience:
+                raise SystemExit("CB_CREDENTIAL_BROKER_AUDIENCE is required when credential forwarding is configured")
+            try:
+                credential_broker_forwarder = CredentialBrokerForwarder(
+                    credential_broker_url,
+                    timeout_s=credential_broker_timeout_s,
+                    capability_ttl_s=capability_ttl_s,
+                )
+            except ValueError as exc:
+                raise SystemExit(str(exc)) from exc
+            capability_codec = CapabilityCodec(capability_secret)
         agent_urls_raw = os.environ.get("CB_AGENT_CONTROL_URLS", "")
         agent_forwarder = None
         if agent_urls_raw.strip():
@@ -289,6 +331,11 @@ def run_service(component: str) -> None:
             supervisor_client=supervisor_client,
             identity_client=identity_client,
             agent_control_forwarder=agent_forwarder,
+            credential_broker_forwarder=credential_broker_forwarder,
+            capability_codec=capability_codec,
+            capability_audience=capability_audience,
+            deployment=instance_id,
+            capability_ttl_s=capability_ttl_s,
             component="router",
         )
         _ = shared_secret

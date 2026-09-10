@@ -80,5 +80,6 @@ def test_release_manifest_lists_the_same_seven_image_components() -> None:
     for name in component_names:
         assert name in manifest
         assert name in image_section
-    assert "installable: true" in manifest
+    assert "installable: false" in manifest
+    assert "status: pre-build-not-installable" in manifest
     assert "identityLink: sha256:" in manifest

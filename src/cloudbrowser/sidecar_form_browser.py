@@ -28,23 +28,26 @@ from .credential_broker.adapters.form import FormBrowser
 class SidecarFormBrowser(FormBrowser):
     """FormBrowser over the agent sidecar; navigate/pages are not exposed."""
 
-    def __init__(self, browser: HttpAgentBrowser) -> None:
+    def __init__(self, browser: HttpAgentBrowser, *, target_tab_id: str) -> None:
+        if not isinstance(target_tab_id, str) or not target_tab_id:
+            raise ValueError("target_tab_id is required")
         self._browser = browser
+        self._target_tab_id = target_tab_id
 
     def current_url(self) -> str:
-        return self._browser.page_info()["url"]
+        return self._browser.page_info(self._target_tab_id)["url"]
 
     def fill(self, selector: str, value: str) -> None:
-        self._browser.type_text(selector, value)
+        self._browser.type_text(self._target_tab_id, selector, value)
 
     def click(self, selector: str) -> None:
-        self._browser.click(selector)
+        self._browser.click(self._target_tab_id, selector)
 
     def has_selector(self, selector: str) -> bool:
-        return bool(self._browser.page_info(selector)["text"])
+        return bool(self._browser.page_info(self._target_tab_id, selector)["text"])
 
     def read_text(self, selector: str) -> str:
-        return self._browser.page_info(selector)["text"]
+        return self._browser.page_info(self._target_tab_id, selector)["text"]
 
 
 __all__ = ["SidecarFormBrowser"]

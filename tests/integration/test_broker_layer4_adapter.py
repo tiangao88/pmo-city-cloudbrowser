@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import threading
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -26,7 +27,13 @@ from typing import Callable
 
 import pytest
 
-from cloudbrowser.credential_broker.runtime import build_broker_api
+from cloudbrowser.browser_slots.transport import BrowserUnavailable
+from cloudbrowser.credential_broker.runtime import LiveBrowserBinding, build_broker_api
+
+pytestmark = pytest.mark.skip(
+    reason="production form mode is disabled until a broker-only exact-target form capability exists"
+)
+from cloudbrowser.credential_capability import CapabilityCodec, CredentialCapability
 
 EMAIL = "broker-test@aikumi.pro"
 PASSWORD = "correct horse battery staple"
@@ -183,14 +190,29 @@ def make_fake_sidecar(
                 submitted["flag"] = True
 
         def live_binding(self):
-            return "alice@example.test", "g1"
+            return LiveBrowserBinding(
+                profile_id="profile-a",
+                principal_id="alice@example.test",
+                browser_id="browser-1",
+                generation="g1",
+            )
 
         def readiness(self):
             calls.readiness += 1
             return None
 
-        def list_pages(self):  # should never be reached by FormBrowser
-            raise AssertionError("adapter reached list_pages (should be impossible)")
+        def list_pages(self):
+            return [
+                {
+                    "tab_id": "target-1",
+                    "url": (
+                        "https://example.test/post-submit"
+                        if submitted["flag"]
+                        else "https://example.test/login"
+                    ),
+                    "title": "test page",
+                }
+            ]
 
         def navigate(self, url):  # should never be reached by FormBrowser
             raise AssertionError("adapter reached navigate (should be impossible)")
@@ -202,14 +224,18 @@ def make_fake_sidecar(
 
 
 @pytest.fixture()
-def broker_env(monkeypatch, fake_vault):
+def broker_env(monkeypatch, fake_vault, tmp_path):
     monkeypatch.setenv("CB_INSTANCE_ID", "test-broker")
     monkeypatch.setenv("CB_RELEASE_VERSION", "vtest")
     monkeypatch.setenv("CB_PROFILE_ID", "profile-a")
     monkeypatch.setenv("CB_PRINCIPAL_ID", "alice@example.test")
     monkeypatch.setenv("CB_BROWSER_ID", "browser-1")
     monkeypatch.setenv("CB_BINDING_GENERATION", "g1")
-    monkeypatch.setenv("CB_BROKER_SHARED_SECRET", "broker-secret-0123456789abcdef")
+    monkeypatch.setenv("CB_CREDENTIAL_CAPABILITY_SECRET", "capability-secret-0123456789")
+    monkeypatch.setenv("CB_CREDENTIAL_BROKER_AUDIENCE", "credential-broker")
+    monkeypatch.setenv("CB_BROKER_GRANT_DB_PATH", str(tmp_path / "grants.sqlite3"))
+    monkeypatch.setenv("CB_BROKER_IDEMPOTENCY_DB_PATH", str(tmp_path / "idempotency.sqlite3"))
+    monkeypatch.setenv("CB_CREDENTIAL_NONCE_DB_PATH", str(tmp_path / "nonces.sqlite3"))
     monkeypatch.setenv("CB_BROKER_SUBMIT_SECRET", "submit-secret-0123456789abcdef")
     monkeypatch.setenv("CB_BROKER_SITE_ID", "site-a")
     monkeypatch.setenv("CB_BROKER_ORIGIN", "https://example.test")
@@ -220,6 +246,26 @@ def broker_env(monkeypatch, fake_vault):
     monkeypatch.setenv("CB_VAULT_BASE_URL", f"http://127.0.0.1:{fake_vault.server_address[1]}")
     monkeypatch.setenv("CB_VAULT_EMAIL", EMAIL)
     monkeypatch.setenv("CB_VAULT_PASSWORD", PASSWORD)
+
+
+def _capability_payload(request_id: str, nonce: str) -> dict[str, str]:
+    now = int(time.time())
+    capability = CredentialCapability(
+        profile_id="profile-a",
+        principal_id="alice@example.test",
+        browser_id="browser-1",
+        generation="g1",
+        site_id="site-a",
+        target_tab_id="target-1",
+        operation="credential.login",
+        request_id=request_id,
+        audience="credential-broker",
+        deployment="test-broker",
+        issued_at=now,
+        expires_at=now + 30,
+        nonce=nonce,
+    )
+    return {"capability": CapabilityCodec("capability-secret-0123456789").encode(capability)}
 
 
 def _post_login(port: int, body: dict) -> tuple[int, dict]:
@@ -249,14 +295,7 @@ def test_layer4_login_full_chain_authenticated(broker_env) -> None:
     try:
         status, body = _post_login(
             port,
-            {
-                "request_id": "req-L4-1",
-                "auth_token": "broker-secret-0123456789abcdef",
-                "username_ref": "PMO Test Site",
-                "site_id": "site-a",
-                "current_url": "https://example.test/login",
-                "target_tab_id": "target-1",
-            },
+            _capability_payload("req-L4-1", "nonce-L4-1"),
         )
         assert status == 200
         assert body["status"] == "authenticated"
@@ -280,26 +319,31 @@ def test_layer4_browser_unreachable_fails_closed(broker_env) -> None:
     class BrokenSidecar:
         def page_info(self, selector=None):  # noqa: ARG002
             calls.info.append(selector or "")
-            raise RuntimeError("sidecar offline")
+            raise BrowserUnavailable("sidecar offline")
 
         def type_text(self, selector, text):  # noqa: ARG002
-            raise RuntimeError("sidecar offline")
+            raise BrowserUnavailable("sidecar offline")
 
         def click(self, selector):  # noqa: ARG002
-            raise RuntimeError("sidecar offline")
+            raise BrowserUnavailable("sidecar offline")
 
         def live_binding(self):
-            return "alice@example.test", "g1"
+            return LiveBrowserBinding(
+                profile_id="profile-a",
+                principal_id="alice@example.test",
+                browser_id="browser-1",
+                generation="g1",
+            )
 
         def readiness(self):
             calls.readiness += 1
-            raise RuntimeError("sidecar offline")
+            raise BrowserUnavailable("sidecar offline")
 
         def list_pages(self):
-            raise RuntimeError("sidecar offline")
+            raise BrowserUnavailable("sidecar offline")
 
         def navigate(self, url):  # noqa: ARG002
-            raise RuntimeError("sidecar offline")
+            raise BrowserUnavailable("sidecar offline")
 
     factory = lambda: BrokenSidecar()  # noqa: E731 - intentional
     api = build_broker_api(browser_factory=factory)
@@ -309,14 +353,7 @@ def test_layer4_browser_unreachable_fails_closed(broker_env) -> None:
     try:
         status, body = _post_login(
             port,
-            {
-                "request_id": "req-L4-2",
-                "auth_token": "broker-secret-0123456789abcdef",
-                "username_ref": "PMO Test Site",
-                "site_id": "site-a",
-                "current_url": "https://example.test/login",
-                "target_tab_id": "target-1",
-            },
+            _capability_payload("req-L4-2", "nonce-L4-2"),
         )
         assert body["status"] == "failed"
         assert "s3cret-pw" not in json.dumps(body)
@@ -336,14 +373,7 @@ def test_layer4_form_failure_selectors_fail_closed(broker_env) -> None:
     try:
         status, body = _post_login(
             port,
-            {
-                "request_id": "req-L4-3",
-                "auth_token": "broker-secret-0123456789abcdef",
-                "username_ref": "PMO Test Site",
-                "site_id": "site-a",
-                "current_url": "https://example.test/login",
-                "target_tab_id": "target-1",
-            },
+            _capability_payload("req-L4-3", "nonce-L4-3"),
         )
         assert body["status"] == "failed"
         # The form adapter returns `failed` with no error_code when the

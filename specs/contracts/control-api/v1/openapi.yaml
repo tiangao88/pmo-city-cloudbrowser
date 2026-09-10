@@ -87,7 +87,7 @@ paths:
   /v1/agent/{operation}:
     post:
       operationId: agentAction
-      description: Relay one allowlisted page action to the caller's own assigned slot.
+      description: Relay one allowlisted, exact-target page action to the caller's own assigned slot. `target_tab_id` is mandatory for navigate, click, type, and page_info; tabs_list is the only tab-enumeration operation.
       parameters:
         - name: operation
           in: path
@@ -184,6 +184,7 @@ components:
         params:
           type: object
           additionalProperties: true
+          description: For navigate, click, type, and page_info, target_tab_id is required. Values are bounded by UTF-8 bytes and oversized values are rejected.
     AgentActionResponse:
       type: object
       additionalProperties: false

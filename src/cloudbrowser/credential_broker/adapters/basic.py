@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlsplit
 
+from ..deadline import BrokerDeadline, invoke_with_deadline
 from ..service import AdapterResult
 from .form import CredentialMaterial
 
@@ -67,30 +68,60 @@ class BasicAuthAdapter:
         browser: BasicAuthBrowser,
         *,
         target_id: str,
+        deadline: BrokerDeadline | None = None,
     ) -> AdapterResult:
         if not target_id:
             return AdapterResult("failed", False, "target_missing")
+        if deadline is not None:
+            deadline.check()
         if not declaration.success_path:
             return AdapterResult("failed", False, "success_proof_missing")
-        current_url = browser.current_url(target_id=target_id)
+        current_url = invoke_with_deadline(
+            browser.current_url,
+            target_id=target_id,
+            deadline=deadline,
+        )
         current_origin = _https_origin(current_url)
         if current_origin is None:
             raise ValueError("HTTP Basic Auth fill requires an HTTPS origin")
         if not declaration.allows(current_url):
             raise ValueError("current origin is not in the declared allowlist")
-        if not _challenge_present(browser, declaration.origin, target_id=target_id):
+        if not callable(getattr(browser, "challenge_origin", None)) and not callable(
+            getattr(browser, "has_basic_auth_challenge", None)
+        ):
+            # A narrow fake/in-process browser may expose only the exact
+            # submission capability. Its success proof is still mandatory.
+            challenge_present = True
+        else:
+            challenge_present = _challenge_present(
+                browser,
+                declaration.origin,
+                target_id=target_id,
+                deadline=deadline,
+            )
+        if not challenge_present:
             return AdapterResult("failed", False, "challenge_missing")
 
+        if deadline is not None:
+            deadline.check()
         # The only credential-bearing call is the narrow browser capability.
-        browser.submit_basic_auth(
+        invoke_with_deadline(
+            browser.submit_basic_auth,
             declaration.origin,
             material.username,
             material.password,
             target_id=target_id,
             success_path=declaration.success_path,
+            deadline=deadline,
         )
 
-        after_origin = _https_origin(browser.current_url(target_id=target_id))
+        after_origin = _https_origin(
+            invoke_with_deadline(
+                browser.current_url,
+                target_id=target_id,
+                deadline=deadline,
+            )
+        )
         if after_origin is None or after_origin not in declaration._allowed_origins():
             return AdapterResult("failed", False, "origin_changed")
 
@@ -98,12 +129,20 @@ class BasicAuthAdapter:
         # on a repeated challenge before claiming success.
         challenge_probe = getattr(browser, "challenge_origin", None)
         if callable(challenge_probe):
-            if challenge_probe(target_id=target_id) == declaration.origin:
+            if invoke_with_deadline(
+                challenge_probe,
+                target_id=target_id,
+                deadline=deadline,
+            ) == declaration.origin:
                 return AdapterResult("failed", False, "challenge_loop")
 
         application_proof = getattr(browser, "application_authenticated", None)
         if not callable(application_proof) or not bool(
-            application_proof(target_id=target_id)
+            invoke_with_deadline(
+                application_proof,
+                target_id=target_id,
+                deadline=deadline,
+            )
         ):
             return AdapterResult("failed", False, "success_unverified")
         return AdapterResult("authenticated", True)
@@ -123,13 +162,30 @@ def _https_origin(url: str) -> str | None:
     return f"https://{parsed.netloc}"
 
 
-def _challenge_present(browser: BasicAuthBrowser, origin: str, *, target_id: str) -> bool:
+def _challenge_present(
+    browser: BasicAuthBrowser,
+    origin: str,
+    *,
+    target_id: str,
+    deadline: BrokerDeadline | None = None,
+) -> bool:
     challenge_origin = getattr(browser, "challenge_origin", None)
     if callable(challenge_origin):
-        return challenge_origin(target_id=target_id) == origin
+        return invoke_with_deadline(
+            challenge_origin,
+            target_id=target_id,
+            deadline=deadline,
+        ) == origin
     challenge_probe = getattr(browser, "has_basic_auth_challenge", None)
     if callable(challenge_probe):
-        return bool(challenge_probe(origin, target_id=target_id))
+        return bool(
+            invoke_with_deadline(
+                challenge_probe,
+                origin,
+                target_id=target_id,
+                deadline=deadline,
+            )
+        )
     return False
 
 

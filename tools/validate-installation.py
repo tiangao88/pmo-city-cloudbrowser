@@ -31,17 +31,20 @@ def main() -> None:
     compose = COMPOSE.read_text(encoding="utf-8")
     if "services: {}" in compose:
         fail("Compose bundle is empty")
-    # The Coolify bundle self-provisions: secrets via Coolify magic envs,
-    # configuration via deploy-safe defaults (dev01 values).
+    # The Coolify bundle supplies service-to-service secrets through magic envs,
+    # while the custody KEK and Vault endpoint remain explicit operator inputs.
     for marker in (
         "name: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}-network",
         "name: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}-router-state",
-        "CB_VIEWER_TOKEN_SECRET: ${SERVICE_PASSWORD_64_VIEWERSECRET}",
-        "CB_ROUTER_SHARED_SECRET: ${SERVICE_PASSWORD_64_ROUTERSECRET}",
-        "CB_AGENT_CONTROL_SHARED_SECRET: ${SERVICE_PASSWORD_64_AGENTCTRLSECRET}",
-        "CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET}",
-        "CB_DOWNLOADS_SHARED_SECRET: ${SERVICE_PASSWORD_64_DLSECRET}",
-        "CB_DOWNLOADS_INGEST_SECRET: ${SERVICE_PASSWORD_64_INGESTSECRET}",
+        "CB_VIEWER_TOKEN_SECRET: ${SERVICE_PASSWORD_64_VIEWERSECRET:?SERVICE_PASSWORD_64_VIEWERSECRET is required}",
+        "CB_ROUTER_SHARED_SECRET: ${SERVICE_PASSWORD_64_ROUTERSECRET:?SERVICE_PASSWORD_64_ROUTERSECRET is required}",
+        "CB_AGENT_CONTROL_SHARED_SECRET: ${SERVICE_PASSWORD_64_AGENTCTRLSECRET:?SERVICE_PASSWORD_64_AGENTCTRLSECRET is required}",
+        "CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET:?SERVICE_PASSWORD_64_IDLINKSECRET is required}",
+        "CB_DOWNLOADS_SHARED_SECRET: ${SERVICE_PASSWORD_64_DLSECRET:?SERVICE_PASSWORD_64_DLSECRET is required}",
+        "CB_DOWNLOADS_INGEST_SECRET: ${SERVICE_PASSWORD_64_INGESTSECRET:?SERVICE_PASSWORD_64_INGESTSECRET is required}",
+        "CB_CREDENTIAL_BROKER_TIMEOUT_S: ${CB_CREDENTIAL_BROKER_TIMEOUT_S:-25}",
+        "CB_CREDENTIAL_CAPABILITY_TTL_S: ${CB_CREDENTIAL_CAPABILITY_TTL_S:-26}",
+        "CB_BROKER_SSO_STAGE_TIMEOUT_S: ${CB_BROKER_SSO_STAGE_TIMEOUT_S:-24}",
     ):
         if marker not in compose:
             fail(f"missing installation marker: {marker}")
@@ -66,28 +69,32 @@ def main() -> None:
             fail(f"{service} Dockerfile missing supported base image")
 
     manifest = MANIFEST.read_text(encoding="utf-8")
-    run_match = re.search(
-        r"^    run: (https://github\.com/[^\s]+/actions/runs/[0-9]+)$",
-        manifest,
-        re.MULTILINE,
-    )
-    commit_match = re.search(r"^    commit: ([0-9a-f]{40})$", manifest, re.MULTILINE)
     for marker in (
         "apiVersion: cloudbrowser.pmo.city/v1",
         "kind: CloudBrowserRelease",
         "productVersion: 0.2.0-dev1",
         "specificationBaseline: v0.2.0",
-        "status: qualified-installable",
-        "installable: true",
         "qualification:",
         "rollbackSupported: true",
+        "status: pre-build-not-installable",
+        "installable: false",
+        "sourceState: pending-build",
+        "imageState: stale-pre-change",
     ):
         if marker not in manifest:
             fail(f"release manifest missing {marker}")
-    if not run_match:
-        fail("release manifest is missing a concrete qualification run")
-    if not commit_match:
-        fail("release manifest is missing a concrete qualification commit")
+    prior_run_match = re.search(
+        r"^    run: (https://github\.com/[^\s]+/actions/runs/[0-9]+)$",
+        manifest,
+        re.MULTILINE,
+    )
+    prior_commit_match = re.search(
+        r"^    commit: ([0-9a-f]{40})$", manifest, re.MULTILINE
+    )
+    if not prior_run_match:
+        fail("release manifest is missing the prior qualification run")
+    if not prior_commit_match:
+        fail("release manifest is missing the prior qualification commit")
     if "QUALIFICATION_RUN_REQUIRED" in manifest or "QUALIFICATION_COMMIT_REQUIRED" in manifest:
         fail("release manifest contains provenance placeholders")
     for component in (

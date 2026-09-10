@@ -25,7 +25,7 @@ _BINDING = {
 def _server():
     browser = RestrictedAgentBrowser(
         readiness=lambda: BrowserReadiness("owner@example.test", "generation-1", True),
-        page_info=lambda: PageState("https://example.test", "Example", "Hello"),
+        page_info=lambda target_tab_id, selector=None: PageState("https://example.test", "Example", "Hello"),
     )
     return AgentControlService.create_server(
         browser,
@@ -41,7 +41,7 @@ def _post(server, *, headers: dict[str, str] | None = None):
     all_headers = {"X-CB-Trusted-Secret": _SECRET}
     if headers:
         all_headers.update(headers)
-    body = json.dumps({"request_id": "r1", "operation": "page_info", "params": {}}).encode()
+    body = json.dumps({"request_id": "r1", "operation": "page_info", "params": {"target_tab_id": "tab-1"}}).encode()
     return urlopen(
         Request(
             f"http://127.0.0.1:{server.server_port}/agent-control/v1",
@@ -98,7 +98,7 @@ def test_binding_lease_rejects_control_character_injection_in_envelope() -> None
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        body = json.dumps({"request_id": "r1", "operation": "page_info", "params": {}}).encode()
+        body = json.dumps({"request_id": "r1", "operation": "page_info", "params": {"target_tab_id": "tab-1"}}).encode()
         raw = (
             f"POST /agent-control/v1 HTTP/1.1\r\n"
             f"Host: 127.0.0.1:{server.server_port}\r\n"
@@ -130,7 +130,7 @@ def test_binding_lease_requires_trusted_secret_alongside_matching_envelope() -> 
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        body = json.dumps({"request_id": "r1", "operation": "page_info", "params": {}}).encode()
+        body = json.dumps({"request_id": "r1", "operation": "page_info", "params": {"target_tab_id": "tab-1"}}).encode()
         with pytest.raises(HTTPError) as denied:
             urlopen(
                 Request(

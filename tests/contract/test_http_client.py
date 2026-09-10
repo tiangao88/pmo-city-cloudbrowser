@@ -13,6 +13,14 @@ class RecordingHandler(BaseHTTPRequestHandler):
     response_body = b'{"ok":true}'
     response_type = "application/json"
 
+    def do_GET(self) -> None:  # noqa: N802 - stdlib HTTP handler contract
+        type(self).last_request = (self.command, self.path, b"")
+        self.send_response(200)
+        self.send_header("Content-Type", self.response_type)
+        self.send_header("Content-Length", str(len(self.response_body)))
+        self.end_headers()
+        self.wfile.write(self.response_body)
+
     def do_POST(self) -> None:  # noqa: N802 - stdlib HTTP handler contract
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length)
@@ -62,6 +70,28 @@ def test_http_json_client_rejects_unsafe_base_urls_and_paths():
         client.request("GET", "https://other.test/browser")
     with pytest.raises(ValueError):
         client.request("GET", "/browser/../secrets")
+    with pytest.raises(ValueError):
+        client.request("GET", "/browser/readiness?debug=true")
+    with pytest.raises(ValueError):
+        client.request("GET", "/agent/pages?selector=%23secret")
+
+
+def test_http_json_client_allows_selector_query_only_for_page_info() -> None:
+    value, thread = server()
+    try:
+        client = HttpJsonClient(f"http://127.0.0.1:{value.server_address[1]}", timeout_s=2)
+        assert client.request(
+            "GET", "/agent/pages/info?target_tab_id=tab-1&selector=main%20%5Brole%3Darticle%5D"
+        ) == {"ok": True}
+        assert RecordingHandler.last_request == (
+            "GET",
+            "/agent/pages/info?target_tab_id=tab-1&selector=main%20%5Brole%3Darticle%5D",
+            b"",
+        )
+    finally:
+        value.shutdown()
+        thread.join(timeout=2)
+        value.server_close()
 
 
 def test_http_json_client_rejects_non_json_responses():

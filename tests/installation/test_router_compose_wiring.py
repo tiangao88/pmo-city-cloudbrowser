@@ -42,7 +42,8 @@ def test_compose_router_carries_identity_link_env_and_edge_switch() -> None:
         (
             "compose.coolify.yaml",
             (
-                "CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET}",
+                "CB_IDENTITY_LINK_SHARED_SECRET: "
+                "${SERVICE_PASSWORD_64_IDLINKSECRET:?SERVICE_PASSWORD_64_IDLINKSECRET is required}",
                 "CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:-https://auth.aikumi.app/application/o/pmoc-sso/}",
                 "CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:-tinyauth-pmo}",
             ),
@@ -67,7 +68,8 @@ def test_compose_router_requires_control_plane_secrets_and_supervisor_map() -> N
         ),
         (
             "compose.coolify.yaml",
-            "CB_ROUTER_SHARED_SECRET: ${SERVICE_PASSWORD_64_ROUTERSECRET}",
+            "CB_ROUTER_SHARED_SECRET: "
+            "${SERVICE_PASSWORD_64_ROUTERSECRET:?SERVICE_PASSWORD_64_ROUTERSECRET is required}",
             "CB_SLOT_SUPERVISOR_URLS: ${CB_SLOT_SUPERVISOR_URLS:-slot-1=http://slot-supervisor:8081}",
         ),
     ):
@@ -79,7 +81,11 @@ def test_compose_router_requires_control_plane_secrets_and_supervisor_map() -> N
 def test_compose_slot_supervisor_receives_router_trusted_secret() -> None:
     for filename, secret_marker in (
         ("compose.yaml", "CB_ROUTER_SHARED_SECRET: ${CB_ROUTER_SHARED_SECRET:?CB_ROUTER_SHARED_SECRET is required}"),
-        ("compose.coolify.yaml", "CB_ROUTER_SHARED_SECRET: ${SERVICE_PASSWORD_64_ROUTERSECRET}"),
+        (
+            "compose.coolify.yaml",
+            "CB_ROUTER_SHARED_SECRET: "
+            "${SERVICE_PASSWORD_64_ROUTERSECRET:?SERVICE_PASSWORD_64_ROUTERSECRET is required}",
+        ),
     ):
         block = (COMPOSE_DIR / filename).read_text(encoding="utf-8").split(
             "  slot-supervisor:", 1
@@ -105,7 +111,11 @@ def test_router_edge_and_identity_vars_match_deployed_contract() -> None:
     # edge-optional so local/CI runs keep the health-only posture.
     deployed = _router_block("compose.coolify.yaml")
     assert "CB_EDGE_AUTH: ${CB_EDGE_AUTH:-traefik-forwardauth}" in deployed
-    assert "CB_IDENTITY_LINK_SHARED_SECRET: ${SERVICE_PASSWORD_64_IDLINKSECRET}" in deployed
+    assert (
+        "CB_IDENTITY_LINK_SHARED_SECRET: "
+        "${SERVICE_PASSWORD_64_IDLINKSECRET:?SERVICE_PASSWORD_64_IDLINKSECRET is required}"
+        in deployed
+    )
     assert "CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:-https://auth.aikumi.app/application/o/pmoc-sso/}" in deployed
     assert "CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:-tinyauth-pmo}" in deployed
 
@@ -140,7 +150,8 @@ def test_compose_router_requires_agent_control_forwarding_env() -> None:
         (
             "compose.coolify.yaml",
             "CB_AGENT_CONTROL_URLS: ${CB_AGENT_CONTROL_URLS:-slot-1=http://agent-control:8090}",
-            "CB_AGENT_CONTROL_SHARED_SECRET: ${SERVICE_PASSWORD_64_AGENTCTRLSECRET}",
+            "CB_AGENT_CONTROL_SHARED_SECRET: "
+            "${SERVICE_PASSWORD_64_AGENTCTRLSECRET:?SERVICE_PASSWORD_64_AGENTCTRLSECRET is required}",
         ),
     ):
         block = _router_block(filename)
