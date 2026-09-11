@@ -6,13 +6,13 @@ Tigo authorized M2 implementation after M1. Development used the standalone
 Mac checkout on branch `feat/m2-first-browser-task`; committed Git bundles
 transferred exact revisions to the separate Linux qualification checkout.
 
-Final tested source: `184d4bca4ca5a4cd7032f8e837ae7ef70a6dee23`.
-This evidence file and status links are a later documentation-only commit; the
-tested runtime and tests are unchanged.
+Final tested source: `ae5b51262960358d11c92f0ec2e257bb4f197dc8`.
+This evidence file and status links are a later documentation-only commit.
 
-No GitHub push/merge, image publication, live deployment, Hermes profile
-configuration, employee sign-in, live grant or real application account was
-used or changed.
+No GitHub push/merge, image publication, live CloudBrowser deployment,
+employee sign-in, live grant or real application account was used or changed.
+An isolated, stopped Hermes profile was configured as described below; it has
+no CloudBrowser credential and its MCP server remains disabled.
 
 ## Qualification environment
 
@@ -31,7 +31,7 @@ used or changed.
 
 At the final tested source:
 
-- `uv run make check`: **1065 passed, 3 skipped**, 151.96 seconds. All six
+- `uv run make check`: **1066 passed, 3 skipped**, 162.22 seconds. All six
   specification, sensitive-file, release-manifest, installation, image-input
   and image-workflow validators passed. Real-Chromium and Compose checks ran.
 - The only skips are the three deliberately disabled ordinary-form integration
@@ -41,7 +41,7 @@ At the final tested source:
   seconds.
 - Hermes' installed MCP SDK initialized the exact source's stdio server and
   discovered all eight tools: **PASS**.
-- Local MCP contract/security suite: **19 passed**. All six validators,
+- Local and Linux MCP contract/security suite: **20 passed**. All six validators,
   compileall and `git diff --check` also passed on the Mac candidate.
 
 The first-tab contract/security tests were run before implementation and failed
@@ -74,16 +74,22 @@ disabled to pass.
   identity/binding headers and contains no raw-CDP or Vaultwarden client.
 - The obsolete supported-tree Hermes helper that exposed raw CDP and arbitrary
   page evaluation was removed.
+- A fresh `cloudbrowser-test` Hermes profile now exists on mother01. It did not
+  clone the default profile's secrets, is stopped, is not the default, and has
+  only the reviewed CloudBrowser local skill in addition to Hermes' builtin
+  core skill. The bridge is installed in a dedicated virtual environment and
+  registered with a profile-secret reference, but remains disabled because no
+  CloudBrowser authentication value has been supplied.
 
 ## Not established by M2
 
 - No live application, live Vaultwarden grant, employee identity or hosted
   browser journey has been accepted. Synthetic application-account proof is
   not evidence that a specific customer site is qualified.
-- The Hermes MCP bridge is not installed/configured in a live profile. A
-  controlled acceptance requires one distinct TinyAuth-compatible
-  authorization value for that profile (or a time-bounded session cookie),
-  supplied through Hermes secret scope and never chat.
+- The Hermes MCP bridge is installed/configured but not authenticated or
+  enabled. A controlled acceptance still requires one distinct
+  TinyAuth-compatible authorization value for that profile (or a time-bounded
+  session cookie), supplied through Hermes secret scope and never chat.
 - Interactive OIDC acquisition/renewal for Hermes is not implemented. Shared
   deployment-wide agent identity is prohibited.
 - Production form login, TOTP submission and direct one-time-code handoff remain
@@ -99,7 +105,6 @@ disabled to pass.
   gates. Test counts do not waive them.
 
 The next user participation is a separately approved controlled M2 acceptance:
-configure the bridge in one Hermes profile, authenticate that profile, and run
-one synthetic/approved-site task while observing the exact browser. It should
-occur only after choosing the target environment/account and deciding whether
+authenticate the prepared profile and run one synthetic/approved-site task
+while observing the exact browser. It should occur only after deciding whether
 to build/deploy this source first.
