@@ -23,6 +23,90 @@ _SECRET = b"deadline-capability-secret-0123456789"
 _NOW = 10_000
 
 
+def test_job_epoch_captured_before_idempotency_wait(tmp_path):
+    from cloudbrowser.broker_jobs import BrokerJobs, JobsUnavailable
+    from cloudbrowser.credential_broker.contracts import BrokerResult
+    authority = BrokerJobs(tmp_path)
+    authority.claim_authority()
+    authority.change("agent")
+    broker = BrokerJobs(tmp_path)
+    calls = []
+    class Coordinator:
+        admission_epoch = broker.snapshot
+
+        def execute(self, intent, *, fetch_credentials, deadline, admission_epoch):
+            try:
+                with broker.job(admission_epoch):
+                    calls.append("fetch")
+                    return BrokerResult(intent.request_id, "authenticated")
+            except JobsUnavailable:
+                return BrokerResult(intent.request_id, "failed", "browser_control_paused")
+    class DelayedIdempotency:
+        def execute(self, scope, operation, *, deadline):
+            authority.change("human")
+            authority.change("agent")
+            return operation()
+    try:
+        server = _server(tmp_path, coordinator=Coordinator(), monotonic_clock=lambda: 0)
+        server._idempotency_store = DelayedIdempotency()
+        with server.handle("/v1/credential/login", {"capability": _token()}) as response:
+            assert response.body["error_code"] == "browser_control_paused"
+        assert calls == []
+    finally:
+        authority.close()
+
+
+def test_http_admission_precedes_delayed_body(tmp_path):
+    import http.client
+    import json
+    from threading import Event, Thread
+    from cloudbrowser.broker_jobs import BrokerJobs, JobsUnavailable
+    from cloudbrowser.credential_broker.contracts import BrokerResult
+    from cloudbrowser.credential_broker.runtime import create_broker_http_server
+    authority = BrokerJobs(tmp_path)
+    authority.claim_authority()
+    authority.change("agent")
+    broker = BrokerJobs(tmp_path)
+    entered = Event()
+    calls = []
+    class Coordinator:
+        def admission_epoch(self):
+            epoch = broker.snapshot()
+            entered.set()
+            return epoch
+
+        def execute(self, intent, *, fetch_credentials, deadline, admission_epoch):
+            try:
+                with broker.job(admission_epoch):
+                    calls.append("fetch")
+                    return BrokerResult(intent.request_id, "authenticated")
+            except JobsUnavailable:
+                return BrokerResult(intent.request_id, "failed", "browser_control_paused")
+    api = _server(tmp_path, coordinator=Coordinator(), monotonic_clock=lambda: 0)
+    server = create_broker_http_server(api, ("127.0.0.1", 0))
+    worker = Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    client = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+    body = json.dumps({"capability": _token()}).encode()
+    try:
+        client.putrequest("POST", "/v1/credential/login")
+        client.putheader("Content-Length", str(len(body)))
+        client.endheaders()
+        assert entered.wait(2)
+        authority.change("human")
+        authority.change("agent")
+        client.send(body)
+        response = client.getresponse()
+        assert json.loads(response.read())["error_code"] == "browser_control_paused"
+        assert calls == []
+    finally:
+        client.close()
+        server.shutdown()
+        server.server_close()
+        worker.join(3)
+        authority.close()
+
+
 def _capability(**overrides: object) -> CredentialCapability:
     claims: dict[str, object] = {
         "profile_id": "profile-a",

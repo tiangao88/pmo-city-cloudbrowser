@@ -41,7 +41,10 @@ VNC input and admits one controlling stream. Requests received before a mode
 change cannot execute after resume. Human disconnect leaves the agent paused;
 explicit resume releases pressed keys/buttons and restores read-only viewing.
 Failed reset/teardown leaves admission unavailable. Agent/broker page operations
-are blocked while paused, but whole-job broker custody fencing is not implemented.
+are blocked while paused. An opt-in cross-process whole-job guard now also
+blocks upstream credential fetching; see [its contract and limitations](../../docs/M3-BROKER-JOB-COORDINATION.md).
+It is exercised with synthetic jobs only. Busy takeover/resume stays paused and
+requires an explicit retry after the job exits; timeout alone does not unlock it.
 
 ## Reproducible local checks
 
@@ -89,7 +92,7 @@ remains available for supervisor snapshots, while `/agent/*` stays paused.
 
 Build success is not a deployment GO. Remaining gates include real SSO session
 and revocation testing, broader failure/leader-fencing coverage, whole-job broker
-fencing, dependency/SBOM review, immutable image publication and installation/rollback.
+fencing deployment qualification, dependency/SBOM review, immutable image publication and installation/rollback.
 The image uses mutable Debian packages and Chromium `--no-sandbox`; those are
 explicit unqualified constraints, not approved production settings.
 

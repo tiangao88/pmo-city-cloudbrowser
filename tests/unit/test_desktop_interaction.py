@@ -15,8 +15,8 @@ HEADERS = {"Remote-Sub": "alice-sub", "Remote-Groups": "PMOC_Users"}
 BINDING = BrowserBinding("profile", "alice", "browser", "g1")
 
 
-def rig():
-    gate = InteractionGate()
+def rig(broker_jobs=None):
+    gate = InteractionGate(broker_jobs=broker_jobs)
     events = []
     viewer = AuthenticatedViewer(ViewerSessionStore(clock=gate.clock), token_secret=b"synthetic-desktop-only")
     authority = SlotViewerAuthority(viewer=viewer,
@@ -114,3 +114,30 @@ def test_runtime_requires_explicit_credential_free_configuration():
             ("CB_BROKER_SUBMIT_SECRET", "synthetic"), ("CB_VIEWER_CONTROL_SECRET", "a" * 32)):
         with pytest.raises(ValueError):
             validate_environment({**env, key: value})
+
+
+def test_whole_job_takeover_retry_disconnect_and_resume(tmp_path):
+    from cloudbrowser.broker_jobs import BrokerJobs, JobsUnavailable
+    jobs = BrokerJobs(tmp_path)
+    jobs.claim_authority()
+    try:
+        gate, authority, token, events = rig(jobs)
+        broker = BrokerJobs(tmp_path)
+        with broker.job(broker.snapshot()):
+            with pytest.raises(JobsUnavailable):
+                control(authority, token, "takeover")
+            assert gate.mode == "paused" and events[-1] is False
+            assert True not in events
+            with pytest.raises(JobsUnavailable):
+                control(authority, token, "resume")
+        assert control(authority, token, "takeover") == "human"
+        connection = authority.connect(trusted_headers=HEADERS, token=token,
+            send_frame=lambda _: None, close_transport=lambda: None)
+        connection.revoke()
+        assert gate.mode == "paused" and events[-1] is False
+        with pytest.raises(JobsUnavailable):
+            broker.snapshot()
+        assert control(authority, token, "resume") == "agent"
+        assert broker.snapshot()
+    finally:
+        jobs.close()

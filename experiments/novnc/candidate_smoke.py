@@ -40,6 +40,10 @@ class Identity(BaseHTTPRequestHandler):
                 if self.path == "/task" else b'{"status":"ok"}')
         if self.path == "/task":
             data += ('<style>html,body{background:#' + COLOURS[self.state["owner"]] + ';height:100%;margin:0}</style>').encode()
+            data += ("<script>requestAnimationFrame(()=>requestAnimationFrame(()=>fetch('/painted/"
+                     + self.state["owner"] + "')))</script>").encode()
+        if self.path == "/painted/" + self.state["owner"]:
+            self.state["painted"] = True
         self.send_response(200)
         if self.path == "/task":
             self.state["seen"].append(self.headers.get("Cookie", ""))
@@ -79,6 +83,10 @@ def main():
     child = None
     streams = []
     with tempfile.TemporaryDirectory(prefix="candidate-smoke-") as temporary:
+        from cloudbrowser.broker_jobs import BrokerJobs
+        jobs_directory = Path(temporary) / "jobs"
+        jobs_directory.mkdir(mode=0o700)
+        broker_jobs = BrokerJobs(jobs_directory)
         try:
             identity = ThreadingHTTPServer(("127.0.0.1", 8091), Identity)
             servers.append(identity)
@@ -91,6 +99,7 @@ def main():
             for server in servers:
                 threading.Thread(target=server.serve_forever, daemon=True).start()
             env = {**os.environ, "CB_EXPERIMENTAL_DESKTOP": "1", "CB_EDGE_AUTH": "traefik-forwardauth",
+                "CB_EXPERIMENTAL_BROKER_JOBS_DIR": str(jobs_directory),
                 "CB_VIEWER_PUBLIC_ORIGIN": ORIGIN, "CB_VIEWER_CONTROL_SECRET": SECRET,
                 "CB_VIEWER_TOKEN_SECRET": "synthetic-viewer-token-secret-only-32",
                 "CB_ROUTER_BASE_URL": "http://127.0.0.1:8080", "CB_ROUTER_SHARED_SECRET": SECRET,
@@ -139,7 +148,7 @@ def main():
                     else:
                         raise AssertionError("old controller survived restart")
                 binding = previous if index == 3 else BrowserBinding("profile-" + owner, owner, "browser-unassigned", "g" + str(index))
-                state.update(owner=owner, seen=[])
+                state.update(owner=owner, seen=[], painted=False)
                 if index != 3:
                     supervisor.adopt_binding(binding)
                 if old_stream is not None:
@@ -156,6 +165,11 @@ def main():
                         break
                     time.sleep(.1)
                 assert state["seen"], "fixture page did not load"
+                for _ in range(50):
+                    if state["painted"]:
+                        break
+                    time.sleep(.1)
+                assert state["painted"], "fixture did not reach two animation frames"
                 assert state["seen"][0] == ("" if index < 2 else "cb_synthetic_owner=alice"), "profile cookie continuity failed"
                 state["owner"] = owner
                 if old_cookie:
@@ -172,9 +186,15 @@ def main():
                 other = bytes.fromhex(COLOURS["bob" if owner == "alice" else "alice"])[::-1]
                 own_count = sum(pixels[i:i + 3] == own for i in range(0, len(pixels), 4))
                 other_count = sum(pixels[i:i + 3] == other for i in range(0, len(pixels), 4))
-                assert own_count > 100000 and other_count == 0, "first framebuffer owner canary mismatch"
+                assert own_count > 100000 and other_count == 0, (
+                    f"first framebuffer owner canary mismatch: owner={own_count}, other={other_count}")
                 pixels_stream.close()
                 print(f"PASS first WSS framebuffer {owner}: {own_count} owner pixels, zero other-owner pixels", flush=True)
+                with broker_jobs.job(broker_jobs.snapshot()):
+                    assert request(6080, "/ui/viewer/takeover", data=b"", headers=h, tls=True)[0] == 403
+                    assert request(9230, "/agent/pages")[0] == 503
+                    assert request(6080, "/ui/viewer/resume", data=b"", headers=h, tls=True)[0] == 403
+                print("PASS separate-process synthetic job blocks takeover/resume until exit", flush=True)
                 assert request(6080, "/ui/viewer/takeover", data=b"", headers=h, tls=True)[0] == 200
                 assert request(9230, "/agent/pages")[0] == 503
                 assert request(9230, "/broker/basic/probe", data=b"{}")[0] == 503

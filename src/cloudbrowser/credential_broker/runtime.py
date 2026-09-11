@@ -579,7 +579,10 @@ def build_broker_api(
             deadline=deadline,
         )
 
+    from cloudbrowser.broker_jobs import BrokerJobs
+    jobs_directory = os.environ.get("CB_EXPERIMENTAL_BROKER_JOBS_DIR")
     coordinator = BrokerCoordinator(
+        broker_jobs=BrokerJobs(jobs_directory) if jobs_directory else None,
         resolve_initial=resolve_initial,
         resolve_pre_fill=resolve_pre_fill,
         declarations={site_id: declaration},
@@ -662,6 +665,19 @@ def create_broker_http_server(
             if path != "/v1/credential/login":
                 self._send_json(404, {"ok": False, "error_code": "not_found"})
                 return
+            # Capture before reading a potentially delayed body. This value is
+            # private server context, never an HTTP payload/header assertion.
+            from cloudbrowser.broker_jobs import JobsUnavailable
+            admission_args = {}
+            capture = getattr(api, "capture_admission", None)
+            try:
+                if callable(capture):
+                    admission_args["admission"] = capture()
+            except (JobsUnavailable, OSError):
+                self.close_connection = True
+                self._send_json(200, {"request_id": "missing", "status": "failed",
+                    "error_code": "browser_control_paused", "duration_ms": 0})
+                return
             try:
                 body = self._read_body()
             except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
@@ -676,7 +692,7 @@ def create_broker_http_server(
                 )
                 return
             try:
-                with api.handle(path, body) as response:
+                with api.handle(path, body, **admission_args) as response:
                     self._send_json(200, response.body)
             except LookupError:
                 self._send_json(404, {"ok": False, "error_code": "not_found"})

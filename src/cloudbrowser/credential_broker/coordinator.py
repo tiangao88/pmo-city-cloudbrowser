@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Callable, Mapping, Protocol
+from cloudbrowser.broker_jobs import JobsUnavailable
 
 from cloudbrowser.browser_slots.transport import BrowserUnavailable
 
@@ -84,6 +85,7 @@ class BrokerCoordinator:
         audit_emit: Callable[[AuditEventType, dict[str, object]], None] | None = None,
         emitter: AuditEmitter | None = None,
         test_only_allow_compatibility_authorization: bool = False,
+        broker_jobs=None,
     ) -> None:
         if not test_only_allow_compatibility_authorization:
             if grant_resolver is None:
@@ -106,6 +108,10 @@ class BrokerCoordinator:
         self._resolve_pre_fill = resolve_pre_fill
         self._adapter_selector = adapter_selector
         self._authorization_gate = authorization_gate
+        self._broker_jobs = broker_jobs
+
+    def admission_epoch(self):
+        return self._broker_jobs.snapshot() if self._broker_jobs is not None else None
 
     def _revalidate_grant_before_fetch(
         self,
@@ -123,6 +129,18 @@ class BrokerCoordinator:
         return current_grant == initial_grant
 
     def execute(
+        self, intent, *, fetch_credentials, deadline=None, admission_epoch=None,
+    ) -> BrokerResult:
+        if self._broker_jobs is None:
+            return self._execute(intent, fetch_credentials=fetch_credentials, deadline=deadline)
+        try:
+            epoch = admission_epoch if admission_epoch is not None else self.admission_epoch()
+            with self._broker_jobs.job(epoch):
+                return self._execute(intent, fetch_credentials=fetch_credentials, deadline=deadline)
+        except (JobsUnavailable, OSError):
+            return self._fail(intent, "browser_control_paused")
+
+    def _execute(
         self,
         intent: LoginIntent,
         *,

@@ -12,6 +12,7 @@ from cloudbrowser.edge_auth import REQUIRED_GROUP, parse_edge_identity
 from . import ViewerRequest
 from .bridge import ViewerBrowserBridge
 from .live_connection import LiveViewConnection
+from cloudbrowser.broker_jobs import JobsUnavailable
 
 
 class SlotViewerAuthority:
@@ -148,10 +149,16 @@ class SlotViewerAuthority:
                 for connection in self._connections:
                     connection.revoke()
                 self._connections.clear()
-                self._set_input(action == "takeover")
+                self._set_input(False)
                 self._interaction.change("human" if action == "takeover" else "agent",
                     token if action == "takeover" else None)
+                self._set_input(action == "takeover")
+            except JobsUnavailable:
+                # Pending jobs retain their exclusion until they actually exit.
+                # Leave paused/input-off and allow an explicit control retry.
+                raise
             except Exception:
+                self._interaction.change("paused")
                 self._teardown_failed = True
                 self._binding = None
                 raise
@@ -229,4 +236,9 @@ class SlotViewerAuthority:
             self._binding = binding
             self._lease_deadline = self._clock() + lease_s
             if self._interaction is not None:
-                self._interaction.change("agent")
+                try:
+                    self._interaction.change("agent")
+                except Exception:
+                    self._binding = None
+                    self._lease_deadline = None
+                    raise

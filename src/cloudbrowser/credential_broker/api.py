@@ -123,8 +123,23 @@ class BrokerHttpServer:
         self._test_only_compatibility_principal_for = principal_for
         self._test_only_compatibility_binding_provider = binding_provider
 
+    def capture_admission(self):
+        # Capture before nonce/idempotency waits; a control change must not
+        # readmit queued work. Compatibility test coordinators have no job gate.
+        admission = {}
+        capture = getattr(self._coordinator, "admission_epoch", None)
+        if callable(capture):
+            admission["admission_epoch"] = capture()
+        return admission
+
     @contextmanager
-    def handle(self, path: str, payload: Mapping[str, object]) -> Iterator[BrokerResponse]:
+    def handle(self, path: str, payload: Mapping[str, object], *, admission=None) -> Iterator[BrokerResponse]:
+        from cloudbrowser.broker_jobs import JobsUnavailable
+        try:
+            admission = self.capture_admission() if admission is None else admission
+        except (JobsUnavailable, OSError):
+            yield _failure("missing", "browser_control_paused")
+            return
         if path != "/v1/credential/login":
             raise LookupError("broker route not found")
         if not isinstance(payload, Mapping) or set(payload) != _CAPABILITY_REQUEST_FIELDS:
@@ -237,6 +252,7 @@ class BrokerHttpServer:
                     intent,
                     fetch_credentials=fetch_credentials,
                     deadline=deadline,
+                    **admission,
                 ),
                 deadline=deadline,
             )

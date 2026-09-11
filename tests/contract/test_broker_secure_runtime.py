@@ -42,6 +42,28 @@ def _build(tmp_path: Path):
     )
 
 
+def test_experimental_jobs_directory_wires_coordinator(monkeypatch, tmp_path):
+    from cloudbrowser.broker_jobs import BrokerJobs, JobsUnavailable
+    _base_env(monkeypatch)
+    monkeypatch.setenv("CB_EXPERIMENTAL_BROKER_JOBS_DIR", str(tmp_path))
+    server = build_broker_api(browser_factory=_Browser, credential_fetcher=lambda _: object(),
+        grant_resolver=object(), target_preflight=object(),
+        nonce_store=DurableNonceStore(tmp_path / "nonces.sqlite3"),
+        idempotency_store=DurableIdempotencyStore(tmp_path / "idempotency.sqlite3"))
+    with pytest.raises(JobsUnavailable):
+        server._coordinator.admission_epoch()
+    authority = BrokerJobs(tmp_path)
+    authority.claim_authority()
+    try:
+        authority.change("agent")
+        assert server._coordinator.admission_epoch()
+        authority.change("human")
+        with pytest.raises(JobsUnavailable):
+            server._coordinator.admission_epoch()
+    finally:
+        authority.close()
+
+
 def test_runtime_requires_capability_secret(monkeypatch, tmp_path: Path) -> None:
     _base_env(monkeypatch)
     monkeypatch.delenv("CB_CREDENTIAL_CAPABILITY_SECRET")

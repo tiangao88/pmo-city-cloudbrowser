@@ -10,11 +10,13 @@ this table is the current status.
 |---|---|---|
 | 1. Integrated runtime | Python 3.12 desktop; standalone Compose with actual Traefik, router, supervisor, agent-control and identity-link. Synthetic-auth end-to-end activation, WSS, renewal and A/B/A passed. Credentials absent/disabled throughout. | Real SSO and revocation qualification; reviewed deployment/image configuration. Local integration work completed, not a deployment GO. |
 | 2. Owner/restart isolation | A/B/A first WSS framebuffer samples: 870,708 owner pixels, zero other-owner pixels. Live old streams close before next wake. Per-owner cookie continuity, restart, Xvfb/Chromium/VNC crashes, supervisor suspend/resume and explicit expired-lease repair passed. | Broader failure/leader-fencing and real-environment qualification. The covered synthetic matrix is complete; canary sampling is not a universal isolation proof. |
-| 3. Human takeover | Real noVNC keyboard input; browser HTTP reads/actions and broker page endpoints paused; queued-request fencing; disconnect stays paused; held Shift/button cleanup; explicit resume. | Whole-job upstream broker admission/custody fencing. Credential UI disabled and broker configuration refused in candidate; upstream broker must remain disabled too. |
-| 4. Qualification/release | Latest Linux Python 3.12 regressions: 1,174 passed / 14 skipped. Targeted adapter/wiring regressions: 25 passed, including Compose checks skipped in Linux. Both standalone-stack and pixel/crash smoke runs passed. | Blocked security review, remaining skipped deployment/real-browser cases, dependency/image qualification, installation and rollback rehearsal. **NO-GO.** |
+| 3. Human takeover | Real noVNC input and browser-operation exclusion. Opt-in whole-job broker guard now covers both fetch paths, stale HTTP/queued admission, timeout, process death/restart and disconnect with synthetic fixtures. | Reviewed cross-service job-guard deployment and isolation. Busy takeover stays paused until explicit retry after job exit. Credential UI disabled and broker configuration refused in candidate; upstream broker remains disabled. |
+| 4. Qualification/release | Latest Linux Python 3.12 regressions: 1,186 passed / 14 skipped. Targeted broker/control/wiring regressions: 49 passed. Job-enabled pixel/crash smoke passed; earlier standalone-stack smoke passed with credentials disabled. | Blocked security review, remaining skipped deployment/real-browser cases, dependency/image qualification, installation and rollback rehearsal. **NO-GO.** |
 
 The candidate's reproducible checks, private port boundaries and rollback
 prerequisites are in [services/desktop/README.md](../services/desktop/README.md).
+Whole-job coordination semantics and remaining limits are in
+[M3-BROKER-JOB-COORDINATION.md](M3-BROKER-JOB-COORDINATION.md).
 `experiments/novnc/candidate_smoke.py` uses only synthetic identities/cookies.
 It does not demonstrate real SSO or Vaultwarden access. Visual QA showed the
 new controls and live remote text input; its session panel is intentionally

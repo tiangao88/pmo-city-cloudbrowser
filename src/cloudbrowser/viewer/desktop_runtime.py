@@ -48,7 +48,12 @@ def main():
     from .desktop_transport import create_desktop_transport
 
     identity = build_identity_link_client()
-    gate = InteractionGate()
+    from cloudbrowser.broker_jobs import BrokerJobs
+    jobs_directory = os.environ.get("CB_EXPERIMENTAL_BROKER_JOBS_DIR")
+    jobs = BrokerJobs(jobs_directory) if jobs_directory else None
+    if jobs is not None:
+        jobs.claim_authority()
+    gate = InteractionGate(broker_jobs=jobs)
     process, browser_server, stop, registry = build_browser_service(
         process_wrapper=lambda browser: DesktopProcess(browser, gate), interaction_gate=gate)
     registry.attach_stop_event(stop)
@@ -97,6 +102,8 @@ def main():
             for server in reversed(servers):
                 server.server_close()
             registry.close()
+            if jobs is not None:
+                jobs.close()
 
 
 if __name__ == "__main__":
