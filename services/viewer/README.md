@@ -7,8 +7,8 @@ browser video stream and user/agent takeover protocol remain roadmap work.
 
 The approved next increment is [M3a viewer foundation](../../docs/M3-VIEWER-FOUNDATION.md):
 prove same-Chromium rendering, then owner-bound live view and exclusive human
-input before M2b application-login acceptance. Neko is a candidate, not an
-installed transport. Current Chromium is headless; embedding a separate Neko
+input before M2b application-login acceptance. noVNC is the approved direction,
+not an installed production transport. Current Chromium is headless; embedding a separate
 room would not satisfy the shared-browser requirement.
 
 ## Boundary

@@ -70,6 +70,11 @@ recovered through a supported login flow or explicit human intervention.
   revocation and exact-target checks and include a state migration decision.
 - Deny agent access to passwords, OTP seeds/codes, cookies, storage values,
   network bodies, raw CDP, arbitrary evaluation, host files, and processes.
+- Vaultwarden remains the credential source of record. Only the deterministic
+  broker consumes automated vault-access grants; Hermes cannot browse the vault
+  UI, call vault APIs, or obtain access through an unlocked extension or other
+  host tools. Enforce this across the actual agent environment, not only its MCP
+  tool list. Human noVNC access must not introduce an agent bypass.
 - Authorize credential destinations by exact declared origin and redirect
   policy; verify application account identity before reporting authenticated.
 - Enforce deadlines across network operations and lock waits. Distinguish

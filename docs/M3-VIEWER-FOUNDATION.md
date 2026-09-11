@@ -1,7 +1,8 @@
 # M3a: live viewer and human takeover
 
 Status: delivery sequence approved by Tigo on 2026-09-11; implementation and
-transport qualification pending. Work branch: `feat/m3-viewer-foundation`,
+transport qualification pending. Tigo subsequently selected noVNC for M3a.
+Work branch: `feat/m3-viewer-foundation`,
 based on frozen M2 review target `9c113587`. No runtime or deployment change.
 
 ## Outcome
@@ -23,7 +24,14 @@ and owner-specific profile are managed by `BrowserProcess`; the viewer bridge
 only returns a stream descriptor, not video or input. Therefore an iframe alone
 cannot enable the required product behavior.
 
-Neko v3 is the lead candidate for reuse, not a qualified integration. Its
+noVNC is the selected transport direction: WebSockets through the authenticated
+HTTPS gateway, with a private VNC backend and the same headed Chromium instance.
+No STUN/TURN service is required for that transport. Resource savings versus
+Neko remain unmeasured. The [disposable harness](../experiments/novnc/README.md)
+is a feasibility experiment, not an authenticated deployment. See
+[ADR-0006](../specs/adr/0006-novnc-viewer-direction.md).
+
+Neko remains a comparison reference, not the selected integration. Its
 [installation documentation](https://neko.m1k1o.net/docs/v3/installation)
 describes a Docker/WebRTC deployment. The
 [authentication documentation](https://neko.m1k1o.net/docs/v3/configuration/authentication)
@@ -41,14 +49,14 @@ or profile volumes into this implementation.
 
 1. **Disposable same-browser spike.** Use synthetic accounts/pages, new scratch
    storage and no production secrets or profile mounts. Prove headed Chromium
-   renders to Neko and remains controlled by the existing mediated API. Preserve
+   renders through noVNC and remains controlled by the existing mediated API. Preserve
    exactly one process owner: no competing automatic browser launcher. Record
    image digest, browser version, display ownership, process UID, launch/stop
    behavior, resource usage and video/input connectivity. Do not modify dev01
    ports, firewall or existing containers for this experiment.
 2. **Transport decision.** Record an ADR after evidence, covering lifecycle,
    deployment network requirements, authentication, session revocation, input
-   arbitration, rollback and release/image-count effects. If Neko cannot satisfy
+   arbitration, rollback and release/image-count effects. If noVNC cannot satisfy
    the boundaries without a broad rewrite, document the failed criterion before
    evaluating a fallback. No current-version or security-qualification claim is
    implied by using the v3 documentation.
