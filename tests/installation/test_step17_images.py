@@ -50,6 +50,7 @@ def test_build_workflow_qualifies_each_published_image() -> None:
     assert "steps.build.outputs.digest" in workflow
     assert "actions/upload-artifact@v4" in workflow
     assert "GITHUB_STEP_SUMMARY" in workflow
+    assert 'source commit \\`${GITHUB_SHA}\\`' in workflow
 
 
 def test_every_image_has_a_qualification_record_template() -> None:

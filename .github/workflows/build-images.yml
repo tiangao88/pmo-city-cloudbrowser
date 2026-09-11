@@ -202,9 +202,11 @@ jobs:
             echo "- digest: \`${digest}\`"
             echo "- status: passed"
             echo "- configured user: \`${user}\`"
+            echo "- non-root: passed (\`${user}\`, uid 10001)"
             echo "- healthcheck: passed (container status: healthy)"
             echo "- runtime endpoint: passed (\`${HEALTH_PATH}\`)"
             echo "- provenance/SBOM metadata: present in registry manifest"
+            echo "- source commit \`${GITHUB_SHA}\`"
             echo "- CI run: \`${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\`"
           } | tee "$evidence" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload qualification evidence
