@@ -34,6 +34,9 @@ class HttpAgentBrowser:
     def list_pages(self, *, deadline: BrokerDeadline | None = None) -> list[dict[str, str]]:
         return self.transport.list_pages(deadline=deadline)
 
+    def open_tab(self, url: str, *, deadline: BrokerDeadline | None = None) -> dict[str, str]:
+        return self.transport.open_tab(url, deadline=deadline)
+
     def navigate(
         self,
         target_tab_id: str,
@@ -101,6 +104,12 @@ class HttpAgentBrowserTransport:
         self.expected_owner = principal_id
         self.expected_generation = generation
 
+    def _binding_headers(self) -> dict[str, str]:
+        return {
+            "X-CB-Principal": self.expected_owner,
+            "X-CB-Generation": self.expected_generation,
+        }
+
     def live_binding(self, *, deadline: BrokerDeadline | None = None) -> "LiveBrowserBinding":
         from cloudbrowser.credential_broker.runtime import LiveBrowserBinding
 
@@ -123,6 +132,7 @@ class HttpAgentBrowserTransport:
             self.client.request,
             "GET",
             "/agent/readiness",
+            headers=self._binding_headers(),
             deadline=deadline,
         )
         if not isinstance(raw, dict):
@@ -160,6 +170,7 @@ class HttpAgentBrowserTransport:
             self.client.request,
             "GET",
             "/agent/pages",
+            headers=self._binding_headers(),
             deadline=deadline,
         )
         if (
@@ -187,6 +198,28 @@ class HttpAgentBrowserTransport:
             pages.append({key: page[key] for key in ("tab_id", "url", "title")})
         return pages
 
+    def open_tab(self, url: str, *, deadline: BrokerDeadline | None = None) -> dict[str, str]:
+        raw = invoke_transport(
+            self.client.request,
+            "POST",
+            "/agent/pages/open",
+            body=self._action_json({"url": url}),
+            headers=self._binding_headers(),
+            deadline=deadline,
+        )
+        page = raw.get("page") if isinstance(raw, dict) else None
+        if not isinstance(page, dict) or not all(
+            isinstance(page.get(key), str) and page[key]
+            for key in ("tab_id", "url", "title")
+        ):
+            raise BrowserUnavailable("invalid created tab response")
+        if any(
+            len(page[key].encode()) > limit
+            for key, limit in (("tab_id", 256), ("url", 2048), ("title", 4096))
+        ):
+            raise BrowserUnavailable("created tab response is too large")
+        return {key: page[key] for key in ("tab_id", "url", "title")}
+
     def navigate(
         self,
         target_tab_id: str,
@@ -201,6 +234,7 @@ class HttpAgentBrowserTransport:
                 "POST",
                 "/agent/pages/navigate",
                 body=body,
+                headers=self._binding_headers(),
                 deadline=deadline,
             )
         )
@@ -219,6 +253,7 @@ class HttpAgentBrowserTransport:
                 "POST",
                 "/agent/pages/click",
                 body=body,
+                headers=self._binding_headers(),
                 deadline=deadline,
             )
         )
@@ -240,6 +275,7 @@ class HttpAgentBrowserTransport:
                 "POST",
                 "/agent/pages/type",
                 body=body,
+                headers=self._binding_headers(),
                 deadline=deadline,
             )
         )
@@ -258,6 +294,7 @@ class HttpAgentBrowserTransport:
             self.client.request,
             "GET",
             "/agent/pages/info?" + query,
+            headers=self._binding_headers(),
             deadline=deadline,
         )
         if not isinstance(raw, dict) or not all(

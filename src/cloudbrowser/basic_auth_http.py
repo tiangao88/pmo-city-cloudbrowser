@@ -75,7 +75,7 @@ class HttpBasicAuthBrowser:
     def live_binding(self) -> "LiveBrowserBinding":
         from cloudbrowser.credential_broker.runtime import LiveBrowserBinding
 
-        raw = self._request("GET", "/agent/readiness")
+        raw = self._request("GET", "/browser/readiness")
         if not isinstance(raw, dict):
             raise BrowserUnavailable("invalid Basic Auth browser readiness")
         owner = raw.get("owner")

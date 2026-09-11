@@ -32,7 +32,7 @@ def test_openapi_covers_the_implemented_router_surface():
         "/v1/agent/{operation}:",
     ):
         assert route in openapi, f"missing OpenAPI path {route}"
-    for operation in ("navigate", "click", "type", "page_info", "tabs_list"):
+    for operation in ("tab_open", "navigate", "click", "type", "page_info", "tabs_list"):
         assert operation in openapi, f"missing allowlisted agent operation {operation}"
     # Bounded-envelope response fields that callers depend on.
     for field in ("session_ttl_s", "offer_ttl_s", "error_code", "entries"):

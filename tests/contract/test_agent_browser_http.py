@@ -11,7 +11,7 @@ class FakeAgentClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, str | None]] = []
 
-    def request(self, method: str, path: str, *, body: str | None = None) -> object:
+    def request(self, method: str, path: str, *, body: str | None = None, headers=None) -> object:
         self.calls.append((method, path, body))
         if path == "/agent/readiness":
             return {

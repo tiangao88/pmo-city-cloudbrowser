@@ -244,6 +244,7 @@ def test_browser_http_server_page_info_round_trips_through_deployed_client() -> 
         assert http.request(
             "GET",
             "/agent/pages/info?target_tab_id=tab-1&selector=main%20%5Brole%3Darticle%5D",
+            headers={"X-CB-Principal": "principal-a", "X-CB-Generation": "g1"},
         ) == {
             "url": "https://example.test/page",
             "title": "Example",

@@ -173,10 +173,32 @@ class ChromeBrowserAdapter:
                 urls.append(url)
         return urls
 
-    def open_page(self, url: str) -> None:
+    def open_page(self, url: str) -> dict[str, str]:
         if not self._is_page_url(url):
             raise ValueError("only absolute HTTP(S) page URLs are allowed")
-        self.chrome.json_request("/json/new?" + quote(url, safe=""), method="PUT")
+        targets = self.chrome.json_request("/json/list")
+        if not isinstance(targets, list):
+            raise BrowserUnavailable("invalid Chrome target response")
+        if sum(
+            isinstance(target, dict) and target.get("type") == "page"
+            for target in targets
+        ) >= 32:
+            raise BrowserUnavailable("browser tab limit reached")
+        created = self.chrome.json_request(
+            "/json/new?" + quote(url, safe=""), method="PUT"
+        )
+        if not isinstance(created, dict):
+            raise BrowserUnavailable("invalid created target response")
+        target_id = created.get("id")
+        from .page_actions import _public_url, _validate_target_id
+
+        _validate_target_id(target_id)
+        title = created.get("title")
+        if not isinstance(title, str) or not title:
+            title = "untitled"
+        if len(title.encode()) > 4096:
+            raise BrowserUnavailable("created target title is too large")
+        return {"tab_id": target_id, "url": _public_url(url), "title": title}
 
     def close_empty_pages(self) -> None:
         raw = self.chrome.json_request("/json/list")

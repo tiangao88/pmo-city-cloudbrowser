@@ -104,7 +104,7 @@ _CREDENTIAL_REFERENCE_FIELDS = frozenset({"username_ref", "grant_ref"})
 _MAX_SITE_ID = 256
 _MAX_TARGET_TAB_ID = 256
 
-_AGENT_ALLOWED_OPERATIONS = frozenset({"navigate", "click", "type", "page_info", "tabs_list"})
+_AGENT_ALLOWED_OPERATIONS = frozenset({"tab_open", "navigate", "click", "type", "page_info", "tabs_list"})
 _AGENT_FORBIDDEN_OPERATIONS = frozenset(
     {
         "raw_cdp",
@@ -416,7 +416,7 @@ class RouterApi:
         params = body.get("params", {})
         if not isinstance(params, dict):
             return 200, _envelope(request_id, status="failed", error_code="invalid_request")
-        required_target = operation != "tabs_list"
+        required_target = operation not in {"tabs_list", "tab_open"}
         target_tab_id = params.get("target_tab_id")
         if required_target and (not isinstance(target_tab_id, str) or not _bounded_text(target_tab_id, limit=_MAX_TARGET_TAB_ID)):
             return 200, _envelope(request_id, status="failed", error_code="invalid_request")

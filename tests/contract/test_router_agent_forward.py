@@ -226,6 +226,26 @@ def test_agent_route_relays_page_info_to_session_slot(stack) -> None:
     assert call["request_id"] == "req-agent"
 
 
+def test_agent_route_relays_first_tab_without_caller_binding_fields(stack) -> None:
+    active = _open_active_session(stack)
+    conn = _conn(stack["server"])
+    status, payload = _request_json(
+        conn, method="POST", path="/v1/agent/tab_open",
+        body=json.dumps({
+            "request_id": "req-open-tab",
+            "params": {"url": "https://example.test/start"},
+        }).encode(), headers=_identity_headers(),
+    )
+    conn.close()
+    assert status == 200 and payload["status"] == "ok"
+    call = stack["forwarder"].calls[0]
+    assert call == {
+        "slot_id": active["slot_id"], "binding": active["binding"],
+        "operation": "tab_open", "params": {"url": "https://example.test/start"},
+        "request_id": "req-open-tab",
+    }
+
+
 def test_agent_route_requires_resolvable_identity(stack) -> None:
     conn = _conn(stack["server"])
     status, payload = _request_json(

@@ -9,7 +9,7 @@ against the server-derived principal, browser, and generation binding.
 ```json
 {
   "request_id": "opaque-request-id",
-  "operation": "page_info|tabs_list|navigate|click|type",
+  "operation": "tab_open|page_info|tabs_list|navigate|click|type",
   "params": {}
 }
 ```
@@ -36,7 +36,13 @@ slots, sessions without a binding, or slots outside the configured forwarding
 map fail closed without network egress. Health (`GET /health`) remains
 unauthenticated.
 
-## Exact-target page operations
+## First tab and exact-target page operations
+
+`tab_open` is the only target-creation operation. It requires exactly one
+bounded absolute HTTP(S) URL without userinfo, a fragment or path traversal,
+enforces the 32-page limit, and returns the real opaque Chromium target ID plus
+a public URL without query data. This gives a fresh profile a supported first
+tab without exposing `/json/new`, raw CDP or a caller-chosen target ID.
 
 Every agent page action (`navigate`, `click`, `type`, and `page_info`) must carry
 `target_tab_id`; missing, unknown, or stale targets fail closed. `tabs_list` is
@@ -48,6 +54,7 @@ and router/viewer boundaries; oversized values are rejected, never truncated.
 
 The baseline surface may expose:
 
+- `tab_open` to create the first bounded HTTP(S) target;
 - `navigate` to an absolute HTTP(S) URL without userinfo, fragments, or path
   traversal;
 - `click` with a bounded selector;

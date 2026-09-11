@@ -70,7 +70,7 @@ _UNAUTHORIZED: tuple[int, dict[str, object]] = (401, {"ok": False, "error_code":
 
 # Allowlisted agent operations relayed to the router; anything else is
 # refused locally, before any router contact.
-_AGENT_ALLOWED_OPERATIONS = frozenset({"navigate", "click", "type", "page_info", "tabs_list"})
+_AGENT_ALLOWED_OPERATIONS = frozenset({"tab_open", "navigate", "click", "type", "page_info", "tabs_list"})
 
 # Param bounds enforced before relay; oversized or non-string values are
 # invalid requests, never truncated.
@@ -474,6 +474,7 @@ class ViewerSessionSurface:
         operation: str, params: Mapping[str, object]
     ) -> bool:
         limits = {
+            "tab_open": {"url": _MAX_AGENT_URL},
             "navigate": {"target_tab_id": _MAX_AGENT_TARGET_ID, "url": _MAX_AGENT_URL},
             "click": {"target_tab_id": _MAX_AGENT_TARGET_ID, "selector": _MAX_AGENT_SELECTOR},
             "type": {"target_tab_id": _MAX_AGENT_TARGET_ID, "selector": _MAX_AGENT_SELECTOR, "text": _MAX_AGENT_TEXT},
@@ -481,19 +482,21 @@ class ViewerSessionSurface:
             "tabs_list": {},
         }
         allowed = limits[operation]
-        if operation != "tabs_list" and "target_tab_id" not in params:
+        if operation not in {"tabs_list", "tab_open"} and "target_tab_id" not in params:
             return False
         for key, value in params.items():
             if key not in allowed or not isinstance(value, str):
                 return False
             if len(value.encode("utf-8")) > allowed[key]:
                 return False
-        if operation == "navigate":
+        if operation in {"tab_open", "navigate"}:
             from urllib.parse import urlsplit
 
             parsed = urlsplit(str(params.get("url", "")))
             if parsed.scheme not in ("http", "https"):
                 return False
             if not parsed.netloc or parsed.username or parsed.password:
+                return False
+            if ".." in parsed.path or parsed.fragment:
                 return False
         return True

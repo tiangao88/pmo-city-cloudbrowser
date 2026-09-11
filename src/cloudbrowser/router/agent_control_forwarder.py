@@ -33,7 +33,7 @@ _SLOT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 # Same allowlist as agent_control.ALLOWED_AGENT_OPERATIONS; duplicated here so
 # forbidden operations are refused locally before any network egress.
-_ALLOWED_OPERATIONS = frozenset({"navigate", "click", "type", "page_info", "tabs_list"})
+_ALLOWED_OPERATIONS = frozenset({"tab_open", "navigate", "click", "type", "page_info", "tabs_list"})
 
 
 def _serialize_binding(binding: object) -> dict[str, str]:

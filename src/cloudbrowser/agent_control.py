@@ -22,7 +22,7 @@ _MAX_BODY = 8192
 _MAX_RESPONSE = 64 * 1024
 _BINDING_HEADERS = ("X-CB-Principal", "X-CB-Browser", "X-CB-Generation")
 
-ALLOWED_AGENT_OPERATIONS = frozenset({"navigate", "click", "type", "page_info", "tabs_list"})
+ALLOWED_AGENT_OPERATIONS = frozenset({"tab_open", "navigate", "click", "type", "page_info", "tabs_list"})
 FORBIDDEN_AGENT_OPERATIONS = frozenset(
     {
         "raw_cdp",
@@ -96,6 +96,20 @@ class AgentControlRequest:
     params: Mapping[str, object]
 
 
+def _validated_page(page: object) -> dict[str, str]:
+    if not isinstance(page, Mapping):
+        raise BrowserUnavailable("created tab metadata is invalid")
+    tab_id, url, title = page.get("tab_id"), page.get("url"), page.get("title")
+    if not all(isinstance(value, str) and value for value in (tab_id, url, title)):
+        raise BrowserUnavailable("created tab metadata is invalid")
+    assert isinstance(tab_id, str) and isinstance(url, str) and isinstance(title, str)
+    if len(tab_id.encode()) > 256 or len(url.encode()) > _MAX_URL or len(title.encode()) > _MAX_TEXT:
+        raise BrowserUnavailable("created tab metadata is too large")
+    if not _safe_observed_url(url) or _contains_sensitive_marker(title):
+        raise BrowserUnavailable("created tab metadata contains blocked content")
+    return {"tab_id": tab_id, "url": url, "title": title}
+
+
 class RestrictedAgentBrowser:
     """Narrow callbacks for page actions; no generic CDP callback is accepted."""
 
@@ -104,6 +118,7 @@ class RestrictedAgentBrowser:
         *,
         readiness: Callable[[], BrowserReadiness],
         list_pages: Callable[[], list[dict[str, str]]] | None = None,
+        open_tab: Callable[[str], dict[str, str]] | None = None,
         navigate: Callable[[str, str], None] | None = None,
         click: Callable[[str, str], None] | None = None,
         type_text: Callable[[str, str, str], None] | None = None,
@@ -111,6 +126,7 @@ class RestrictedAgentBrowser:
     ) -> None:
         self._readiness = readiness
         self._list_pages = list_pages
+        self._open_tab = open_tab
         self._navigate = navigate
         self._click = click
         self._type_text = type_text
@@ -141,6 +157,11 @@ class RestrictedAgentBrowser:
         if self._navigate is None:
             raise BrowserUnavailable("navigation is unavailable")
         self._navigate(target_tab_id, url)
+
+    def open_tab(self, url: str) -> dict[str, str]:
+        if self._open_tab is None:
+            raise BrowserUnavailable("tab creation is unavailable")
+        return _validated_page(self._open_tab(url))
 
     def click(self, target_tab_id: str, selector: str) -> None:
         if self._click is None:
@@ -262,7 +283,7 @@ class AgentControlService:
         except Exception:
             return self._failure(request_id, "operation_failed")
 
-    def _dispatch(self, operation: str, params: Mapping[str, object]) -> PageState | list[dict[str, str]] | None:
+    def _dispatch(self, operation: str, params: Mapping[str, object]) -> PageState | dict[str, str] | list[dict[str, str]] | None:
         if operation == "page_info":
             target_tab_id = params.get("target_tab_id")
             if not isinstance(target_tab_id, str):
@@ -276,6 +297,11 @@ class AgentControlService:
             )
         if operation == "tabs_list":
             return self._browser.list_pages()
+        if operation == "tab_open":
+            url = params.get("url")
+            if set(params) != {"url"} or not isinstance(url, str) or not _safe_navigation_url(url):
+                raise ValueError("url is invalid")
+            return self._browser.open_tab(url)
         if operation == "navigate":
             target_tab_id = params.get("target_tab_id")
             url = params.get("url")

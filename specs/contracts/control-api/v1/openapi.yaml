@@ -87,14 +87,14 @@ paths:
   /v1/agent/{operation}:
     post:
       operationId: agentAction
-      description: Relay one allowlisted, exact-target page action to the caller's own assigned slot. `target_tab_id` is mandatory for navigate, click, type, and page_info; tabs_list is the only tab-enumeration operation.
+      description: Relay one allowlisted page action to the caller's own assigned slot. `tab_open` creates the first HTTP(S) tab and returns its exact target ID. `target_tab_id` is mandatory for navigate, click, type, and page_info; `tabs_list` enumerates existing public tabs.
       parameters:
         - name: operation
           in: path
           required: true
           schema:
             type: string
-            enum: [navigate, click, type, page_info, tabs_list]
+            enum: [tab_open, navigate, click, type, page_info, tabs_list]
       requestBody:
         required: true
         content:
@@ -184,7 +184,7 @@ components:
         params:
           type: object
           additionalProperties: true
-          description: For navigate, click, type, and page_info, target_tab_id is required. Values are bounded by UTF-8 bytes and oversized values are rejected.
+          description: For tab_open, one absolute HTTP(S) url is required. For navigate, click, type, and page_info, target_tab_id is required. Values are bounded by UTF-8 bytes and oversized values are rejected.
     AgentActionResponse:
       type: object
       additionalProperties: false

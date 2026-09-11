@@ -68,7 +68,7 @@ class _FakeRouterClient:
 
     def agent_action(self, *, headers, operation, params, request_id):  # noqa: ANN001
         self.calls.append(("agent:" + operation, dict(headers), dict(params)))
-        assert operation == "page_info" or "target_tab_id" in params
+        assert operation in {"page_info", "tab_open"} or "target_tab_id" in params
         return 200, dict(self.agent_response)
 
 
@@ -100,6 +100,19 @@ def _stop(server, thread) -> None:
 
 
 class TestSurfaceAgentRelay:
+    def test_tab_open_relays_first_url_without_a_target(self) -> None:
+        surface, router = _surface()
+        status, payload = surface.agent(
+            "tab_open", headers=_EDGE_HEADERS,
+            params={"url": "https://example.com/start"}, request_id="r-open",
+        )
+        assert status == 200
+        assert payload["status"] == "ok"
+        assert router.calls[0] == (
+            "agent:tab_open", {key.lower(): value for key, value in _EDGE_HEADERS.items()},
+            {"url": "https://example.com/start"},
+        )
+
     def test_page_info_relays_to_router_with_identity_headers(self) -> None:
         surface, router = _surface()
         status, payload = surface.agent(

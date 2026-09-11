@@ -45,7 +45,7 @@ See [ADR-0005](../../adr/0005-m1-personal-state-and-consent.md) and the
 | Immutable identity and authorization | `edge_auth.py`, `identity_link_service.py`, `identity_links.py`; identity/security tests | Current deployed edge-to-principal proof for two employees. |
 | Queue, activation, leases, roster, leave | `router/sessions.py`, `router/router_api.py`; router contract tests | Integrated multi-slot and fresh-browser journey; current deployment capacity unverified. |
 | Browser lifecycle and profile | `browser_slots/browser_process.py`, `supervisor.py`, `lifecycle.py`, `owner_storage.py`; M1 real-Chromium continuity test | Source ownership/clean-restart continuity proven synthetically; uncertain crash locks need operator recovery. Live migration and multi-slot deployment remain qualification work. |
-| Exact-target agent actions | `browser_slots/page_actions.py`, `agent_control.py`; exact-target tests | Navigate, click, type, page_info and tabs_list exist in source; useful real-site behavior and first-tab bootstrap require integrated proof. |
+| Exact-target agent actions | `browser_slots/page_actions.py`, `agent_control.py`; M2 first-tab and real-browser task tests | `tab_open` supplies a bounded first target; navigate, click, type, page_info and tabs_list remain exact-target. Real-Chromium synthetic qualification is pending the final M2 candidate run; useful real-site acceptance remains separate. |
 | Viewer | `viewer/session_surface.py`, `viewer/__init__.py` | Authenticated queue/control HTML exists; live video/streaming and human takeover remain missing product work. |
 | Broker authorization | `credential_capability.py`, `router/credential_broker_forwarder.py`, broker coordinator/nonce/idempotency/deadline modules | Post-remediation review and real-browser/site acceptance of replay, races, unknown outcomes and deadlines. |
 | Grant custody | `credential_broker/grant_custody.py`, `grant_admin.py`, `runtime.py`; M1 consent tests | Explicit durable consent and fresh exact-target authorization implemented. Employee self-service capture remains M3; independent security review and live acceptance remain open. |
@@ -70,10 +70,11 @@ See [ADR-0005](../../adr/0005-m1-personal-state-and-consent.md) and the
    custody, and click/type beyond older READMEs. It simultaneously invalidates
    the earlier images as evidence for current source. Neither direction may be
    inferred from old "shipped" headings.
-5. **Fresh-tab and useful page-state path.** Actions require an existing exact
-   target; enumeration filters non-HTTP(S) pages. Capture rejects page bodies
-   exceeding 4096 bytes. Validate fresh-browser usability and normal application
-   pages, then specify bounded discovery/observation as necessary.
+5. **Fresh-tab and useful page-state path — M2 source decision made.**
+   `tab_open` creates one bounded HTTP(S) target and returns its exact opaque ID.
+   A real-Chromium synthetic task covers open, type, click, page state, listing
+   and stale-target rejection. Capture still rejects page bodies exceeding 4096
+   bytes rather than truncating them; broader observation design remains open.
 6. **Development environment reproducibility.** Native crypto expects Linux
    library names, and the Authentik real-Chrome fixture pins a previous agent's
    absolute executable path. M0 must make the qualified test environment

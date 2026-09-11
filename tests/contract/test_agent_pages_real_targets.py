@@ -7,6 +7,7 @@ import threading
 from urllib.request import urlopen
 
 from cloudbrowser.browser_slots.browser_server import create_browser_server
+from cloudbrowser.browser_slots import BrowserBinding
 
 
 class _Chrome:
@@ -31,6 +32,7 @@ class _Chrome:
 
 class _Adapter:
     chrome = _Chrome()
+    binding = BrowserBinding("profile-owner", "owner", "slot-1", "g1")
 
     def readiness(self):
         return type("R", (), {"owner": "owner", "generation": "g1", "cdp_ok": True})()
@@ -57,7 +59,12 @@ def test_agent_pages_uses_exact_chrome_id_url_and_title() -> None:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        with urlopen(f"http://127.0.0.1:{server.server_address[1]}/agent/pages", timeout=3) as response:
+        from urllib.request import Request
+        request = Request(
+            f"http://127.0.0.1:{server.server_address[1]}/agent/pages",
+            headers={"X-CB-Principal": "owner", "X-CB-Generation": "g1"},
+        )
+        with urlopen(request, timeout=3) as response:
             body = json.loads(response.read())
         assert body == {
             "pages": [

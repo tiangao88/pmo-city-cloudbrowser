@@ -23,10 +23,13 @@ or process control.
   caller's own active session is bound to; forwarded to the slot supervisor over
   the trusted-secret channel.
 - `POST /v1/agent/<operation>` — relay one allowlisted page action
-  (`navigate`, `click`, `type`, `page_info`, `tabs_list`) to the caller's own
-  assigned slot's agent-control service. `navigate`, `click`, `type`, and
+  (`tab_open`, `navigate`, `click`, `type`, `page_info`, `tabs_list`) to the
+  caller's own assigned slot's agent-control service. `tab_open` accepts one
+  bounded HTTP(S) URL and returns the exact created target. `navigate`, `click`, `type`, and
   `page_info` require the exact `target_tab_id`; missing, unknown, or stale
-  targets fail closed. `tabs_list` returns bounded real target metadata. Forbidden operations
+  targets fail closed. The browser service rechecks principal and generation
+  under its serialized action gate, closing owner-rebind races. `tabs_list`
+  returns bounded real target metadata. Forbidden operations
   (`raw_cdp`, `evaluate`, `cookies`, `storage`, `network`, `filesystem`,
   `process`, `credential_material`, `password_values`) are refused locally;
   unknown operations return `operation_not_supported`. See

@@ -158,6 +158,16 @@ def create_browser_server(
         raise ValueError("monotonic_clock must be callable")
     lifecycle_gate = threading.RLock()
 
+    def require_agent_binding(handler: BaseHTTPRequestHandler) -> None:
+        binding = getattr(adapter, "binding", None)
+        from .lifecycle import BrowserBinding
+
+        if not isinstance(binding, BrowserBinding) or (
+            handler.headers.get("X-CB-Principal") != binding.principal_id
+            or handler.headers.get("X-CB-Generation") != binding.generation
+        ):
+            raise BrowserUnavailable("agent browser binding mismatch")
+
     def serialized_http_operation(operation: Callable) -> Callable:
         @wraps(operation)
         def guarded(handler: Any, *args: object, **kwargs: object) -> object:
@@ -198,6 +208,7 @@ def create_browser_server(
             try:
                 parsed = urlsplit(self.path)
                 if parsed.path == "/agent/pages/info":
+                    require_agent_binding(self)
                     query = parse_qs(parsed.query, keep_blank_values=True, strict_parsing=True, max_num_fields=2) if parsed.query else {}
                     if set(query) - {"target_tab_id", "selector"}:
                         raise ValueError("invalid page-info query")
@@ -217,6 +228,8 @@ def create_browser_server(
                     self._send_json(200, adapter.page_info(target_tab_id, selector))
                     return
                 if self.path in ("/browser/readiness", "/agent/readiness"):
+                    if self.path == "/agent/readiness":
+                        require_agent_binding(self)
                     ready = adapter.readiness()
                     healthy = process.readiness()
                     profile_id, browser_id = self._binding_identity()
@@ -252,6 +265,8 @@ def create_browser_server(
                     )
                     return
                 if self.path in ("/browser/pages", "/agent/pages"):
+                    if self.path == "/agent/pages":
+                        require_agent_binding(self)
                     if self.path == "/browser/pages":
                         self._send_json(200, {"urls": adapter.list_page_urls()})
                     else:
@@ -285,15 +300,29 @@ def create_browser_server(
                         adapter.stop()
                 elif self.path == "/browser/pages/open":
                     adapter.open_page(self._read_text())
+                elif self.path == "/agent/pages/open":
+                    require_agent_binding(self)
+                    payload = json.loads(self._read_text())
+                    if (
+                        not isinstance(payload, dict)
+                        or set(payload) != {"url"}
+                        or not isinstance(payload["url"], str)
+                    ):
+                        raise ValueError("tab-open payload is invalid")
+                    self._send_json(200, {"page": adapter.open_page(payload["url"])})
+                    return
                 elif self.path == "/browser/pages/close-empty":
                     adapter.close_empty_pages()
                 elif self.path == "/agent/pages/navigate":
+                    require_agent_binding(self)
                     target_tab_id, url = self._read_page_action_payload()
                     adapter.navigate(target_tab_id, url)
                 elif self.path == "/agent/pages/click":
+                    require_agent_binding(self)
                     target_tab_id, selector = self._read_page_action_payload()
                     adapter.click(target_tab_id, selector)
                 elif self.path == "/agent/pages/type":
+                    require_agent_binding(self)
                     target_tab_id, selector, text = self._read_page_type_payload()
                     adapter.type_text(target_tab_id, selector, text)
                 elif self.path.startswith("/broker/authentik/"):

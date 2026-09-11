@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 import pytest
 
 from cloudbrowser.browser_slots.browser_server import create_browser_server
+from cloudbrowser.browser_slots import BrowserBinding
 from cloudbrowser.browser_slots.transport import BrowserReadiness
 
 
@@ -92,8 +93,14 @@ class _Adapter:
         self.chrome = _Chrome(self.operation_entered["agent_pages"])
         self.owner = "principal-old"
         self.generation = "generation-old"
+        self.profile_id = "profile-old"
+        self.browser_id = "browser-1"
         self.blocked_operation: str | None = None
         self.release_blocked_operation = threading.Event()
+
+    @property
+    def binding(self):
+        return BrowserBinding(self.profile_id, self.owner, self.browser_id, self.generation)
 
     def start(self) -> bool:
         return self._process.start()
@@ -147,7 +154,8 @@ class _Adapter:
     ) -> None:
         self.owner = owner
         self.generation = generation
-        del profile_id, browser_id
+        self.profile_id = profile_id
+        self.browser_id = browser_id
 
     def _enter(self, operation: str) -> None:
         self.operation_entered[operation].set()
@@ -174,6 +182,11 @@ def _request(
     headers: dict[str, str] | None = None,
 ) -> tuple[int, object]:
     data = body.encode("utf-8") if body is not None else None
+    if path.startswith("/agent/") and headers is None:
+        headers = {
+            "X-CB-Principal": "principal-old",
+            "X-CB-Generation": "generation-old",
+        }
     request = Request(
         f"http://127.0.0.1:{server.server_port}{path}",
         data=data,
