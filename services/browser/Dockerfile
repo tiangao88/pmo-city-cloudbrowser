@@ -11,7 +11,7 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y chromium ca-certificates python3 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 cloudbrowser \
-    && mkdir -p /data/profile \
+    && mkdir -p /data/profile /data/downloads-browser \
     && chown -R cloudbrowser:cloudbrowser /app /data
 
 COPY src/ /app/src/
