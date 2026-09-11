@@ -231,6 +231,8 @@ def create_viewer_server(
     address: tuple[str, int] = ("127.0.0.1", 8082),
     allow_edge_identity: bool = False,
     session_surface: ViewerSessionSurface | None = None,
+    stream_authority=None,
+    public_origin: str | None = None,
 ) -> ThreadingHTTPServer:
     """Create the authenticated viewer shell; no CDP or profile routes exist.
 
@@ -248,6 +250,16 @@ def create_viewer_server(
 
     if session_surface is not None and allow_edge_identity is not True:
         raise ValueError("session_surface requires the authenticated edge mode")
+    if stream_authority is not None:
+        from urllib.parse import urlsplit
+
+        if not allow_edge_identity or not isinstance(public_origin, str):
+            raise ValueError("stream issuance requires authenticated edge and HTTPS origin")
+        origin = urlsplit(public_origin)
+        if (origin.scheme != "https" or not origin.hostname or origin.username
+                or origin.password or origin.path or origin.query or origin.fragment
+                or public_origin != f"https://{origin.netloc}"):
+            raise ValueError("stream issuance requires an exact HTTPS origin")
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - stdlib HTTP handler contract
@@ -450,6 +462,28 @@ def create_viewer_server(
             self._json(status, payload)
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib HTTP handler contract
+            if self.path == "/ui/viewer/session" and stream_authority is not None:
+                # This route never accepts bearer fallback, identity/binding JSON
+                # or cookies as proof of SSO. Only sanitized trusted-edge headers.
+                try:
+                    names = [name.lower() for name in self.headers.keys()]
+                    if (len(names) != len(set(names))
+                            or self.headers.get("Origin") != public_origin
+                            or self.headers.get("Content-Length", "0") != "0"
+                            or self.headers.get("Transfer-Encoding") is not None):
+                        raise PermissionError()
+                    session = stream_authority.issue_leased(trusted_headers=dict(self.headers.items()))
+                except Exception:
+                    self.close_connection = True
+                    self._json(403, {"ok": False, "error_code": "viewer_unavailable"})
+                    return
+                self.send_response(204)
+                self.send_header("Set-Cookie", "__Host-CBViewer=" + session.token
+                    + "; Path=/; Secure; HttpOnly; SameSite=Strict")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             if session_surface is not None and self.path == "/ui/session/join":
                 self._surface_call("join")
                 return

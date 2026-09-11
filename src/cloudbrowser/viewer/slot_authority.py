@@ -76,6 +76,19 @@ class SlotViewerAuthority:
             self._principal(trusted_headers)
             return self._viewer.open_session(self._current())
 
+    def issue_leased(self, *, trusted_headers):
+        """Public issuer seam: only a control-enabled, ready binding qualifies."""
+        with self._lock:
+            self._principal(trusted_headers)
+            binding = self._current()
+            self.require_lease(binding.request_id)
+            ready = self._readiness()
+            if (ready.owner, ready.generation, ready.cdp_ok) != (
+                binding.principal_id, binding.generation, True
+            ):
+                raise PermissionError("viewer unavailable")
+            return self._viewer.open_session(binding)
+
     def connect(self, *, trusted_headers, token, send_frame, close_transport):
         with self._lock:
             self._principal(trusted_headers)

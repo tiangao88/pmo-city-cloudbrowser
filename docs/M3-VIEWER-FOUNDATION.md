@@ -181,6 +181,26 @@ to the viewer. Scheduling cannot compensate for unbounded transport callbacks.
 Viewer-side SSO issuance, private endpoint startup, display cleanup, leadership
 and deployment qualification are still pending.
 
+## SSO-derived stream-cookie route
+
+`create_viewer_server` now optionally accepts the same `stream_authority` used
+by the private control endpoint/transport and an exact HTTPS `public_origin`.
+With authenticated-edge mode enabled, `POST /ui/viewer/session` accepts an empty
+body and that exact Origin. It resolves the trusted edge identity, requires the
+current leased owner and matching browser readiness, then returns 204 with a
+Secure, HttpOnly, SameSite=Strict, Path=/ `__Host-CBViewer` cookie. No token or
+binding is returned in JSON. Missing configuration leaves the route unavailable.
+Bearer fallback, caller binding JSON, duplicate headers, wrong Origin, expired
+leases and identity-service failures do not mint a cookie.
+
+Tests use synthetic identity resolution and HTTP loopback to inspect the cookie
+attributes; they do not prove real SSO login or browser cookie delivery over
+HTTPS. Runtime must wire the existing identity-link client, a trusted proxy that
+strips caller identity headers, private backend access, and the same authority
+into both issuance and WebSocket admission. The actual cookie-consuming transport
+and public viewer UI are not wired to this route yet. This route must never be
+exposed directly as a trusted-header authentication endpoint.
+
 ## Exit tests
 
 | Test | Evidence required |
