@@ -139,6 +139,18 @@ def test_wake_times_out_and_stops_browser(tmp_path: Path):
     assert value.lifecycle.state == BrowserState.STOPPED
 
 
+def test_native_profile_restore_does_not_reopen_slot_snapshot(tmp_path):
+    lifecycle = OwnerBoundLifecycle(BINDING, tmp_path / "tabs.json")
+    lifecycle.start(BINDING)
+    lifecycle.mark_ready(BINDING)
+    lifecycle.record_tabs(BINDING, ["https://example.test/a"])
+    lifecycle.stop(BINDING)
+    browser = FakeBrowser([BrowserReadiness(BINDING.principal_id, BINDING.generation, True)])
+    value = SlotSupervisor(lifecycle, browser, native_tab_restore=True)
+    assert value.wake(BINDING).status == "ready"
+    assert browser.opened == []
+
+
 def test_wake_fails_closed_when_owner_changes(tmp_path: Path):
     browser = FakeBrowser([BrowserReadiness(OTHER.principal_id, OTHER.generation, True)])
     value = supervisor(tmp_path, browser)

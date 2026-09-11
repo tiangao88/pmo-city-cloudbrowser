@@ -18,6 +18,8 @@ import cloudbrowser.browser_service as browser_service
 
 class FakeProcess:
     def __init__(self) -> None:
+        from types import SimpleNamespace
+        self.config = SimpleNamespace(owner="owner-test", profile_id="profile-test", browser_id="browser-test", generation="g1")
         self.started = False
         self.stopped = False
         self.watched = False
@@ -60,7 +62,7 @@ class FakeRegistry:
 
 def _install_fakes(monkeypatch):
     process, server, stop_event = FakeProcess(), FakeServer(), threading.Event()
-    monkeypatch.setattr(browser_service, "build_browser_service", lambda: (process, server, stop_event, FakeRegistry()))
+    monkeypatch.setattr(browser_service, "build_browser_service", lambda: (process, server, stop_event, browser_service.DownloadWatcherRegistry()))
     return process, server, stop_event
 
 
@@ -117,7 +119,7 @@ def test_browser_service_starts_and_stops_watcher_when_configured(monkeypatch, t
     process, server, _ = _install_fakes(monkeypatch)
     captured: dict[str, object] = {}
 
-    def fake_build():
+    def fake_build(binding=None):
         from cloudbrowser.cloudfiles.browser_downloads import (
             BrowserDownloadWatcher,
             DownloadWatchConfig,
@@ -130,7 +132,7 @@ def test_browser_service_starts_and_stops_watcher_when_configured(monkeypatch, t
         watcher = BrowserDownloadWatcher(
             DownloadWatchConfig(
                 download_dir=tmp_path / "downloads",
-                binding=PrincipalBinding(principal_id="owner@example.test"),
+                    binding=binding,
             ),
             submit=submit,
         )

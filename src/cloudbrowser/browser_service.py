@@ -39,6 +39,8 @@ def build_browser_service() -> tuple[
         service_port = int(os.environ.get("CB_PORT", "9230"))
     except ValueError as exc:
         raise SystemExit("browser ports must be integers") from exc
+    from cloudbrowser.browser_slots.browser_process import request_chromium_shutdown
+
     process = BrowserProcess(
         BrowserProcessConfig(
             executable=os.environ.get("CB_CHROME_EXECUTABLE", "/usr/bin/google-chrome"),
@@ -58,6 +60,7 @@ def build_browser_service() -> tuple[
             download_root=Path(download_dir) if download_dir else None,
         ),
         probe=lambda: chrome_version_is_ready(chrome.json_request("/json/version")),
+        graceful_shutdown=lambda: request_chromium_shutdown(chrome),
     )
     from cloudbrowser.browser_slots.page_actions import CdpPageActionAdapter, _WebSocket
 

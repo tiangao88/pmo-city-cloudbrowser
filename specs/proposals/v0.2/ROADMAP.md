@@ -1,6 +1,7 @@
 # CloudBrowser development roadmap
 
-Status: **proposed; awaiting Tigo's validation — 2026-09-11**.
+Status: **M1 development authorized by Tigo — 2026-09-11**.
+Later milestones remain the forward plan; this is not deployment authorization.
 Based on source `430a06603e8dff9531cc14042a01e38fff2b8874`.
 This is the proposed forward plan. [PRODUCT-PRD.md](PRODUCT-PRD.md) defines
 outcomes; [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md) records evidence.
@@ -25,7 +26,13 @@ depends on settled ownership and interaction contracts. M6 can move ahead of M5
 if the selected pilot sites require MFA or ordinary forms. This is a site-driven
 scope adjustment, not permission to bypass those requirements.
 
-## First development increment after validation
+## Development decisions and sequencing
+
+M1 is proceeding with stable owner storage and explicit durable consent under
+[ADR-0005](../../adr/0005-m1-personal-state-and-consent.md). The M0 Linux baseline
+is reproduced; its independent broker security review remains a release gate.
+M1 authorization does not waive that review. Employee self-service consent is
+M3; current M1 consent provisioning stays operator-controlled and offline.
 
 1. Reproduce and record the source gates; resolve machine-dependent test
    requirements without weakening assertions or hiding skips.

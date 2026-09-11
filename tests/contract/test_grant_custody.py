@@ -95,6 +95,28 @@ def _vault_transport():
     return transport
 
 
+def test_durable_consent_execution_uses_fresh_binding_and_rejects_stale_epoch(tmp_path):
+    from cloudbrowser.credential_broker.contracts import AuthorizationChanged
+
+    stable = GrantScope.consent(profile_id=scope().profile_id, principal_id=scope().principal_id, site_id=scope().site_id)
+    store = CustodyGrantStore(tmp_path / "consent.sqlite3", kek=KEK)
+    provision(store, stable)
+    fresh = scope(browser_id="slot-2", generation="g-new", target_tab_id="tab-new")
+    authorization = store.resolve(binding(fresh), fresh.site_id, fresh.target_tab_id)
+    fetcher = CustodyCredentialFetcher(store=store, base_url="https://fake.invalid", transport=_vault_transport())
+    seen = []
+    assert fetcher.run_authorized(authorization, lambda material: seen.append(material.username) or "submitted") == "submitted"
+    assert seen == ["alice@fake.invalid"]
+    provision(store, stable)
+    with pytest.raises(AuthorizationChanged):
+        fetcher.run_authorized(authorization, lambda material: seen.append("stale"))
+    current = store.resolve(binding(fresh), fresh.site_id, fresh.target_tab_id)
+    store.revoke(scope=stable, operator_id="operator")
+    with pytest.raises(GrantRevoked):
+        fetcher.run_authorized(current, lambda material: seen.append("revoked"))
+    assert seen == ["alice@fake.invalid"]
+
+
 def test_authorized_operation_sqlite_lock_wait_obeys_shared_deadline(tmp_path: Path) -> None:
     path = tmp_path / "grants.sqlite3"
     store = CustodyGrantStore(path, kek=KEK)

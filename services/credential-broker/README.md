@@ -128,9 +128,19 @@ Authentik qualification.
 
 ## Product continuity
 
-The current custody key includes the exact tab and browser generation. Safe
-reuse of user consent after those values change still requires a demonstrated
-reauthorization flow. Offline provisioning is an operator capability; employee
-self-service consent and complete restart/recovery acceptance remain roadmap
-work. See [implementation status](../../specs/proposals/v0.2/IMPLEMENTATION-STATUS.md)
-and the proposed [roadmap](../../specs/proposals/v0.2/ROADMAP.md).
+Existing `provision` grants retain their exact tab/browser/generation scope.
+The explicit `provision-consent`, `status-consent`, and `revoke-consent` commands
+use profile, principal and site without ephemeral binding arguments. They keep
+the same stdin-only custody-material contract and operator/audit requirements.
+Consent resolution produces a fresh exact-target authorization on each request;
+it does not bypass signed capabilities, current bindings or revocation epochs.
+
+Switching modes requires backup, revoking the prior active grants, and explicit
+reprovisioning with approval. Active exact grants and durable consent cannot
+coexist for the same owner/profile/site. There is no automatic widening or live
+migration. One selected account per site is supported. Revocation prevents new
+broker use; it does not log out an already authenticated application session.
+Employee self-service consent remains M3 work. See
+[ADR-0005](../../specs/adr/0005-m1-personal-state-and-consent.md),
+[implementation status](../../specs/proposals/v0.2/IMPLEMENTATION-STATUS.md), and
+the [roadmap](../../specs/proposals/v0.2/ROADMAP.md).

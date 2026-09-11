@@ -733,6 +733,7 @@ class CustodyGrantStore:
                 _scope_values(scope),
             ).fetchone()
             if row is None or int(row[1]) != 1:
+                exact_row = row
                 consent = GrantScope.consent(profile_id=scope.profile_id, principal_id=scope.principal_id, site_id=scope.site_id)
                 row = connection.execute(
                     "SELECT grant_id, active, browser_id, generation, epoch FROM grant_custody "
@@ -740,6 +741,8 @@ class CustodyGrantStore:
                     "AND target_tab_id = ? AND browser_id = ? AND generation = ?",
                     _scope_values(consent),
                 ).fetchone()
+                if row is None:
+                    row = exact_row
         if row is None:
             raise LookupError("grant unavailable")
         if int(row[1]) != 1:

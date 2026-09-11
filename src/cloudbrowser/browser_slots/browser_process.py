@@ -107,6 +107,7 @@ class BrowserProcess:
         probe: Callable[[], bool] | None = None,
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
+        graceful_shutdown: Callable[[], None] | None = None,
     ) -> None:
         self.config = self._owner_config(config)
         self._profile_lease: int | None = None
@@ -114,6 +115,7 @@ class BrowserProcess:
         self._probe = probe or (lambda: False)
         self._sleep = sleep
         self._monotonic = monotonic
+        self._graceful_shutdown = graceful_shutdown
         self._process: object | None = None
         self._state = "stopped"
         self._recovering = False
@@ -406,6 +408,14 @@ class BrowserProcess:
         terminate = getattr(process, "terminate", None)
         wait = getattr(process, "wait", None)
         kill = getattr(process, "kill", None)
+        if self._poll(process) is None and self._graceful_shutdown is not None and callable(wait):
+            try:
+                self._graceful_shutdown()
+                wait(timeout=self.config.stop_timeout_s)
+                return
+            except (BrowserUnavailable, OSError, ValueError, TimeoutError, subprocess.TimeoutExpired):
+                # Forced shutdown may leave a singleton requiring recovery.
+                pass
         if callable(terminate):
             terminate()
         if callable(wait):
@@ -440,6 +450,20 @@ class BrowserProcess:
                 marker.unlink(missing_ok=True)
             except OSError as exc:
                 raise BrowserProcessError("browser profile lock cleanup failed") from exc
+
+
+def request_chromium_shutdown(chrome: object) -> None:
+    """Private lifecycle-only CDP close: flush tabs/cookies before exit."""
+    from .page_actions import _WebSocket
+
+    version = chrome.json_request("/json/version")
+    if not chrome_version_is_ready(version):
+        raise BrowserProcessError("browser shutdown endpoint is unavailable")
+    websocket = _WebSocket(version["webSocketDebuggerUrl"], open_timeout_s=1.0, command_timeout_s=1.0)
+    try:
+        websocket.send(json.dumps({"id": 1, "method": "Browser.close", "params": {}}))
+    finally:
+        websocket.close()
 
 
 def chrome_version_is_ready(raw: object) -> bool:

@@ -15,6 +15,11 @@ starting Chromium. Hold it until the process stops; a second slot using the same
 shared volume fails closed. All slots in one installation must mount the same
 profile root for cross-slot continuity; separate installations must not share it.
 This single-host design relies on filesystem flock semantics, not NFS locking.
+An existing Chromium singleton marker blocks all pre-start mutation and is not
+automatically erased: a service crash can leave a live orphan browser. Recovery
+requires stopping the owner/slots and proving the marker stale before any
+separately authorized cleanup. Profile isolation is logical between trusted
+services, not a sandbox against a compromised same-UID container process.
 
 Reject owner-path symlinks. Existing unpartitioned profile data stays in place
 and is never automatically attributed to a user. Prior ambiguous data requires
@@ -53,6 +58,8 @@ idempotency, origin/account verification and pre/post live-binding checks remain
 mandatory. A durable consent row is never an agent capability or a reason to
 accept a stale browser request. Revocation/refresh rotation use the same row,
 epoch and transactional lock across all generations.
+Revocation blocks future broker credential use, not an application's existing
+authenticated cookies/session; application logout is a separate operation.
 
 ## Acceptance
 

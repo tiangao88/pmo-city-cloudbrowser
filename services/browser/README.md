@@ -14,7 +14,9 @@ evaluation.
 - `CB_CHROME_EXTRA_ARGS` — extra Chromium flags; the image default is
   `--headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage`
   (container-appropriate flags; overridable per deployment).
-- `CB_PROFILE_DIR` — absolute persistent profile path, default `/data/profile`.
+- `CB_PROFILE_DIR` — absolute persistent **owner storage root**, default `/data/profile`.
+  Production selects `owners-v1/<owner-key>` below it from principal and profile,
+  independent of the current slot, tab or generation.
 - `CB_PRINCIPAL_ID` and `CB_BINDING_GENERATION` — server-owned identity binding.
 - `CB_PORT` — restricted browser service port, default `9230`.
 
@@ -33,7 +35,16 @@ immutable images and the runtime/security acceptance matrix are still required
 before `installable: true`.
 
 The restricted service has separate broker-only Basic and Authentik channels;
-the normal agent API cannot call them. Profile path selection across an owner
-change is an outstanding integrated acceptance gate; owner metadata alone is
-not proof of profile isolation. See
+the normal agent API cannot call them. Owner selection and download attribution
+now use the same stable owner key. Chromium restores personal tabs natively;
+the production supervisor does not also reopen its slot snapshot. All slots in
+one installation must share the persistent profile and browser-download volumes.
+Exclusive filesystem leases prevent concurrent profile use on this single-host
+layout. An existing Chromium singleton marker blocks profile mutation/start and
+requires offline stale-lock verification; it is never deleted automatically.
+
+Old unpartitioned profiles/downloads remain untouched and are not adopted into
+any employee's namespace. Follow the separately authorized backup/ownership
+review in [ADR-0005](../../specs/adr/0005-m1-personal-state-and-consent.md).
+This source change does not migrate or deploy existing data. See
 [implementation status](../../specs/proposals/v0.2/IMPLEMENTATION-STATUS.md).

@@ -80,3 +80,17 @@ def test_consent_cli_has_no_ephemeral_binding_arguments(tmp_path):
     result = run(["provision-consent", *args], stdin=io.StringIO(doc), stdout=io.StringIO())
     assert result["status"] == "provisioned"
     assert run(["revoke-consent", *args], stdout=io.StringIO())["status"] == "revoked"
+
+
+def test_active_consent_cannot_gain_an_unrevoked_exact_alternative(tmp_path):
+    store = CustodyGrantStore(tmp_path / "custody.sqlite3", kek=KEK)
+    provision(store)
+    exact = GrantScope.from_binding(binding(), site_id="site-1", target_tab_id="tab-1")
+    with pytest.raises(ValueError):
+        store.provision(scope=exact, item_ref="test-item", vault_key=bytes.fromhex("22" * 64), refresh_token=b"fake-refresh", operator_id="operator")
+
+
+def test_consent_record_cannot_be_used_as_a_request_binding():
+    assert not consent().permits_request_scope(consent())
+    with pytest.raises(ValueError):
+        replace(consent(), target_tab_id="real-tab")

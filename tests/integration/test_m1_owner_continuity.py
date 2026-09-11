@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 import pytest
 
-from cloudbrowser.browser_slots.browser_process import BrowserProcess, BrowserProcessConfig
+from cloudbrowser.browser_slots.browser_process import BrowserProcess, BrowserProcessConfig, request_chromium_shutdown
 from cloudbrowser.browser_slots.chrome_adapter import ChromeHttpClient
 from cloudbrowser.browser_slots.page_actions import CdpPageActionAdapter
 
@@ -57,7 +57,7 @@ def test_real_owner_tabs_cookies_storage_survive_a_b_a_and_second_slot(tmp_path)
             http_port=port, owner=owner, profile_id="profile-" + owner,
             browser_id=slot, generation=generation,
             extra_args=("--headless=new", "--no-sandbox", "--disable-dev-shm-usage"),
-        ), probe=lambda: bool(chrome.json_request("/json/version")))
+        ), probe=lambda: bool(chrome.json_request("/json/version")), graceful_shutdown=lambda: request_chromium_shutdown(chrome))
         processes.append(process)
         process.start()
         return process, chrome, CdpPageActionAdapter(chrome)

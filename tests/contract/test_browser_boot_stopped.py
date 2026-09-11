@@ -28,6 +28,8 @@ import cloudbrowser.browser_service as browser_service
 
 class FakeProcess:
     def __init__(self) -> None:
+        from types import SimpleNamespace
+        self.config = SimpleNamespace(owner="owner-test", profile_id="profile-test", browser_id="browser-test", generation="g1")
         self.started = False
         self.stopped = False
         self.watched = False
