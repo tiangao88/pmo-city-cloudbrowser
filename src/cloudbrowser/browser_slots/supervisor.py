@@ -53,6 +53,7 @@ class SlotSupervisor:
         sleep: Callable[[float], None] = time.sleep,
         native_tab_restore: bool = False,
         viewer_fence: Callable[[BrowserBinding], None] | None = None,
+        viewer_enable: Callable[[BrowserBinding], None] | None = None,
     ) -> None:
         self._lifecycle = lifecycle
         self._transport = transport
@@ -61,6 +62,9 @@ class SlotSupervisor:
         self._native_tab_restore = native_tab_restore
         self._lifecycle_gate = threading.RLock()
         self._viewer_fence = viewer_fence
+        if viewer_enable is not None and viewer_fence is None:
+            raise ValueError("viewer enable requires fencing")
+        self._viewer_enable = viewer_enable
 
     def _fence_viewer(self, binding: BrowserBinding) -> None:
         if self._viewer_fence is not None:
@@ -126,6 +130,8 @@ class SlotSupervisor:
                 for url in urls:
                     self._transport.open_page(url)
             self._transport.close_empty_pages()
+            if self._viewer_enable is not None:
+                self._viewer_enable(binding)
             return OrchestrationResult("ready", self._lifecycle.state, urls)
         except (BrowserOwnershipChanged, BrowserUnavailable, LifecycleError):
             self._safe_stop(binding)

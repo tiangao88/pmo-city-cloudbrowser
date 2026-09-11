@@ -27,7 +27,7 @@ def rig():
     session = authority.issue(trusted_headers=HEADERS)
     live = authority.connect(trusted_headers=HEADERS, token=session.token,
         send_frame=lambda _: events.append("frame"), close_transport=lambda: events.append("close"))
-    server = create_fence_server(authority, shared_secret=SECRET)
+    server = create_fence_server(authority, shared_secret=SECRET, reset_display=lambda: events.append("reset"))
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
     url = f"http://127.0.0.1:{server.server_port}"
@@ -76,6 +76,36 @@ def test_retry_is_safe_but_old_binding_cannot_fence_new_owner(rig):
     authority.rebind(ViewerRequest("r2", "p", "bob", "b", "g2"), apply_binding=lambda: None)
     with pytest.raises(BrowserUnavailable):
         client(BINDING)
+
+
+def test_enable_over_http_requires_latest_fence_and_fresh_session(rig):
+    authority, old_live, events, url = rig
+    client = ViewerFenceClient(base_url=url, shared_secret=SECRET)
+    with pytest.raises(BrowserUnavailable):
+        client.enable(BINDING)
+    client(BINDING)
+    client.enable(BINDING)
+    client.enable(BINDING)
+    assert events == ["close", "reset"]
+    assert not old_live.forward_frame(b"stale")
+    assert authority.issue(trusted_headers=HEADERS)
+    another = ViewerFenceClient(base_url=url, shared_secret=SECRET)
+    another(BINDING)
+    with pytest.raises(BrowserUnavailable):
+        client.enable(BINDING)
+
+
+def test_supervisor_enables_only_after_ready_and_tab_cleanup(rig, tmp_path):
+    _, _, events, url = rig
+    lifecycle = OwnerBoundLifecycle(BINDING, tmp_path / "tabs.json")
+    browser = SimpleNamespace(start=lambda: events.append("start"),
+        readiness=lambda: BrowserReadiness("alice", "g1", True),
+        close_empty_pages=lambda: events.append("tabs-clean"),
+        open_page=lambda _: None)
+    client = ViewerFenceClient(base_url=url, shared_secret=SECRET)
+    supervisor = SlotSupervisor(lifecycle, browser, viewer_fence=client, viewer_enable=client.enable)
+    supervisor.wake(BINDING)
+    assert events == ["close", "start", "tabs-clean", "reset"]
 
 
 def test_unacknowledged_fence_leaves_lifecycle_unchanged(tmp_path):

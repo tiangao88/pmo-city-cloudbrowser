@@ -45,10 +45,21 @@ safe; a stale request against a new binding is rejected. Loopback HTTP tests
 verify close → stop → push ordering and failure paths.
 
 This RPC is deliberately not wired into `service_runtime` or Compose yet.
-It only disables viewer authority; it never publishes a new binding or resumes
-viewing. The remaining enable handshake must verify browser/display cleanup,
-readiness and the current supervisor/viewer incarnation before issuing new
-viewer sessions. All live-view-enabled deployments must make fencing mandatory;
+The follow-up enable endpoint now requires the latest process-local fence ticket,
+an explicit display-reset callback and matching browser readiness. A new fence
+or viewer-process restart invalidates earlier tickets. Exact enable retries are
+idempotent; different bindings cannot reuse the same completed ticket. A fresh
+viewer session epoch prevents old cookies becoming valid on same-generation
+resume. Cleanup/readiness failures leave admission disabled and require fencing
+again. The optional supervisor enable callback runs only after startup, matching
+readiness and tab restoration/cleanup.
+
+These are tested protocol seams, not production cleanup implementation. The
+display-reset callback still needs a real implementation and qualification.
+The existing already-READY fast path does not silently re-enable a restarted
+viewer; runtime reconciliation must explicitly obtain a fresh fence ticket.
+Supervisor incarnation/lease enforcement and real SSO session issuance remain
+required. All live-view-enabled deployments must make fencing mandatory;
 the optional port only preserves existing viewer-less behavior during this
 development stage. No image/release qualification is implied.
 

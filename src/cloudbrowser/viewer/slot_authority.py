@@ -108,3 +108,21 @@ class SlotViewerAuthority:
                     if getattr(self._binding, field) != getattr(expected, field):
                         raise PermissionError("viewer binding mismatch")
             self.rebind(None, apply_binding=lambda: None)
+
+    def publish_fenced(self, binding: ViewerRequest, *, reset_display):
+        """Internal enable seam: fresh session epoch after confirmed teardown.
+
+        A resumed browser may retain its generation, but request_id must be a
+        fresh control-plane epoch so pre-fence cookies never regain authority.
+        Caller must serialize this with fencing and never reuse an epoch.
+        """
+        with self._lock:
+            if self._binding is not None or self._teardown_failed:
+                raise PermissionError("viewer is not fenced")
+            reset_display()
+            ready = self._readiness()
+            if (ready.owner, ready.generation, ready.cdp_ok) != (
+                binding.principal_id, binding.generation, True
+            ):
+                raise PermissionError("viewer browser not ready")
+            self._binding = binding
