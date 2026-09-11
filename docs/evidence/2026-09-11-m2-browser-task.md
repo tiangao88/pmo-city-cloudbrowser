@@ -123,5 +123,21 @@ M2 does not establish:
 - employee self-service credential consent/revocation, owned by M3; or
 - the separate independent broker/security GO verdict.
 
-No user action is required to close the bounded M2 acceptance above. A manual
-viewer check is optional product feedback, not a release blocker.
+## Dashboard execution follow-up
+
+The user's dashboard test exposed an environment gap in the initial acceptance:
+the agent and dashboard containers share Hermes profiles but mount different
+`/opt/data` volumes. The bridge executable existed only in the agent container.
+The original CLI acceptance therefore did not establish dashboard execution.
+
+The repair places the qualified standalone bridge in the shared test profile at
+`runtimes/cloudbrowser-77b7896044262aaf/hermes_mcp.py`, executed with
+`/usr/bin/python3`. The original profile configuration was backed up and its
+authentication references were preserved. Both containers subsequently passed
+MCP connection and discovery of all eight tools.
+
+A model-driven one-shot inside the dashboard container then passed start,
+opening Example Domain, listing the created tab and inspecting that exact tab's
+title and URL. This verifies the dashboard container's execution environment;
+the user should select `cloudbrowser-test` and start a fresh dashboard chat to
+load the repaired tools. The default profile has no CloudBrowser registration.
