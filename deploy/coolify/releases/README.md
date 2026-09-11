@@ -6,18 +6,16 @@ its images are pinned, health checks exist, migration/rollback are tested, and
 its security gates pass.
 
 The `v0.1.0` directory is a deliberately non-installable migration marker.
-The current Coolify image bundle still uses the prior published digest pins;
-this working tree is a pre-build source/spec checkpoint, so those pins are
-retained for provenance only and are not evidence for the current source. The
-release manifest is intentionally `status: pre-build-not-installable` with
-`installable: false`, `sourceState: pending-build`, and
-`imageState: stale-pre-change`.
+The current Coolify image bundle uses the nine immutable digests built from
+commit `ce0ef5d` in CI run `34594208145`. The workflow passed the full source
+gate and qualified every published image's non-root user, healthcheck, startup,
+runtime endpoint and provenance/SBOM metadata. The manifest is therefore
+`status: image-qualified-ready-for-deployment` with `installable: true`,
+`sourceState: qualified`, and `imageState: qualified`.
 
-The sequence remains: commit the source/spec change, have the user/operator
-trigger the approved GitHub Actions build from that commit, verify
-provenance/SBOM, synchronize the immutable digests in a separate release
-change, and run the provenance/full gates. Deployment and live qualification
-require separate approval after those steps.
+Future source changes must repeat the same build, qualification, immutable-pin
+synchronization and full-gate sequence. Deployment and live qualification are
+recorded separately from image qualification.
 
 ## Grant custody state lifecycle
 

@@ -22,13 +22,10 @@ customer data, or raw browser state in these records. The public downloads
 route remains `cloudfiles2.dev01.pmo.city`; routing and live qualification are
 step 19 / Phase 6, not step 17.
 
-All nine records retain `status: passed` evidence from prior qualification run
-`34402569940` at commit
-`50ce1984448ddf79621d4114f81c6a2b2b83d5fa`, including `cloudfiles` and
-`identity-link`. Those records and their immutable digests prove only that
-prior source state; they do not qualify the current source and must not be used
-to mark the current release installable. After the current commit is built, CI
-must publish every image, verify provenance/SBOM and runtime health, replace all
-retained digests and provenance atomically, and rerun the gates. Step 19 / Phase
-6 still covers deployment and runtime/security qualification and requires
-separate approval.
+All nine records contain `status: passed` evidence from qualification run
+`34594208145` at commit
+`ce0ef5df54eda344692d17498cbbb297fe2161fb`, including `cloudfiles` and
+`identity-link`. CI published every image, verified provenance/SBOM and runtime
+health, and the release change synchronized all digests and provenance
+atomically. Step 19 / Phase 6 still covers deployment and runtime/security
+qualification as a separate outcome.

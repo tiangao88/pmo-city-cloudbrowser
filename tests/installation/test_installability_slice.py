@@ -29,14 +29,14 @@ def test_compose_defines_real_services_with_health_and_instance_isolation():
     assert "scripts:/app" not in compose
 
 
-def test_release_preview_is_explicitly_gated_until_images_are_published():
+def test_release_is_explicitly_image_qualified():
     manifest = (
         ROOT / "deploy" / "coolify" / "releases" / "v0.2.0-dev1" / "release-manifest.yaml"
     ).read_text(encoding="utf-8")
     assert "productVersion: 0.2.0-dev1" in manifest
-    assert "installable: false" in manifest
-    assert "status: pre-build-not-installable" in manifest
-    assert "sourceState: pending-build" in manifest
-    assert "imageState: stale-pre-change" in manifest
+    assert "installable: true" in manifest
+    assert "status: image-qualified-ready-for-deployment" in manifest
+    assert "sourceState: qualified" in manifest
+    assert "imageState: qualified" in manifest
     assert "image publication" not in manifest
     assert "rollbackSupported: true" in manifest

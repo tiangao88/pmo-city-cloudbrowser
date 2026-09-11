@@ -73,7 +73,7 @@ source results, not an image, deployment, real-site or employee acceptance.
 | Basic and Authentik | Broker adapters, `browser_slots/basic_auth.py`, `authentik.py`; real-CDP and fixture tests | Synthetic current-source exact-origin/application-account checks passed. Current-source image and approved live-site proof remain open; Authentik detects MFA but has no production TOTP/code submission. |
 | Ordinary form and MFA | Form/TOTP/handoff components/tests exist | Production form mode is disabled; 3 historical form integration tests intentionally skipped. Production TOTP submission and human one-time-code handoff are unavailable. |
 | CloudFiles | `cloudfiles/`, `downloads/`, browser ingest, identity service, Compose wiring and E2E tests | Requalify actual browser → scan/store → public gateway → local attachment with current images, persistence and two owners. |
-| Release | `deploy/coolify/releases/v0.2.0-dev1/release-manifest.yaml` | `installable: false`, `sourceState: pending-build`, `imageState: stale-pre-change`. Nine retained digests qualify `50ce198`, workflow run `34402569940`, not this source. |
+| Release | `deploy/coolify/releases/v0.2.0-dev1/release-manifest.yaml` | `installable: true`, `sourceState: qualified`, `imageState: qualified`. Nine immutable digests qualify `ce0ef5d`, workflow run `34594208145`; live deployment and user acceptance are recorded separately. |
 
 ## Product/implementation mismatches requiring decisions
 

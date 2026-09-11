@@ -61,11 +61,10 @@ is M3; current consent provisioning stays operator-controlled and offline.
 
 ## Release and deployment policy
 
-The current manifest is pre-build and not installable. Prior image pins qualify
-`50ce198`, not the current source. Local image builds and fixture qualification
-may occur during earlier milestones; a deployable release is assembled only
-from the reviewed source with all nine service digests, qualification records,
-and provenance tests synchronized in one release change.
+The current manifest is image-qualified and installable. All nine image pins,
+qualification records and provenance tests are synchronized to commit
+`ce0ef5d` and CI run `34594208145`. Live deployment and user acceptance remain
+separate outcomes from image qualification.
 
 A user/operator or an authorized agent may trigger the build workflow. Token
 budgets from previous tasks are not an enduring operational restriction.

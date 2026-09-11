@@ -23,11 +23,11 @@ def _provenance(manifest: str) -> tuple[str, str]:
     return run_match.group(1), commit_match.group(1)
 
 
-def test_manifest_retains_prior_qualification_provenance() -> None:
+def test_manifest_records_current_qualification_provenance() -> None:
     manifest = MANIFEST.read_text(encoding="utf-8")
     run_url, commit = _provenance(manifest)
-    assert run_url.endswith("/actions/runs/34402569940")
-    assert commit == "50ce1984448ddf79621d4114f81c6a2b2b83d5fa"
+    assert run_url.endswith("/actions/runs/34594208145")
+    assert commit == "ce0ef5df54eda344692d17498cbbb297fe2161fb"
     assert "QUALIFICATION_RUN_REQUIRED" not in manifest
     assert "QUALIFICATION_COMMIT_REQUIRED" not in manifest
 

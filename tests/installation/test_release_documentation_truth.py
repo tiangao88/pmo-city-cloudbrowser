@@ -4,18 +4,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_root_readme_matches_prebuild_release_and_disabled_form_mode() -> None:
+def test_root_readme_matches_qualified_release_and_disabled_form_mode() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     normalized = " ".join(readme.split()).lower()
 
     for stale_claim in (
         "controlled ordinary form adapter",
-        "digest-pinned, installable manifest",
-        "release is now digest-pinned and installable",
+        "pre-build and not installable",
     ):
         assert stale_claim not in normalized
     assert "production form mode is disabled" in normalized
-    assert "pre-build and not installable" in normalized
+    assert "image-qualified and installable" in normalized
 
 
 def test_coolify_guide_uses_current_cloudfiles_and_digest_pinned_contract() -> None:
@@ -26,12 +25,12 @@ def test_coolify_guide_uses_current_cloudfiles_and_digest_pinned_contract() -> N
         "pins the published dev\nimages (`ghcr.io/tiangao88/pmo-city-cloudbrowser/<service>:v0.2.0-dev1`)",
         "The downloads service is fronted at `cloudfiles2.dev01.pmo.city`",
         "cloudbrowser2-downloads",
-        "`installable: true`",
+        "pre-build and not installable",
     ):
         assert stale_claim not in guide
     assert "cloudbrowser2-cloudfiles" in guide
     assert "immutable image digests" in guide
-    assert "pre-build and not installable" in guide
+    assert "release manifest is installable" in guide
     assert "--env-file deploy/coolify/.env" in guide
 
 
@@ -50,13 +49,13 @@ def test_source_compose_env_example_assigns_every_required_input() -> None:
     assert required <= assigned
 
 
-def test_qualification_index_marks_all_retained_records_stale_for_current_source() -> None:
+def test_qualification_index_names_the_current_source_and_run() -> None:
     index = (ROOT / "deploy/coolify/image-qualification/README.md").read_text(
         encoding="utf-8"
     )
     normalized = " ".join(index.split())
 
     assert "remain `status: pending`" not in normalized
-    assert "prior qualification run `34402569940`" in normalized
-    assert "commit `50ce1984448ddf79621d4114f81c6a2b2b83d5fa`" in normalized
-    assert "do not qualify the current source" in normalized
+    assert "qualification run `34594208145`" in normalized
+    assert "commit `ce0ef5df54eda344692d17498cbbb297fe2161fb`" in normalized
+    assert "synchronized all digests and provenance atomically" in normalized

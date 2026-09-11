@@ -38,19 +38,19 @@ def _provenance(manifest: str) -> tuple[str, str]:
     return run_match.group(1), commit_match.group(1)
 
 
-def test_release_manifest_marks_the_current_source_as_pre_build() -> None:
+def test_release_manifest_marks_the_current_source_as_image_qualified() -> None:
     manifest = _manifest()
     assert "productVersion: 0.2.0-dev1" in manifest
     assert "specificationBaseline: v0.2.0" in manifest
-    assert "status: pre-build-not-installable" in manifest
-    assert "installable: false" in manifest
-    assert "sourceState: pending-build" in manifest
-    assert "imageState: stale-pre-change" in manifest
+    assert "status: image-qualified-ready-for-deployment" in manifest
+    assert "installable: true" in manifest
+    assert "sourceState: qualified" in manifest
+    assert "imageState: qualified" in manifest
     assert "identityLink: 0.2.0-dev1" in manifest
     assert re.search(r"identityLink: sha256:[0-9a-f]{64}", manifest)
 
 
-def test_prior_qualification_records_are_present_and_match_manifest() -> None:
+def test_qualification_records_are_present_and_match_manifest() -> None:
     manifest = _manifest()
     run_url, commit = _provenance(manifest)
     for service, component in SERVICES:

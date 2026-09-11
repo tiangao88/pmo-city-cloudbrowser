@@ -23,9 +23,8 @@ For Coolify deployment, `compose.coolify.yaml` is the image-based variant.
 Coolify API-created compose services cannot clone the private repository to
 satisfy `build:` contexts, so this variant uses immutable image digests and
 keeps the same environment, healthcheck, volume, and network wiring. The
-current retained digests qualify only the prior source commit; the release
-manifest remains pre-build and not installable until a new image build and
-digest/provenance synchronization complete.
+current digests qualify commit `ce0ef5d` in CI run `34594208145`; the release
+manifest and qualification records are synchronized to those immutable pins.
 
 ## Public CloudFiles host
 
@@ -86,9 +85,8 @@ headers or accesses `downloads` directly.
 The `browser-overlay.yaml` was folded into the main compose when the browser
 service was added (step 11) and is retained only as a historical reference.
 
-The dev staging service on Coolify remains a Step 19 runtime-qualification
-target, not a qualified release. The release manifest is pre-build and not
-installable because its image digests and qualification records describe the
-prior source commit. A new build, provenance/SBOM review, digest synchronization,
-and green repository gates are required before deployment can be proposed;
-actual deployment and runtime/security acceptance require separate approval.
+The dev staging service on Coolify remains the Step 19 runtime-qualification
+target. The release manifest is installable: its nine immutable image digests
+and qualification records describe source commit `ce0ef5d`, built and qualified
+in CI run `34594208145`. Deployment and runtime/security acceptance remain
+separate recorded outcomes.

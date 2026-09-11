@@ -103,11 +103,11 @@ def main() -> None:
     manifest = (ROOT / "deploy/coolify/releases/v0.2.0-dev1/release-manifest.yaml").read_text(
         encoding="utf-8"
     )
-    if "installable: false" not in manifest:
-        fail("pre-build release must not be installable")
-    if "status: pre-build-not-installable" not in manifest:
-        fail("release manifest is missing pre-build status")
-    for marker in ("sourceState: pending-build", "imageState: stale-pre-change"):
+    if "installable: true" not in manifest:
+        fail("qualified release must be installable")
+    if "status: image-qualified-ready-for-deployment" not in manifest:
+        fail("release manifest is missing image-qualified status")
+    for marker in ("sourceState: qualified", "imageState: qualified"):
         if marker not in manifest:
             fail(f"release manifest is missing {marker}")
     if "identityLink" not in manifest:

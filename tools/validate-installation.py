@@ -76,10 +76,10 @@ def main() -> None:
         "specificationBaseline: v0.2.0",
         "qualification:",
         "rollbackSupported: true",
-        "status: pre-build-not-installable",
-        "installable: false",
-        "sourceState: pending-build",
-        "imageState: stale-pre-change",
+        "status: image-qualified-ready-for-deployment",
+        "installable: true",
+        "sourceState: qualified",
+        "imageState: qualified",
     ):
         if marker not in manifest:
             fail(f"release manifest missing {marker}")

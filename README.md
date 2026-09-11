@@ -33,9 +33,10 @@ browser stream/takeover, interactive Hermes OIDC renewal and hosted user
 acceptance remain open. The independent M0 broker/security verdict also remains
 a release gate.
 
-The current release manifest is pre-build and not installable. Retained image
-digests qualify earlier source; they must be rebuilt/qualified and synchronized
-before a deployment decision. Local tests do not establish live qualification.
+The current release manifest is image-qualified and installable. Its nine
+immutable image digests qualify source commit `ce0ef5d` in CI run
+`34594208145`. Image qualification does not by itself establish live user
+acceptance.
 
 ## Product boundaries
 
