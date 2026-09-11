@@ -52,6 +52,7 @@ class SlotSupervisor:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
         native_tab_restore: bool = False,
+        viewer_fence: Callable[[BrowserBinding], None] | None = None,
     ) -> None:
         self._lifecycle = lifecycle
         self._transport = transport
@@ -59,6 +60,11 @@ class SlotSupervisor:
         self._sleep = sleep
         self._native_tab_restore = native_tab_restore
         self._lifecycle_gate = threading.RLock()
+        self._viewer_fence = viewer_fence
+
+    def _fence_viewer(self, binding: BrowserBinding) -> None:
+        if self._viewer_fence is not None:
+            self._viewer_fence(binding)
 
     @property
     def lifecycle(self) -> OwnerBoundLifecycle:
@@ -103,11 +109,13 @@ class SlotSupervisor:
             # server-minted binding while stopped, then restart below. Keep the
             # lifecycle READY until both operations succeed so a transient
             # transport failure remains retryable through this same branch.
+            self._fence_viewer(binding)
             self._transport.stop()
             push = getattr(self._transport, "push_binding", None)
             if push is not None:
                 push(binding)
             self._lifecycle.stop(binding)
+        self._fence_viewer(self._lifecycle.binding)
         self._lifecycle.start(binding)
         try:
             self._transport.start()
@@ -130,6 +138,7 @@ class SlotSupervisor:
     def suspend(self, binding: BrowserBinding) -> OrchestrationResult:
         """Capture current page URLs, then stop the browser cleanly."""
         self._require_transport_owner(binding)
+        self._fence_viewer(binding)
         urls = self._transport.list_page_urls()
         captured = self._lifecycle.record_tabs(binding, urls)
         self._transport.stop()
@@ -140,6 +149,7 @@ class SlotSupervisor:
     def stop(self, binding: BrowserBinding) -> OrchestrationResult:
         """Stop the browser without accepting a different owner binding."""
         self._require_transport_owner(binding)
+        self._fence_viewer(binding)
         self._transport.stop()
         snapshot = self._lifecycle.stop(binding)
         return OrchestrationResult("stopped", snapshot.state)
@@ -162,6 +172,7 @@ class SlotSupervisor:
         current = self._lifecycle.binding
         if binding.browser_id != current.browser_id:
             raise ValueError("binding names a different browser slot")
+        self._fence_viewer(current)
         if self._lifecycle.state is not BrowserState.STOPPED:
             # Order matters: stop the browser first, then the lifecycle, so
             # a refused stop leaves the previous owner untouched.
@@ -215,6 +226,7 @@ class SlotSupervisor:
             raise BrowserOwnershipChanged("browser owner or generation changed")
 
     def _safe_stop(self, binding: BrowserBinding) -> None:
+        self._fence_viewer(binding)
         try:
             self._transport.stop()
         finally:

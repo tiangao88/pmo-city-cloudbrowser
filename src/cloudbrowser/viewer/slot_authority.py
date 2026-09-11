@@ -95,3 +95,16 @@ class SlotViewerAuthority:
                 raise RuntimeError("viewer transport teardown failed")
             apply_binding()
             self._binding = binding
+
+    def fence(self, expected):
+        """Private control-plane operation: acknowledge only after teardown.
+
+        Retries while already fenced are harmless. A stale request must never
+        fence a different, newly admitted binding.
+        """
+        with self._lock:
+            if self._binding is not None:
+                for field in ("profile_id", "principal_id", "browser_id", "generation"):
+                    if getattr(self._binding, field) != getattr(expected, field):
+                        raise PermissionError("viewer binding mismatch")
+            self.rebind(None, apply_binding=lambda: None)

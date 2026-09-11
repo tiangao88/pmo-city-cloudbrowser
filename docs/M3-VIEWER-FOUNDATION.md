@@ -35,6 +35,23 @@ revocation. Trusted gateway wiring, cookie issuance, active-session expiry
 propagation, display cleanup and cross-process transition qualification remain
 required. Never deploy the fixture resolver as the real session issuer.
 
+The private fencing RPC (`viewer/fence_control.py`) and optional supervisor
+`viewer_fence` port now implement the disable/acknowledge half of cross-service
+coordination. The client requires a fresh nonce echoed in a bounded successful
+response; errors and timeouts raise before supervisor mutation. The endpoint
+authenticates a dedicated service secret, closes existing connections under
+the authority lock, then acknowledges. Repeated fencing while disabled is
+safe; a stale request against a new binding is rejected. Loopback HTTP tests
+verify close → stop → push ordering and failure paths.
+
+This RPC is deliberately not wired into `service_runtime` or Compose yet.
+It only disables viewer authority; it never publishes a new binding or resumes
+viewing. The remaining enable handshake must verify browser/display cleanup,
+readiness and the current supervisor/viewer incarnation before issuing new
+viewer sessions. All live-view-enabled deployments must make fencing mandatory;
+the optional port only preserves existing viewer-less behavior during this
+development stage. No image/release qualification is implied.
+
 ## Outcome
 
 After signing in to CloudBrowser, the employee sees the same Chromium instance
