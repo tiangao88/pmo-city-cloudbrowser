@@ -6,7 +6,7 @@ Tigo authorized M2 implementation after M1. Development used the standalone
 Mac checkout on branch `feat/m2-first-browser-task`; committed Git bundles
 transferred exact revisions to the separate Linux qualification checkout.
 
-Final tested source: `ae5b51262960358d11c92f0ec2e257bb4f197dc8`.
+Final tested source: `13c0414977d5b6f71a11b10ac94256af20c697db`.
 This evidence file and status links are a later documentation-only commit.
 
 No GitHub push/merge, image publication, live CloudBrowser deployment,
@@ -31,7 +31,7 @@ no CloudBrowser credential and its MCP server remains disabled.
 
 At the final tested source:
 
-- `uv run make check`: **1066 passed, 3 skipped**, 162.22 seconds. All six
+- `uv run make check`: **1066 passed, 3 skipped**, 157.34 seconds. All six
   specification, sensitive-file, release-manifest, installation, image-input
   and image-workflow validators passed. Real-Chromium and Compose checks ran.
 - The only skips are the three deliberately disabled ordinary-form integration
@@ -43,6 +43,14 @@ At the final tested source:
   discovered all eight tools: **PASS**.
 - Local and Linux MCP contract/security suite: **20 passed**. All six validators,
   compileall and `git diff --check` also passed on the Mac candidate.
+
+The first GitHub Actions publication attempt, run `34593503855`, stopped in
+validation before building images because an incomplete OpenSSL `ctypes`
+signature caused a Python 3.12 RSA test segmentation fault. Commit `13c0414`
+declares the pointer-bearing RSA functions before their first call and uses the
+correct C `long` type for the DER length. The Linux qualification then passed
+the complete crypto suite, five additional RSA repetitions, all validators and
+the full gate above. No image from the failed run was published or deployed.
 
 The first-tab contract/security tests were run before implementation and failed
 as expected. The first Linux browser candidate then found an incorrect expected
