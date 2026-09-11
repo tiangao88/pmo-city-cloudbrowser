@@ -2,6 +2,9 @@
 
 Status: **M1 development authorized by Tigo — 2026-09-11**.
 Later milestones remain the forward plan; this is not deployment authorization.
+M1 source implementation and automated qualification are complete; see
+[evidence](../../../docs/evidence/2026-09-11-m1-continuity.md). Independent
+security approval, image qualification and live acceptance remain separate gates.
 Based on source `430a06603e8dff9531cc14042a01e38fff2b8874`.
 This is the proposed forward plan. [PRODUCT-PRD.md](PRODUCT-PRD.md) defines
 outcomes; [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md) records evidence.

@@ -31,8 +31,10 @@ exact grants are not widened automatically.
 
 The synthetic real-Chromium A → B → A / second-slot test proves tabs, application
 cookies, local storage and downloads without transferring Alice's state to Bob.
-Focused Linux continuity/custody tests pass. Full qualification results will be
-recorded in the dated M1 evidence; these are source results, not live acceptance.
+Final Linux qualification at `37e50c6`: **1030 passed, 3 intentionally disabled
+form cases skipped**; all six validators and **80 CloudFiles boundary cases**
+passed. See [M1 evidence](../../../docs/evidence/2026-09-11-m1-continuity.md).
+These are source results, not live acceptance.
 See [ADR-0005](../../adr/0005-m1-personal-state-and-consent.md) and the
 [migration/recovery checklist](../../../docs/M1-MIGRATION.md).
 
