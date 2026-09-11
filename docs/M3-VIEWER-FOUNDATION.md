@@ -213,6 +213,16 @@ real proxy/SSO verification, owner-switch cleanup and takeover are still pending
 
 ## Acceptance matrix
 
+The separate `experiments/novnc/owner_switch.py` proof now passes A → B → A with
+real Chromium/Xvfb/x11vnc: acknowledged fence, old stream closure, complete
+process teardown, fresh X display/profile, then enable. Actual VNC framebuffer
+samples contain the current owner's synthetic colour and none of the other
+owner's colour. Old cookies are rejected. This establishes a tested reset
+sequence, not production integration: it bypasses the HTTPS gateway, uses fresh
+profiles and samples frames rather than proving every delayed-frame race.
+Production process ownership and negative failure/timeout qualification remain
+required before marking owner isolation complete.
+
 | Test | Evidence required |
 | --- | --- |
 | Same browser | Hermes opens a synthetic page; employee sees that exact tab and a shared state change. |

@@ -40,6 +40,41 @@ noVNC viewOnly is not authorization. Do not test application credentials here.
 
 ## Read-only adapter increment — 2026-09-11
 
+### A/B/A full-display reset proof
+
+Run separately (no published ports or mounted profiles):
+
+```sh
+docker run --rm --name cloudbrowser-owner-switch --init --shm-size=256m --memory=1g --cpus=2 --entrypoint python3 cloudbrowser-novnc-spike:local /app/experiment/owner_switch.py
+```
+
+`owner_switch.py` exercises the real private fence/enable RPC and authority,
+Chromium, Xvfb and x11vnc. It first waits for fencing acknowledgement, verifies
+the previous registered stream is closed, stops Chromium/VNC/Xvfb, then starts
+a fresh display and scratch profile. Only after the page and VNC are ready does
+it enable admission for the next owner. Old cookies fail on each transition.
+
+Observed on the local aarch64 Docker runtime using image
+`sha256:65900a4e63f9ff1a13c057cb26ae436ab15af94d43522f301636c75d3ae7d767`:
+
+| Round | Owner | Matching background pixels | Other-owner background pixels |
+| --- | --- | ---: | ---: |
+| 1 | Alice | 883669 | 0 |
+| 2 | Bob | 883714 | 0 |
+| 3 | Alice | 883575 | 0 |
+
+Pixels are read from actual raw VNC framebuffer updates (unused XRGB padding
+is ignored). Three different display PIDs were observed. This samples the first
+full framebuffer after each new page paints; it is not a continuous delayed-frame
+race proof. The test uses fresh profiles even when Alice returns, so it does not
+qualify profile restoration. It registers the raw VNC connection with the same
+authority but does not exercise the HTTPS gateway across these switches.
+
+The existing interactive fixed-owner harness is unchanged. Production needs
+this full reset sequence integrated into browser/display process ownership;
+restarting x11vnc alone remains insufficient. No live SSO, Vaultwarden, existing
+user profiles or deployed containers participate in this test.
+
 ### Unified HTTPS experiment (latest)
 
 One authority now serves the real cookie-issuance route, private fence/enable/
