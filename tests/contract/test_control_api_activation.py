@@ -33,21 +33,28 @@ class FakeTransport:
 
     def __init__(self) -> None:
         self.started = False
+        self.start_count = 0
+        self.stop_count = 0
         self.pushed: BrowserBinding | None = None
+        self.reported_binding: BrowserBinding | None = None
 
     def _binding(self) -> BrowserBinding:
         return self._supervisor_ref.lifecycle.binding  # type: ignore[attr-defined]
 
     def start(self) -> None:
         self.started = True
+        self.start_count += 1
 
     def stop(self) -> None:
         self.started = False
+        self.stop_count += 1
 
     def readiness(self) -> BrowserReadiness:
-        binding = self._binding()
+        binding = self.reported_binding or self._binding()
         return BrowserReadiness(
-            owner=binding.principal_id, generation=binding.generation, cdp_ok=True
+            owner=binding.principal_id,
+            generation=binding.generation,
+            cdp_ok=self.started,
         )
 
     def list_page_urls(self) -> list[str]:
@@ -61,6 +68,7 @@ class FakeTransport:
 
     def push_binding(self, binding: BrowserBinding) -> None:
         self.pushed = binding
+        self.reported_binding = binding
 
 
 class _AnnnotatedTransport(FakeTransport):
@@ -148,6 +156,35 @@ def test_rewake_with_minted_binding_after_adopt_is_idempotent(tmp_path):
     assert second["status"] == "ready"
     assert second["state"] == "ready"
     assert supervisor.lifecycle.binding == minted
+
+
+def test_rewake_recovers_when_browser_container_restarts_but_supervisor_survives(tmp_path):
+    api, supervisor, pinned = _stack(tmp_path)
+    transport = supervisor._transport
+    assert isinstance(transport, FakeTransport)
+    assert api.handle(ControlRequest(operation="wake", request_id="req-1", binding=pinned))[
+        "status"
+    ] == "ready"
+
+    # A browser-only container restart loses its process and runtime binding;
+    # the separate supervisor container still remembers READY for this owner.
+    transport.started = False
+    transport.reported_binding = BrowserBinding(
+        profile_id="profile-unassigned",
+        principal_id="principal-unassigned",
+        browser_id="browser-1",
+        generation="generation-0",
+    )
+
+    recovered = api.handle(
+        ControlRequest(operation="wake", request_id="req-2", binding=pinned)
+    )
+
+    assert recovered["status"] == "ready"
+    assert supervisor.lifecycle.state.value == "ready"
+    assert transport.pushed == pinned
+    assert transport.start_count == 2
+    assert transport.stop_count == 1
 
 
 def test_adopt_takes_over_slot_left_running_by_previous_session(tmp_path):

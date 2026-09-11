@@ -83,9 +83,31 @@ class SlotSupervisor:
             self._lifecycle.state is BrowserState.READY
             and self._lifecycle.binding == binding
         ):
-            self._wait_ready(binding, timeout_s=timeout_s, poll_s=poll_s)
-            urls = self._lifecycle.load_tabs(binding)
-            return OrchestrationResult("ready", self._lifecycle.state, urls)
+            try:
+                readiness = self._transport.readiness()
+            except BrowserUnavailable:
+                readiness = None
+            if (
+                readiness is not None
+                and readiness.owner == binding.principal_id
+                and readiness.generation == binding.generation
+                and readiness.cdp_ok
+            ):
+                urls = self._lifecycle.load_tabs(binding)
+                return OrchestrationResult("ready", self._lifecycle.state, urls)
+
+            # The supervisor can outlive a restarted browser container. Its
+            # in-memory lifecycle then remains READY while the browser process
+            # and runtime binding return to their stopped boot values. Stop is
+            # idempotent at the browser boundary; push the authoritative
+            # server-minted binding while stopped, then restart below. Keep the
+            # lifecycle READY until both operations succeed so a transient
+            # transport failure remains retryable through this same branch.
+            self._transport.stop()
+            push = getattr(self._transport, "push_binding", None)
+            if push is not None:
+                push(binding)
+            self._lifecycle.stop(binding)
         self._lifecycle.start(binding)
         try:
             self._transport.start()
