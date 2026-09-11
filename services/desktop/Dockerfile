@@ -1,11 +1,14 @@
 # Candidate only: not referenced by release Compose or deployment automation.
-FROM debian:bookworm-slim
+FROM python:3.12-slim-bookworm
 RUN apt-get update && apt-get install --no-install-recommends -y \
     chromium ca-certificates python3 xvfb x11vnc novnc websockify x11-utils libxtst6 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 cloudbrowser \
     && mkdir -p /data/profile /data/downloads-browser \
     && chown -R cloudbrowser:cloudbrowser /data
+# Debian's websockify belongs to system Python 3.11. Install the transport for
+# the actual Python 3.12 entrypoint; never import another interpreter's packages.
+RUN python -m pip install --no-cache-dir websockify==0.10.0
 WORKDIR /app
 COPY src/ /app/src/
 ENV PYTHONPATH=/app/src DISPLAY=:99 PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \

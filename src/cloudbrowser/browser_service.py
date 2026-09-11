@@ -85,6 +85,7 @@ def build_browser_service(*, process_wrapper=None, interaction_gate=None) -> tup
         start_callback=process.start,
         stop_callback=process.stop,
         page_actions=page_actions,
+        preserve_last_page=interaction_gate is not None,
     )
     registry = DownloadWatcherRegistry()
     policy = parse_authentik_policy(os.environ)

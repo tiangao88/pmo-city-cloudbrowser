@@ -20,7 +20,9 @@ class InteractionGate:
 
     def permits_browser(self, path, received):
         # Health/lifecycle must remain reachable to stop or replace a browser.
-        if path in ("/browser/health", "/browser/readiness", "/browser/start", "/browser/stop", "/browser/binding"):
+        if path in ("/browser/health", "/browser/readiness", "/browser/start", "/browser/stop", "/browser/binding", "/browser/pages"):
+            # The private supervisor snapshots URLs after fencing. Agent reads
+            # use /agent/* and remain blocked; this is not a public endpoint.
             return True
         if path.startswith("/browser/pages") and self.mode == "initializing":
             return received >= self.changed_at

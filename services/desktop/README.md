@@ -5,6 +5,10 @@ service, Xvfb, x11vnc, noVNC transport and viewer authority. One shared lock
 serializes browser responses, stream forwarding, lifecycle and control changes.
 The router, identity-link and slot supervisor remain separate services.
 No release Compose, CI publication matrix or dev01 deployment selects this image.
+The separate [candidate Compose stack](../../deploy/desktop/compose.candidate.yaml)
+now wires these services together. The desktop entrypoint runs Python 3.12;
+websockify is installed for that interpreter rather than borrowed from Debian's
+system Python. This remains a candidate, not a supported release image.
 
 ## Configuration boundary
 
@@ -20,6 +24,8 @@ No release Compose, CI publication matrix or dev01 deployment selects this image
 - Configure the supervisor's existing experimental viewer-control client with
   its dedicated secret and private URL. Its renewal worker never re-enables an
   expired/restarted authority; a fresh fence/enable lifecycle is required.
+  Explicit wake now repairs expired viewer authority even when Chromium remains
+  ready. A successful retry only renews, preserving human/paused control mode.
 - Preserve owner-partitioned profile storage. Each start gets a fresh X server,
   not a fresh user profile. Confirm old process termination before replacement.
 - Credential UI forwarding is disabled and broker submit configuration is
@@ -53,16 +59,37 @@ ports are needed. This exercises real Chromium, the actual candidate process,
 a synthetic identity-link HTTP service, HTTPS cookies and WSS. It checks A/B/A
 cookie continuity, full process restart, stale authority, takeover, disconnect,
 held Shift/button release and explicit resume. It never uses real credentials.
+It also uses the real supervisor over the private HTTP interfaces, keeps an old
+WSS transport open across owner changes, and decodes the first raw framebuffer
+after each new admission. A/B/A and restart samples each contained 870,708
+owner-canary pixels and zero other-owner-canary pixels. Xvfb, Chromium and x11vnc
+are separately killed inside the disposable container: old streams close, old
+cookies fail, and supervisor recovery produces a clean first framebuffer.
+These finite canary checks are evidence, not proof against every pixel leak.
+One forced-crash run logged a disconnected health client's `BrokenPipeError`;
+the isolated request handler ended and the recovery assertions still passed.
+That diagnostic noise is not counted as a failed isolation assertion or hidden
+as a clean-log qualification.
 `CB_SMOKE_SERVE=1` keeps the last synthetic binding renewed for localhost visual
 QA; expose **only** `127.0.0.1:16080:6080` for that disposable fixture.
 
+For the real service topology, follow [the standalone stack instructions](../../deploy/desktop/README.md).
+`stack_smoke.py` passed through actual Traefik, desktop, router, supervisor,
+agent-control and identity-link services with only the external authentication
+response replaced by a synthetic fixture. It covers WSS framebuffer delivery,
+anonymous denial, caller identity-header replacement, activation, renewal beyond
+the 15-second lease, takeover/resume, disabled broker forwarding and A/B/A.
+
+Integration uncovered and fixed three lifecycle issues: headed cleanup closed
+the last blank tab; fencing blocked the supervisor's URL snapshot; an already-
+ready wake could not repair an expired viewer lease. Private `/browser/pages`
+remains available for supervisor snapshots, while `/agent/*` stays paused.
+
 ## Qualification / rollback gates
 
-Build success is not a deployment GO. Remaining gates include real sanitizing
-edge and supervisor/router wiring, first-frame pixel isolation in this integrated
-runtime, leader/restart recovery, whole-job broker fencing, dependency/SBOM
-review, supported Python alignment (candidate currently inherits Debian 3.11,
-project requires 3.12), immutable image publication and installation/rollback.
+Build success is not a deployment GO. Remaining gates include real SSO session
+and revocation testing, broader failure/leader-fencing coverage, whole-job broker
+fencing, dependency/SBOM review, immutable image publication and installation/rollback.
 The image uses mutable Debian packages and Chromium `--no-sandbox`; those are
 explicit unqualified constraints, not approved production settings.
 

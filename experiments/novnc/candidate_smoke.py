@@ -6,21 +6,26 @@ The mock identity service is a fixture, not authentication qualification.
 import http.client
 import json
 import os
+import signal
 import ssl
 import subprocess
 import sys
 import tempfile
 import threading
 import time
-from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from cloudbrowser.browser_slots.lifecycle import BrowserBinding
+from cloudbrowser.browser_slots.lifecycle import BrowserBinding, OwnerBoundLifecycle
+from cloudbrowser.browser_slots.supervisor import SlotSupervisor
+from cloudbrowser.browser_slots.http_client import HttpJsonClient
+from cloudbrowser.browser_slots.http_transport import HttpBrowserTransport
 from cloudbrowser.viewer.fence_control import ViewerFenceClient
 from gateway import build_gateway
 from test_proxy import connect
 from held_input import held_input
+from owner_switch import framebuffer, COLOURS
+from wss_rfb import RfbWebSocket
 
 ORIGIN = "https://127.0.0.1:16080"
 SECRET = "synthetic-candidate-control-only-32"
@@ -33,6 +38,8 @@ class Identity(BaseHTTPRequestHandler):
         data = (b'<!doctype html><title>Synthetic desktop input</title><h1>Synthetic desktop input</h1>'
                 b'<p>No credentials or external sites.</p><input autofocus style="font:24px sans-serif">'
                 if self.path == "/task" else b'{"status":"ok"}')
+        if self.path == "/task":
+            data += ('<style>html,body{background:#' + COLOURS[self.state["owner"]] + ';height:100%;margin:0}</style>').encode()
         self.send_response(200)
         if self.path == "/task":
             self.state["seen"].append(self.headers.get("Cookie", ""))
@@ -103,7 +110,13 @@ def main():
                 raise AssertionError("candidate unavailable")
             client = ViewerFenceClient(base_url="http://127.0.0.1:6083", shared_secret=SECRET)
             previous = BrowserBinding("profile-unassigned", "principal-unassigned", "browser-unassigned", "generation-0")
+            os.environ["CB_ROUTER_SHARED_SECRET"] = SECRET
+            supervisor = SlotSupervisor(OwnerBoundLifecycle(previous, Path(temporary) / "tabs.json"),
+                HttpBrowserTransport(HttpJsonClient("http://127.0.0.1:9230", timeout_s=15),
+                    expected_owner=previous.principal_id, expected_generation=previous.generation),
+                native_tab_restore=True, viewer_fence=client, viewer_enable=client.enable, viewer_renew=client.renew)
             old_cookie = None
+            old_stream = None
             for index, owner in enumerate(("alice", "bob", "alice", "alice")):
                 if index == 3:
                     child.terminate()
@@ -125,13 +138,18 @@ def main():
                         pass
                     else:
                         raise AssertionError("old controller survived restart")
-                client(previous)
-                assert request(9230, "/browser/stop", data=b"")[0] == 200
-                binding = BrowserBinding("profile-" + owner, owner, "browser-unassigned", "g" + str(index))
-                assert request(9230, "/browser/binding", data=json.dumps(asdict(binding)).encode(),
-                    headers={"X-CB-Trusted-Secret": SECRET})[0] == 200
+                binding = previous if index == 3 else BrowserBinding("profile-" + owner, owner, "browser-unassigned", "g" + str(index))
                 state.update(owner=owner, seen=[])
-                assert request(9230, "/browser/start", data=b"")[0] == 200
+                if index != 3:
+                    supervisor.adopt_binding(binding)
+                if old_stream is not None:
+                    drained = 0
+                    while chunk := old_stream.recv(65536):
+                        drained += len(chunk)
+                        assert drained < 8 * 1024 * 1024
+                    old_stream.close()
+                    print("PASS old live WSS transport closed before next wake", flush=True)
+                assert supervisor.wake(binding).status == "ready"
                 assert request(9230, "/browser/pages/open", data=b"http://127.0.0.1:8091/task")[0] == 200
                 for _ in range(50):
                     if state["seen"]:
@@ -139,7 +157,6 @@ def main():
                     time.sleep(.1)
                 assert state["seen"], "fixture page did not load"
                 assert state["seen"][0] == ("" if index < 2 else "cb_synthetic_owner=alice"), "profile cookie continuity failed"
-                client.enable(binding)
                 state["owner"] = owner
                 if old_cookie:
                     assert request(6080, "/desktop.html", headers={"Cookie": old_cookie}, tls=True)[0] == 403
@@ -148,6 +165,16 @@ def main():
                 value = headers["Set-Cookie"].split(";", 1)[0]
                 h = {"Origin": ORIGIN, "Cookie": value}
                 assert request(6080, "/desktop.html", headers=h, tls=True)[0] == 200
+                pixels_stream = RfbWebSocket(value)
+                streams.append(pixels_stream)
+                pixels = framebuffer(pixels_stream)
+                own = bytes.fromhex(COLOURS[owner])[::-1]
+                other = bytes.fromhex(COLOURS["bob" if owner == "alice" else "alice"])[::-1]
+                own_count = sum(pixels[i:i + 3] == own for i in range(0, len(pixels), 4))
+                other_count = sum(pixels[i:i + 3] == other for i in range(0, len(pixels), 4))
+                assert own_count > 100000 and other_count == 0, "first framebuffer owner canary mismatch"
+                pixels_stream.close()
+                print(f"PASS first WSS framebuffer {owner}: {own_count} owner pixels, zero other-owner pixels", flush=True)
                 assert request(6080, "/ui/viewer/takeover", data=b"", headers=h, tls=True)[0] == 200
                 assert request(9230, "/agent/pages")[0] == 503
                 assert request(9230, "/broker/basic/probe", data=b"{}")[0] == 503
@@ -173,6 +200,58 @@ def main():
                 assert request(9230, "/browser/pages")[0] == 200
                 print(f"PASS {owner} round {index}: HTTPS cookie, WSS RFB, takeover exclusion, disconnect pause, resume", flush=True)
                 previous, old_cookie = binding, value
+                if index == 0:
+                    assert supervisor.suspend(binding).status == "suspended"
+                    assert supervisor.wake(binding).status == "ready"
+                    print("PASS supervisor suspend snapshot after fence and resume", flush=True)
+                _, headers, _ = request(6080, "/ui/viewer/session", data=b"", headers={"Origin": ORIGIN}, tls=True)
+                old_cookie = headers["Set-Cookie"].split(";", 1)[0]
+                old_stream = RfbWebSocket(old_cookie)
+                streams.append(old_stream)
+                framebuffer(old_stream)
+            if os.environ.get("CB_SMOKE_SERVE") != "1":
+                for executable in ("Xvfb", "chromium", "x11vnc"):
+                    _, headers, _ = request(6080, "/ui/viewer/session", data=b"", headers={"Origin": ORIGIN}, tls=True)
+                    value = headers["Set-Cookie"].split(";", 1)[0]
+                    stream = RfbWebSocket(value)
+                    streams.append(stream)
+                    framebuffer(stream)
+                    victims = []
+                    for process_dir in Path("/proc").iterdir():
+                        if not process_dir.name.isdigit():
+                            continue
+                        try:
+                            status = (process_dir / "status").read_text()
+                            args = (process_dir / "cmdline").read_bytes().split(b"\0")
+                        except OSError:
+                            continue
+                        parent = next((line.split()[1] for line in status.splitlines() if line.startswith("PPid:")), "")
+                        if parent == str(child.pid) and Path(os.fsdecode(args[0])).name == executable:
+                            victims.append(int(process_dir.name))
+                    assert len(victims) == 1, "expected one owned runtime child"
+                    os.kill(victims[0], signal.SIGKILL)
+                    for _ in range(100):
+                        code, _, body = request(9230, "/browser/health")
+                        if code == 200 and json.loads(body)["browser_state"] == "stopped":
+                            break
+                        time.sleep(.1)
+                    else:
+                        raise AssertionError("crash did not stop the complete desktop")
+                    assert request(6080, "/desktop.html", headers={"Cookie": value}, tls=True)[0] == 403
+                    drained = 0
+                    while chunk := stream.recv(65536):
+                        drained += len(chunk)
+                        assert drained < 8 * 1024 * 1024
+                    stream.close()
+                    assert supervisor.wake(previous).status == "ready"
+                    assert request(6080, "/desktop.html", headers={"Cookie": value}, tls=True)[0] == 403
+                    _, headers, _ = request(6080, "/ui/viewer/session", data=b"", headers={"Origin": ORIGIN}, tls=True)
+                    fresh = RfbWebSocket(headers["Set-Cookie"].split(";", 1)[0])
+                    streams.append(fresh)
+                    pixels = framebuffer(fresh)
+                    assert sum(pixels[i:i + 3] == bytes.fromhex(COLOURS["bob"])[::-1] for i in range(0, len(pixels), 4)) == 0
+                    fresh.close()
+                    print(f"PASS {executable} crash: stream closed, old cookie rejected, supervisor recovery and clean first frame", flush=True)
             if os.environ.get("CB_SMOKE_SERVE") == "1":
                 print("Synthetic localhost viewer ready for visual QA", flush=True)
                 while child.poll() is None:
@@ -189,8 +268,11 @@ def main():
                 else:
                     raise AssertionError("renewal revived expired authority")
                 print("PASS expired lease pauses agent and rejects issuance/renewal", flush=True)
+                assert supervisor.wake(previous).status == "ready"
+                assert request(6080, "/ui/viewer/session", data=b"", headers={"Origin": ORIGIN}, tls=True)[0] == 204
+                print("PASS explicit already-ready wake repairs expired viewer authority", flush=True)
             client(previous)
-            print("PASS profile-cookie A/B/A continuity and full runtime restart; not real SSO or pixel qualification", flush=True)
+            print("PASS profile-cookie A/B/A, first WSS framebuffer and runtime restart; synthetic qualification only", flush=True)
         finally:
             for stream in streams:
                 stream.close()

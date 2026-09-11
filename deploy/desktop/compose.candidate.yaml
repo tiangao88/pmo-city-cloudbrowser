@@ -1,0 +1,145 @@
+# Standalone qualification stack. Never combine with the Coolify release files.
+# No credential broker, Vaultwarden configuration, Docker socket or host CDP.
+name: ${CB_DESKTOP_PROJECT:?Use a dedicated candidate project name}
+x-env: &env
+  CB_INSTANCE_ID: ${CB_DESKTOP_PROJECT:?required}
+  CB_RELEASE_VERSION: candidate-unqualified
+x-identity: &identity
+  CB_EDGE_AUTH: traefik-forwardauth
+  CB_IDENTITY_LINK_BASE_URL: http://identity-link:8091
+  CB_IDENTITY_LINK_SHARED_SECRET: ${CB_IDENTITY_LINK_SHARED_SECRET:?required}
+  CB_OIDC_ISSUER: ${CB_OIDC_ISSUER:?required}
+  CB_TINYAUTH_REALM: ${CB_TINYAUTH_REALM:?required}
+services:
+  browser:
+    build: {context: ../.., dockerfile: services/desktop/Dockerfile}
+    environment:
+      <<: [*env, *identity]
+      CB_EXPERIMENTAL_DESKTOP: '1'
+      CB_BROWSER_AUTOSTART: '0'
+      CB_BROWSER_ID: browser-slot-1
+      CB_PROFILE_DIR: /data/profile
+      CB_ROUTER_BASE_URL: http://router:8080
+      CB_ROUTER_SHARED_SECRET: ${CB_ROUTER_SHARED_SECRET:?required}
+      CB_VIEWER_PUBLIC_ORIGIN: ${CB_VIEWER_PUBLIC_ORIGIN:?Exact HTTPS origin required}
+      CB_VIEWER_TOKEN_SECRET: ${CB_VIEWER_TOKEN_SECRET:?required}
+      CB_VIEWER_CONTROL_SECRET: ${CB_VIEWER_CONTROL_SECRET:?required}
+      CB_BROKER_SUBMIT_SECRET: ''
+      CB_BROKER_ADAPTER: basic
+    volumes: [profiles:/data/profile]
+    networks: [slot, frontend, identity]
+    depends_on: {identity-link: {condition: service_healthy}}
+  slot-supervisor:
+    build: {context: ../.., dockerfile: services/slot-supervisor/Dockerfile}
+    environment:
+      <<: *env
+      CB_PORT: '8081'
+      CB_BROWSER_ID: browser-slot-1
+      CB_BROWSER_API_URL: http://browser:9230
+      CB_ROUTER_SHARED_SECRET: ${CB_ROUTER_SHARED_SECRET:?required}
+      CB_EXPERIMENTAL_VIEWER_CONTROL: '1'
+      CB_VIEWER_CONTROL_URL: http://browser:6083
+      CB_VIEWER_CONTROL_SECRET: ${CB_VIEWER_CONTROL_SECRET:?required}
+    volumes: [slot-state:/data/state]
+    networks: [slot, control]
+    depends_on: {browser: {condition: service_healthy}}
+  agent-control:
+    build: {context: ../.., dockerfile: services/agent-control/Dockerfile}
+    environment:
+      <<: *env
+      CB_PORT: '8090'
+      # Required bootstrap values, rotated by the router's private lease API.
+      CB_PRINCIPAL_ID: principal-unassigned
+      CB_BROWSER_ID: browser-slot-1
+      CB_BINDING_GENERATION: generation-0
+      CB_BROWSER_API_URL: http://browser:9230
+      CB_AGENT_CONTROL_SHARED_SECRET: ${CB_AGENT_CONTROL_SHARED_SECRET:?required}
+    networks: [slot, control]
+    depends_on: {browser: {condition: service_healthy}}
+  router:
+    build: {context: ../.., dockerfile: services/router/Dockerfile}
+    environment:
+      <<: [*env, *identity]
+      CB_PORT: '8080'
+      CB_ROUTER_SHARED_SECRET: ${CB_ROUTER_SHARED_SECRET:?required}
+      CB_SLOT_SUPERVISOR_URLS: slot-1=http://slot-supervisor:8081
+      CB_AGENT_CONTROL_URLS: slot-1=http://agent-control:8090
+      CB_AGENT_CONTROL_SHARED_SECRET: ${CB_AGENT_CONTROL_SHARED_SECRET:?required}
+      CB_CREDENTIAL_BROKER_URL: ''
+      CB_CREDENTIAL_CAPABILITY_SECRET: ''
+    volumes: [router-state:/data/state]
+    networks: [frontend, control, identity]
+    depends_on: {identity-link: {condition: service_healthy}}
+  identity-link:
+    build: {context: ../.., dockerfile: services/identity-link/Dockerfile}
+    environment:
+      <<: [*env, *identity]
+      CB_PORT: '8091'
+    volumes: [identity-state:/data]
+    networks: [identity]
+  edge:
+    image: ${CB_DESKTOP_EDGE_IMAGE:?Select an explicit Traefik v3 image for qualification}
+    command:
+      - --entrypoints.websecure.address=:8443
+      - --providers.file.filename=/etc/traefik/candidate.yaml
+      - --api.dashboard=false
+    ports: ['127.0.0.1:${CB_DESKTOP_HTTPS_PORT:-18443}:8443']
+    configs: [{source: edge, target: /etc/traefik/candidate.yaml}]
+    volumes:
+      - type: bind
+        source: ${CB_DESKTOP_TLS_CERT:?required}
+        target: /tls/cert.pem
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${CB_DESKTOP_TLS_KEY:?required}
+        target: /tls/key.pem
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [frontend, auth-egress]
+configs:
+  edge:
+    content: |
+      tls:
+        certificates:
+          - certFile: /tls/cert.pem
+            keyFile: /tls/key.pem
+      http:
+        routers:
+          desktop:
+            rule: Host(`${CB_DESKTOP_HOST:?required}`)
+            entryPoints: [websecure]
+            tls: {}
+            middlewares: [identity]
+            service: desktop
+          router:
+            rule: Host(`${CB_DESKTOP_ROUTER_HOST:?required}`)
+            entryPoints: [websecure]
+            tls: {}
+            middlewares: [identity]
+            service: router
+        middlewares:
+          identity:
+            forwardAuth:
+              address: '${CB_DESKTOP_FORWARD_AUTH_URL:?Authenticated forward-auth endpoint required}'
+              trustForwardHeader: false
+              authRequestHeaders: [Cookie]
+              authResponseHeadersRegex: '(?i)^Remote-'
+        services:
+          desktop:
+            loadBalancer:
+              servers: [{url: 'http://browser:8082'}]
+          router:
+            loadBalancer:
+              servers: [{url: 'http://router:8080'}]
+networks:
+  slot: {}
+  frontend: {internal: true}
+  control: {internal: true}
+  identity: {internal: true}
+  auth-egress: {}
+volumes:
+  profiles: {}
+  slot-state: {}
+  router-state: {}
+  identity-state: {}

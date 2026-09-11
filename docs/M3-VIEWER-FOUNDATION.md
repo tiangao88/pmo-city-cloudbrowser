@@ -8,10 +8,10 @@ this table is the current status.
 
 | Gate | Evidence delivered | Still required for closure |
 |---|---|---|
-| 1. Integrated runtime | Separate desktop image, existing browser API, real identity-link client, cookie issuer, noVNC, private fence/enable and shared control lock. Non-root stopped startup checked. | Sanitizing edge + router + supervisor installation wiring and qualification; supported Python alignment. |
-| 2. Owner/restart isolation | Actual candidate A/B/A HTTPS/WSS smoke; old cookie rejection; per-owner synthetic application-cookie continuity; full runtime restart rejects previous controller ticket. Fresh X lifetime is coupled to browser lifecycle. | Integrated first-frame pixel leakage tests, crash/failure matrix and supervisor recovery when its already-ready state outlives viewer restart. |
+| 1. Integrated runtime | Python 3.12 desktop; standalone Compose with actual Traefik, router, supervisor, agent-control and identity-link. Synthetic-auth end-to-end activation, WSS, renewal and A/B/A passed. Credentials absent/disabled throughout. | Real SSO and revocation qualification; reviewed deployment/image configuration. Local integration work completed, not a deployment GO. |
+| 2. Owner/restart isolation | A/B/A first WSS framebuffer samples: 870,708 owner pixels, zero other-owner pixels. Live old streams close before next wake. Per-owner cookie continuity, restart, Xvfb/Chromium/VNC crashes, supervisor suspend/resume and explicit expired-lease repair passed. | Broader failure/leader-fencing and real-environment qualification. The covered synthetic matrix is complete; canary sampling is not a universal isolation proof. |
 | 3. Human takeover | Real noVNC keyboard input; browser HTTP reads/actions and broker page endpoints paused; queued-request fencing; disconnect stays paused; held Shift/button cleanup; explicit resume. | Whole-job upstream broker admission/custody fencing. Credential UI disabled and broker configuration refused in candidate; upstream broker must remain disabled too. |
-| 4. Qualification/release | Linux Python 3.12 regression runner: 1,153 passed / 13 skipped. Final new/control/issuer tests: 35 passed. Candidate image builds; localhost desktop and mobile-sized visual checks performed. | Blocked security review, all skipped deployment/real-browser cases, dependency/image qualification, installation and rollback rehearsal. **NO-GO.** |
+| 4. Qualification/release | Latest Linux Python 3.12 regressions: 1,174 passed / 14 skipped. Targeted adapter/wiring regressions: 25 passed, including Compose checks skipped in Linux. Both standalone-stack and pixel/crash smoke runs passed. | Blocked security review, remaining skipped deployment/real-browser cases, dependency/image qualification, installation and rollback rehearsal. **NO-GO.** |
 
 The candidate's reproducible checks, private port boundaries and rollback
 prerequisites are in [services/desktop/README.md](../services/desktop/README.md).
@@ -21,6 +21,9 @@ new controls and live remote text input; its session panel is intentionally
 offline because the fixture does not provide a router/SSO stack. Desktop and
 390px-wide controls render; the scaled remote desktop is tiny on mobile and is
 not a mobile-usability sign-off.
+The subsequent `stack_smoke.py` uses the actual router and identity-link services
+behind Traefik; only forward-auth is synthetic. It is distinct from that earlier
+visual fixture. See [standalone qualification](../deploy/desktop/README.md).
 
 The outstanding scan `f6547962-81de-4748-bede-39f6e240eb82` against frozen M2
 target `9c11358710bc9d16f7b32d25e27c0f4434d20985` remains incomplete after a platform

@@ -106,6 +106,7 @@ class ChromeBrowserAdapter:
     start_callback: Callable[[], None] | None = None
     stop_callback: Callable[[], None] | None = None
     page_actions: PageActionAdapter | None = None
+    preserve_last_page: bool = False
 
     def rebind(
         self,
@@ -204,13 +205,17 @@ class ChromeBrowserAdapter:
         raw = self.chrome.json_request("/json/list")
         if not isinstance(raw, list):
             raise BrowserUnavailable("invalid Chrome target response")
+        remaining = sum(isinstance(target, dict) and target.get("type") == "page" for target in raw)
         for target in raw:
             if not isinstance(target, dict) or target.get("type") != "page":
                 continue
             url = target.get("url")
             target_id = target.get("id")
             if url in ("about:blank", "chrome://newtab/") and isinstance(target_id, str):
+                if self.preserve_last_page and remaining <= 1:
+                    continue
                 self.chrome.text_request("/json/close/" + quote(target_id, safe=""), method="GET")
+                remaining -= 1
 
     def navigate(self, target_tab_id: str, url: str) -> None:
         self._actions().navigate(target_tab_id, url)

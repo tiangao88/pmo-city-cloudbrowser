@@ -130,6 +130,14 @@ class SlotSupervisor:
                 and readiness.generation == binding.generation
                 and readiness.cdp_ok
             ):
+                if self._viewer_renew is not None:
+                    try:
+                        self._viewer_renew(binding)
+                    except Exception:
+                        # Explicit wake repairs a lost viewer incarnation or
+                        # expired lease. Heartbeats never execute this path.
+                        self._fence_viewer(binding)
+                        self._viewer_enable(binding)
                 urls = self._lifecycle.load_tabs(binding)
                 return OrchestrationResult("ready", self._lifecycle.state, urls)
 

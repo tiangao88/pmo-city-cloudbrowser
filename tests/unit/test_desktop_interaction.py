@@ -38,7 +38,7 @@ def test_takeover_disconnect_stays_paused_until_explicit_resume():
     gate, authority, token, events = rig()
     assert control(authority, token, "takeover") == "human"
     assert events[-1] is True
-    for path in ("/agent/page-info", "/broker/login", "/browser/pages"):
+    for path in ("/agent/page-info", "/broker/login", "/browser/pages/open"):
         assert not gate.permits_browser(path, gate.clock())
     connection = authority.connect(trusted_headers=HEADERS, token=token,
         send_frame=lambda _: None, close_transport=lambda: None)
