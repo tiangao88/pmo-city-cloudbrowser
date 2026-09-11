@@ -20,6 +20,14 @@ A direct authenticated check from the dashboard container confirmed `pmo.city`
 page reading returns `ok`, 4096 bytes of text and the truncation marker. A
 deliberately nonexistent tab returns `browser_unavailable` through the bridge.
 
+The dashboard model-driven task also completed: it opened `pmo.city`, read real
+page content on its first `page_info` attempt and reported `browser_unavailable`
+for the deliberate stale target. Hermes additionally shortened its tool-result
+display, obscuring the exact trailing CloudBrowser marker/title from the model's
+visible result. The direct check established the byte count and marker; the
+model run establishes useful reading, not complete visibility of every response
+field. Hermes result-display limits remain a separate usability consideration.
+
 The roster's “anonymous” entry was a waiting record without display-email
 metadata. The label now reads “User (display name unavailable)”. The owner was
 not established or removed. Waiting records currently have no expiry; abandoned
