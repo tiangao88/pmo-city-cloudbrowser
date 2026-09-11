@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from contextlib import closing
+import fcntl
+import json
 import os
 from pathlib import Path
 import signal
+import sqlite3
 import subprocess
 import threading
+import tempfile
 import time
 from typing import Callable
 from urllib.parse import urlsplit
 
 from .transport import BrowserUnavailable
+from cloudbrowser.owner_storage import owner_directory, prepare_owner_directory
 
 
 class BrowserProcessError(BrowserUnavailable):
@@ -34,6 +40,8 @@ class BrowserProcessConfig:
     download_dir: Path | None = None
     startup_timeout_s: float = 30.0
     stop_timeout_s: float = 5.0
+    profile_root: Path | None = None
+    download_root: Path | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.executable, str) or not self.executable:
@@ -42,6 +50,10 @@ class BrowserProcessConfig:
             raise ValueError("executable must be an absolute path")
         if not isinstance(self.profile_dir, Path) or not self.profile_dir.is_absolute():
             raise ValueError("profile_dir must be an absolute path")
+        if self.profile_root is not None and not self.profile_root.is_absolute():
+            raise ValueError("profile_root must be absolute")
+        if self.download_root is not None and (self.profile_root is None or not self.download_root.is_absolute()):
+            raise ValueError("download_root requires an absolute owner profile root")
         if not isinstance(self.http_port, int) or not 1 <= self.http_port <= 65535:
             raise ValueError("http_port must be between 1 and 65535")
         if not isinstance(self.owner, str) or not self.owner:
@@ -76,6 +88,7 @@ class BrowserProcessConfig:
             "--no-first-run",
             "--no-default-browser-check",
             "--disable-background-networking",
+            *(("--restore-last-session",) if self.profile_root is not None else ()),
             *(
                 (f"--download-dir={self.download_dir}",) if self.download_dir is not None else ()
             ),
@@ -95,7 +108,8 @@ class BrowserProcess:
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
-        self.config = config
+        self.config = self._owner_config(config)
+        self._profile_lease: int | None = None
         self._popen = popen
         self._probe = probe or (lambda: False)
         self._sleep = sleep
@@ -105,6 +119,82 @@ class BrowserProcess:
         self._recovering = False
         self._lock = threading.RLock()
         self._start_epoch = 0
+
+    @staticmethod
+    def _owner_config(config: BrowserProcessConfig) -> BrowserProcessConfig:
+        if config.profile_root is None:
+            return config
+        return replace(
+            config,
+            profile_dir=owner_directory(config.profile_root, config.owner, config.profile_id),
+            download_dir=owner_directory(config.download_root, config.owner, config.profile_id) if config.download_root is not None else config.download_dir,
+        )
+
+    def _prepare_downloads(self) -> None:
+        if self.config.download_root is None or self.config.download_dir is None:
+            return
+        prepare_owner_directory(self.config.download_root, self.config.download_dir)
+        default = self.config.profile_dir / "Default"
+        if default.is_symlink():
+            raise BrowserProcessError("profile preferences path is invalid")
+        default.mkdir(mode=0o700, exist_ok=True)
+        path = default / "Preferences"
+        if path.is_symlink():
+            raise BrowserProcessError("profile preferences path is invalid")
+        try:
+            document = json.loads(path.read_text()) if path.exists() else {}
+            document.setdefault("download", {})["default_directory"] = str(self.config.download_dir)
+            document["download"]["prompt_for_download"] = False
+            fd, temporary = tempfile.mkstemp(dir=default, prefix=".preferences-")
+            try:
+                with os.fdopen(fd, "w") as stream:
+                    json.dump(document, stream)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temporary, path)
+            finally:
+                Path(temporary).unlink(missing_ok=True)
+        except (OSError, ValueError, TypeError, AttributeError) as exc:
+            raise BrowserProcessError("download preferences are unavailable") from exc
+
+    def _acquire_profile(self) -> None:
+        root = self.config.profile_root
+        if root is None or self._profile_lease is not None:
+            return
+        if self.config.owner == "principal-unassigned" or self.config.profile_id == "profile-unassigned":
+            raise BrowserProcessError("profile owner is unassigned")
+        try:
+            prepare_owner_directory(root, self.config.profile_dir)
+            descriptor = os.open(self.config.profile_dir / ".cloudbrowser-lease", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BaseException:
+                os.close(descriptor)
+                raise
+            self._profile_lease = descriptor
+        except (OSError, ValueError) as exc:
+            raise BrowserProcessError("owner profile is unavailable or in use") from exc
+
+    def _release_profile(self) -> None:
+        if self._profile_lease is not None:
+            os.close(self._profile_lease)
+            self._profile_lease = None
+
+    def _strip_identity_cookies(self) -> None:
+        if self.config.profile_root is None:
+            return
+        for relative in ("Default/Cookies", "Default/Network/Cookies"):
+            path = self.config.profile_dir / relative
+            if not path.exists():
+                continue
+            if any(p.is_symlink() for p in (path, *path.parents) if p != self.config.profile_root) or not path.resolve().is_relative_to(self.config.profile_dir.resolve()):
+                raise BrowserProcessError("profile cookie path is invalid")
+            try:
+                with closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=1.0)) as connection:
+                    with connection:
+                        connection.execute("DELETE FROM cookies WHERE host_key LIKE '%.pmo.city%' OR host_key LIKE '%aikumi%' OR name LIKE 'tinyauth%'")
+            except sqlite3.Error as exc:
+                raise BrowserProcessError("identity cookie cleanup failed") from exc
 
     @property
     def state(self) -> str:
@@ -141,13 +231,13 @@ class BrowserProcess:
             for value in (owner, generation):
                 if not isinstance(value, str) or not value or len(value) > 256:
                     raise ValueError("owner and generation must be bounded strings")
-            self.config = replace(
+            self.config = self._owner_config(replace(
                 self.config,
                 owner=owner,
                 generation=generation,
                 profile_id=profile_id if profile_id is not None else self.config.profile_id,
                 browser_id=browser_id if browser_id is not None else self.config.browser_id,
-            )
+            ))
 
     def start(
         self,
@@ -167,8 +257,15 @@ class BrowserProcess:
                 return True
             if self.state == "starting":
                 raise BrowserProcessError("browser is already starting")
-            self.config.profile_dir.mkdir(parents=True, exist_ok=True)
-            self._clear_stale_profile_locks()
+            self._acquire_profile()
+            try:
+                self.config.profile_dir.mkdir(parents=True, exist_ok=True)
+                self._clear_stale_profile_locks()
+                self._strip_identity_cookies()
+                self._prepare_downloads()
+            except BaseException:
+                self._release_profile()
+                raise
             self._state = "starting"
             self._start_epoch += 1
             start_epoch = self._start_epoch
@@ -184,6 +281,7 @@ class BrowserProcess:
             except (OSError, TypeError) as exc:
                 self._process = None
                 self._state = "failed"
+                self._release_profile()
                 raise BrowserProcessError("browser process failed to start") from exc
             self._process = process
             deadline = self._monotonic() + self.config.startup_timeout_s
@@ -194,6 +292,7 @@ class BrowserProcess:
                     raise BrowserProcessError("browser start was cancelled")
                 if self._poll(process) is not None:
                     self._state = "failed"
+                    self._release_profile()
                     raise BrowserProcessError("browser process exited during startup")
             try:
                 ready = bool(self._probe())
@@ -215,19 +314,25 @@ class BrowserProcess:
             self._terminate_process(process)
             if self._process is process:
                 self._process = None
+            self._release_profile()
         raise BrowserProcessError("browser readiness timed out")
 
     def stop(self) -> None:
         with self._lock:
             self._start_epoch += 1
             process = self._process
-            self._process = None
-            self._state = "stopped"
             if process is not None:
                 # Keep the process gate through termination. A concurrent
                 # start must not launch a new browser/profile while the old
                 # child still owns the profile and endpoint.
-                self._terminate_process(process)
+                try:
+                    self._terminate_process(process)
+                except BaseException:
+                    self._state = "failed"
+                    raise
+            self._process = None
+            self._state = "stopped"
+            self._release_profile()
 
     def recover_if_crashed(self) -> bool:
         """Restart once after an observed crash; never changes identity binding."""
@@ -314,11 +419,21 @@ class BrowserProcess:
             if callable(wait):
                 try:
                     wait(timeout=self.config.stop_timeout_s)
+                    return
                 except (TimeoutError, subprocess.TimeoutExpired, OSError):
-                    pass
+                    raise BrowserProcessError("browser process did not stop")
+        raise BrowserProcessError("browser termination could not be confirmed")
 
     def _clear_stale_profile_locks(self) -> None:
         """Remove Chromium singleton links left by an unclean container exit."""
+        if self.config.profile_root is not None:
+            # An orphan Chromium can outlive this service's advisory lease.
+            # Fail closed before touching Preferences/Cookies. An operator
+            # must prove stale ownership before removing an abandoned marker.
+            marker = self.config.profile_dir / "SingletonLock"
+            if marker.exists() or marker.is_symlink():
+                raise BrowserProcessError("owner profile needs singleton recovery")
+            return
         for name in ("SingletonCookie", "SingletonLock", "SingletonSocket"):
             marker = self.config.profile_dir / name
             try:

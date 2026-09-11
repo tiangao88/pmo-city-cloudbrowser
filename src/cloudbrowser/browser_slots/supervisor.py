@@ -51,11 +51,13 @@ class SlotSupervisor:
         *,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
+        native_tab_restore: bool = False,
     ) -> None:
         self._lifecycle = lifecycle
         self._transport = transport
         self._clock = clock
         self._sleep = sleep
+        self._native_tab_restore = native_tab_restore
         self._lifecycle_gate = threading.RLock()
 
     @property
@@ -90,8 +92,9 @@ class SlotSupervisor:
             self._wait_ready(binding, timeout_s=timeout_s, poll_s=poll_s)
             self._lifecycle.mark_ready(binding)
             urls = self._lifecycle.load_tabs(binding)
-            for url in urls:
-                self._transport.open_page(url)
+            if not self._native_tab_restore:
+                for url in urls:
+                    self._transport.open_page(url)
             self._transport.close_empty_pages()
             return OrchestrationResult("ready", self._lifecycle.state, urls)
         except (BrowserOwnershipChanged, BrowserUnavailable, LifecycleError):

@@ -12,6 +12,7 @@ import logging
 import os
 import secrets
 import stat
+import threading
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import BinaryIO, Callable
@@ -19,6 +20,7 @@ from typing import BinaryIO, Callable
 from .contracts import PrincipalBinding
 from .filenames import validate_name
 from .ingest import IngestPipeline, IngestReceipt
+from cloudbrowser.owner_storage import owner_directory, prepare_owner_directory
 
 _logger = logging.getLogger("cloudbrowser.cloudfiles.browser_downloads")
 
@@ -68,6 +70,7 @@ class DownloadWatchConfig:
     download_dir: Path
     binding: PrincipalBinding
     max_bytes: int = 1024 * 1024 * 1024
+    owner_scoped: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.download_dir, Path) or not self.download_dir.is_absolute():
@@ -135,22 +138,31 @@ class BrowserDownloadWatcher:
         if not callable(submit):
             raise TypeError("submit must be callable")
         self._config = config
+        self._root = config.download_dir
+        self._lock = threading.RLock()
+        if config.owner_scoped:
+            self._config = replace(config, download_dir=owner_directory(self._root, config.binding.principal_id, config.binding.profile_id))
         self._submit = submit
         self._closed = False
 
     def update_binding(self, binding: PrincipalBinding) -> None:
         """Rotate the attribution binding after a browser rebind.
 
-        The download directory is server-owned and unchanged; only the
-        owner identity follows the adopted server-minted binding, so
-        downloads are never attributed to a stale principal.
+        Production rotates the owner-specific directory and attribution
+        atomically with respect to scans. Pending files stay with their owner.
         """
 
         if not isinstance(binding, PrincipalBinding):
             raise ValueError("binding must be a PrincipalBinding")
-        self._config = replace(self._config, binding=binding)
+        with self._lock:
+            directory = owner_directory(self._root, binding.principal_id, binding.profile_id) if self._config.owner_scoped else self._config.download_dir
+            self._config = replace(self._config, binding=binding, download_dir=directory)
 
     def emit_once(self) -> list[IngestReceipt]:
+        with self._lock:
+            return self._emit_once()
+
+    def _emit_once(self) -> list[IngestReceipt]:
         """Scan once; emit and consume every completed candidate.
 
         Each candidate is handled independently: a vanished or replaced
@@ -161,7 +173,10 @@ class BrowserDownloadWatcher:
 
         if self._closed:
             raise RuntimeError("watcher is closed")
-        self._config.download_dir.mkdir(parents=True, exist_ok=True)
+        if self._config.owner_scoped:
+            prepare_owner_directory(self._root, self._config.download_dir)
+        else:
+            self._config.download_dir.mkdir(parents=True, exist_ok=True)
         receipts: list[IngestReceipt] = []
         for path in completed_downloads(
             self._config.download_dir, max_bytes=self._config.max_bytes
@@ -241,7 +256,8 @@ class BrowserDownloadWatcher:
     def close(self) -> None:
         """Stop accepting new emissions. Idempotent."""
 
-        self._closed = True
+        with self._lock:
+            self._closed = True
 
 
 __all__ = [

@@ -75,7 +75,7 @@ def run_service(component: str) -> None:
         )
         server = create_control_server(
             ControlApi(
-                SlotSupervisor(lifecycle, transport),
+                SlotSupervisor(lifecycle, transport, native_tab_restore=True),
                 binding,
                 trusted_secret=trusted_secret,
             ),

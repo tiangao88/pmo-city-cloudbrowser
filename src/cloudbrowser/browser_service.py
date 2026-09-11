@@ -43,6 +43,7 @@ def build_browser_service() -> tuple[
         BrowserProcessConfig(
             executable=os.environ.get("CB_CHROME_EXECUTABLE", "/usr/bin/google-chrome"),
             profile_dir=Path(os.environ.get("CB_PROFILE_DIR", "/data/profile")),
+            profile_root=Path(os.environ.get("CB_PROFILE_DIR", "/data/profile")),
             http_port=chrome_port,
             owner=owner,
             generation=generation,
@@ -54,6 +55,7 @@ def build_browser_service() -> tuple[
                 if (download_dir := os.environ.get("CB_BROWSER_DOWNLOAD_DIR"))
                 else None
             ),
+            download_root=Path(download_dir) if download_dir else None,
         ),
         probe=lambda: chrome_version_is_ready(chrome.json_request("/json/version")),
     )
@@ -200,6 +202,7 @@ def build_download_watcher(binding: "object | None" = None):
             download_dir=Path(download_dir),
             binding=binding,
             max_bytes=max_bytes,
+            owner_scoped=True,
         )
     except ValueError as exc:
         raise SystemExit(f"download watcher configuration is invalid: {exc}") from exc
@@ -335,21 +338,19 @@ def run_browser_service() -> None:
         process.start()
     watcher = threading.Thread(target=process.watch, args=(stop_event,), daemon=True)
     watcher.start()
-    download_watcher = build_download_watcher() if autostart else None
-    download_thread = None
-    if download_watcher is not None:
-        download_thread = threading.Thread(
-            target=download_watcher.run,
-            args=(stop_event,),
-            daemon=True,
-        )
-        download_thread.start()
+    if autostart:
+        from cloudbrowser.cloudfiles.contracts import PrincipalBinding
+
+        registry.on_binding(PrincipalBinding(
+            principal_id=process.config.owner,
+            profile_id=process.config.profile_id,
+            browser_id=process.config.browser_id,
+            generation=process.config.generation,
+        ))
     try:
         server.serve_forever()
     finally:
         stop_event.set()
         process.stop()
         server.server_close()
-        if download_watcher is not None:
-            download_watcher.close()
         registry.close()

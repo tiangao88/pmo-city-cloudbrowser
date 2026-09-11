@@ -84,8 +84,9 @@ def run(
             )
         else:
             store = CustodyGrantStore(args.db, kek=kek)
-            scope = _scope(args)
-            if args.command == "provision":
+            consent_mode = args.command.endswith("-consent")
+            scope = GrantScope.consent(profile_id=args.profile_id, principal_id=args.principal_id, site_id=args.site_id) if consent_mode else _scope(args)
+            if args.command in ("provision", "provision-consent"):
                 document = _read_provision_document(input_stream)
                 item_ref = _required_document_text(document, "item_ref")
                 result = store.provision(
@@ -100,7 +101,7 @@ def run(
                     "grant_ref": result.grant_ref,
                     "epoch": result.epoch,
                 }
-            elif args.command == "revoke":
+            elif args.command in ("revoke", "revoke-consent"):
                 changed = store.revoke(scope=scope, operator_id=args.operator_id)
                 current = store.status(scope, operator_id=args.operator_id)
                 response = {
@@ -121,7 +122,7 @@ def main() -> None:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cloudbrowser-grant-admin")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for command in ("provision", "revoke", "status"):
+    for command in ("provision", "revoke", "status", "provision-consent", "revoke-consent", "status-consent"):
         sub = subparsers.add_parser(command)
         sub.add_argument("--db", required=True)
         sub.add_argument(
@@ -132,9 +133,10 @@ def _parser() -> argparse.ArgumentParser:
         sub.add_argument("--profile-id", required=True)
         sub.add_argument("--principal-id", required=True)
         sub.add_argument("--site-id", required=True)
-        sub.add_argument("--target-tab-id", required=True)
-        sub.add_argument("--browser-id", required=True)
-        sub.add_argument("--generation", required=True)
+        if not command.endswith("-consent"):
+            sub.add_argument("--target-tab-id", required=True)
+            sub.add_argument("--browser-id", required=True)
+            sub.add_argument("--generation", required=True)
         sub.add_argument("--operator-id", required=True)
         if command == "provision":
             sub.add_argument(

@@ -61,6 +61,7 @@ _MAX_REFRESH_TOKEN_BYTES = 16 * 1024
 _GRANT_REF_PREFIX = "grantref:v1."
 _SCHEMA_VERSION = 1
 _SCHEMA_ID = "cloudbrowser.grant-custody.v1"
+_CONSENT_BINDING = "@consent:v1"
 
 Transport = Callable[..., tuple[int, bytes]]
 _Result = TypeVar("_Result")
@@ -116,6 +117,30 @@ class GrantScope:
             "generation",
         ):
             _bounded_text(getattr(self, name), name)
+        ephemeral = (self.target_tab_id, self.browser_id, self.generation)
+        if _CONSENT_BINDING in ephemeral and ephemeral != (_CONSENT_BINDING,) * 3:
+            raise ValueError("partial consent scope is invalid")
+
+    @classmethod
+    def consent(cls, *, profile_id: str, principal_id: str, site_id: str) -> "GrantScope":
+        """Explicit durable approval, not an ephemeral browser capability.
+
+        The versioned reserved tuple uses the existing authenticated envelope
+        schema. Old exact grants are never inferred into this scope.
+        """
+        return cls(profile_id, principal_id, site_id, _CONSENT_BINDING, _CONSENT_BINDING, _CONSENT_BINDING)
+
+    @property
+    def is_consent(self) -> bool:
+        return (self.target_tab_id, self.browser_id, self.generation) == (_CONSENT_BINDING,) * 3
+
+    def permits_request_scope(self, request: "GrantScope") -> bool:
+        if request.is_consent:
+            return False
+        return self == request or (
+            self.is_consent
+            and (self.profile_id, self.principal_id, self.site_id) == (request.profile_id, request.principal_id, request.site_id)
+        )
 
     @classmethod
     def from_binding(
@@ -488,6 +513,17 @@ class CustodyGrantStore:
         )
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            # Consent is explicitly chosen and cannot coexist with an active
+            # older exact grant for this owner/site. Withdrawal therefore has
+            # no second active authorization path hidden behind it.
+            active_scopes = connection.execute(
+                "SELECT target_tab_id, browser_id, generation FROM grant_custody "
+                "WHERE profile_id = ? AND principal_id = ? AND site_id = ? AND active = 1",
+                (scope.profile_id, scope.principal_id, scope.site_id),
+            ).fetchall()
+            if any((tuple(row) == (_CONSENT_BINDING,) * 3) != scope.is_consent for row in active_scopes):
+                connection.rollback()
+                raise ValueError("revoke prior grant scope before changing consent mode")
             old = connection.execute(
                 """
                 SELECT grant_id, epoch
@@ -684,6 +720,8 @@ class CustodyGrantStore:
         target_tab_id: str,
     ) -> GrantAuthorization:
         scope = GrantScope.from_binding(binding, site_id=site_id, target_tab_id=target_tab_id)
+        if scope.is_consent:
+            raise LookupError("request must name an exact browser target")
         with self._connect() as connection:
             row = connection.execute(
                 """
@@ -694,11 +732,19 @@ class CustodyGrantStore:
                 """,
                 _scope_values(scope),
             ).fetchone()
+            if row is None or int(row[1]) != 1:
+                consent = GrantScope.consent(profile_id=scope.profile_id, principal_id=scope.principal_id, site_id=scope.site_id)
+                row = connection.execute(
+                    "SELECT grant_id, active, browser_id, generation, epoch FROM grant_custody "
+                    "WHERE profile_id = ? AND principal_id = ? AND site_id = ? "
+                    "AND target_tab_id = ? AND browser_id = ? AND generation = ?",
+                    _scope_values(consent),
+                ).fetchone()
         if row is None:
             raise LookupError("grant unavailable")
         if int(row[1]) != 1:
             raise LookupError("grant revoked")
-        if str(row[2]) != binding.browser_id or str(row[3]) != binding.generation:
+        if (str(row[2]), str(row[3])) != (_CONSENT_BINDING,) * 2 and (str(row[2]) != binding.browser_id or str(row[3]) != binding.generation):
             raise LookupError("grant unavailable")
         return GrantAuthorization(
             username_ref=_grant_ref(str(row[0])),
@@ -1051,14 +1097,14 @@ class CustodyCredentialFetcher:
                 deadline.check()
             if lease._grant_id != expected:
                 raise GrantRevoked("grant revoked")
-            if lease.epoch != authorization.epoch or lease.scope != GrantScope(
+            if lease.epoch != authorization.epoch or not lease.scope.permits_request_scope(GrantScope(
                 profile_id=authorization.profile_id,
                 principal_id=authorization.principal_id,
                 site_id=authorization.site_id,
                 target_tab_id=authorization.target_tab_id,
                 browser_id=authorization.browser_id,
                 generation=authorization.generation,
-            ):
+            )):
                 raise AuthorizationChanged("grant changed")
             lease.recheck()
             token, rotated = self._mint_session(lease, deadline=deadline)
