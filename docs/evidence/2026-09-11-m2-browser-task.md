@@ -1,4 +1,4 @@
-# M2 source qualification — 2026-09-11
+# M2 qualification and dev01 deployment — 2026-09-11
 
 ## Scope and source
 
@@ -6,13 +6,18 @@ Tigo authorized M2 implementation after M1. Development used the standalone
 Mac checkout on branch `feat/m2-first-browser-task`; committed Git bundles
 transferred exact revisions to the separate Linux qualification checkout.
 
-Final tested source: `13c0414977d5b6f71a11b10ac94256af20c697db`.
-This evidence file and status links are a later documentation-only commit.
+Final tested deployment source:
+`5bdbcbdc2ba62b1987b3e9af44c0aec45a4725a3`. Nine application images were
+built from `ce0ef5df54eda344692d17498cbbb297fe2161fb`, qualified and published by
+GitHub Actions run `34594208145`, then pinned in the release at `5157d60`.
+The later deployment commit adds only the missing viewer-to-router Compose
+wiring and its installation regression test; it does not rebuild image code.
 
-No GitHub push/merge, image publication, live CloudBrowser deployment,
-employee sign-in, live grant or real application account was used or changed.
-An isolated, stopped Hermes profile was configured as described below; it has
-no CloudBrowser credential and its MCP server remains disabled.
+The branch was pushed and the qualified M2 release was deployed to
+`cloudbrowser2.dev01.pmo.city` in Coolify. It has not been merged. No employee
+sign-in, live grant or real application account was used. An isolated, stopped
+Hermes profile is configured as described below; it has no CloudBrowser cookie
+and its MCP server remains disabled.
 
 ## Qualification environment
 
@@ -23,15 +28,16 @@ no CloudBrowser credential and its MCP server remains disabled.
 - Real Chromium:
   `/opt/data/browsers/chromium-1228/chrome-linux64/chrome`.
 - Compose v5.5.0 was made discoverable only inside the isolated qualification
-  virtual environment. No deployed Compose resource was rendered or mutated.
+  virtual environment. The deployed Coolify service was updated separately
+  through its API after preserving a protected pre-deployment snapshot.
 - Browser/login fixtures used localhost applications, disposable profiles and
   synthetic credentials.
 
 ## Results
 
-At the final tested source:
+At the final tested deployment source:
 
-- `uv run make check`: **1066 passed, 3 skipped**, 157.34 seconds. All six
+- `uv run make check`: **1067 passed, 3 skipped**, 162.66 seconds. All six
   specification, sensitive-file, release-manifest, installation, image-input
   and image-workflow validators passed. Real-Chromium and Compose checks ran.
 - The only skips are the three deliberately disabled ordinary-form integration
@@ -51,6 +57,30 @@ declares the pointer-bearing RSA functions before their first call and uses the
 correct C `long` type for the DER length. The Linux qualification then passed
 the complete crypto suite, five additional RSA repetitions, all validators and
 the full gate above. No image from the failed run was published or deployed.
+
+The corrected publication run, `34594208145`, passed validation and built,
+qualified and published all nine application images. Each image passed its
+non-root, health, endpoint and provenance/SBOM checks. The release manifest
+pins those exact digests and passed the release validators before deployment.
+
+## Dev01 deployment
+
+- Coolify service `nievufka0cggf82cregyihav` was updated in the `pmo-city` /
+  `development` context and reports `running:healthy`.
+- All ten containers are healthy: the nine digest-pinned application services
+  plus `clamav/clamav:1.4`. The running application image references match the
+  qualified release manifest exactly.
+- The deployment-scoped broker KEK and Vault base URL were added through
+  Coolify's protected environment configuration. Secret values were generated
+  or handled only inside the protected host workspace and were not printed or
+  copied to the development Mac.
+- The first restart exposed a missing `CB_ROUTER_BASE_URL` in the viewer
+  Compose wiring. The viewer failed closed instead of starting partially. The
+  wiring and a regression test were added in `5bdbcbd`, the stored Coolify
+  definition was verified, and the corrected restart converged healthy.
+- Unauthenticated public requests to `/` and `/health` return `401`; this
+  confirms the external TinyAuth boundary is closed, not an authenticated
+  employee journey. Container-native health checks are green.
 
 The first-tab contract/security tests were run before implementation and failed
 as expected. The first Linux browser candidate then found an incorrect expected
@@ -88,6 +118,8 @@ disabled to pass.
   core skill. The bridge is installed in a dedicated virtual environment and
   registered with a profile-secret reference, but remains disabled because no
   CloudBrowser authentication value has been supplied.
+- The digest-pinned M2 Compose release is running healthy at
+  `cloudbrowser2.dev01.pmo.city`.
 
 ## Not established by M2
 
@@ -108,11 +140,11 @@ disabled to pass.
   screenshots, tab activation/close and download tools remain future work.
 - M3 still owns live video, human takeover/resume and employee self-service
   consent/revocation.
-- The M0 independent broker/security GO review, current-source image
-  qualification, release assembly and deployment acceptance remain separate
-  gates. Test counts do not waive them.
+- The M0 independent broker/security GO review and authenticated deployment
+  acceptance remain separate gates. Test counts and container health do not
+  waive them.
 
-The next user participation is a separately approved controlled M2 acceptance:
-authenticate the prepared profile and run one synthetic/approved-site task
-while observing the exact browser. It should occur only after deciding whether
-to build/deploy this source first.
+The next user participation is a controlled M2 acceptance: sign in to the
+deployed CloudBrowser with the non-MFA test account, store that session cookie
+in the prepared Hermes profile's secret scope, enable its MCP bridge, and run
+one synthetic or approved-site task while observing the exact browser.

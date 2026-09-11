@@ -51,12 +51,14 @@ bridge. It exposes eight bounded tools through the authenticated viewer surface
 and replaces the old supported-tree helper that bypassed the router through raw
 CDP. Hermes' installed MCP SDK completed initialization/tool discovery.
 
-Final Linux qualification at `184d4bc`: **1065 passed, 3 intentionally disabled
-form cases skipped**; all six validators and **80 CloudFiles boundary cases**
-passed. The focused real-browser, Basic/Authentik, wrong-origin/account,
-idempotency and MCP suite passed **96 cases**. See
-[M2 evidence](../../../docs/evidence/2026-09-11-m2-browser-task.md). These are
-source results, not an image, deployment, real-site or employee acceptance.
+The publication source `ce0ef5d` passed GitHub Actions run `34594208145`; all
+nine application images were built, provenance/SBOM-qualified and pinned by
+digest. The deployed Compose hotfix `5bdbcbd` passed the complete Linux gate:
+**1067 passed, 3 intentionally disabled form cases skipped**, with all six
+validators green. The digest-pinned release is now `running:healthy` in the
+Coolify service behind `cloudbrowser2.dev01.pmo.city`. See
+[M2 evidence](../../../docs/evidence/2026-09-11-m2-browser-task.md). Live
+employee sign-in, Hermes authentication and a real-site journey remain pending.
 
 ## Capability inventory
 
@@ -73,7 +75,7 @@ source results, not an image, deployment, real-site or employee acceptance.
 | Basic and Authentik | Broker adapters, `browser_slots/basic_auth.py`, `authentik.py`; real-CDP and fixture tests | Synthetic current-source exact-origin/application-account checks passed. Current-source image and approved live-site proof remain open; Authentik detects MFA but has no production TOTP/code submission. |
 | Ordinary form and MFA | Form/TOTP/handoff components/tests exist | Production form mode is disabled; 3 historical form integration tests intentionally skipped. Production TOTP submission and human one-time-code handoff are unavailable. |
 | CloudFiles | `cloudfiles/`, `downloads/`, browser ingest, identity service, Compose wiring and E2E tests | Requalify actual browser → scan/store → public gateway → local attachment with current images, persistence and two owners. |
-| Release | `deploy/coolify/releases/v0.2.0-dev1/release-manifest.yaml` | `installable: true`, `sourceState: qualified`, `imageState: qualified`. Nine immutable digests qualify `ce0ef5d`, workflow run `34594208145`; live deployment and user acceptance are recorded separately. |
+| Release | `deploy/coolify/releases/v0.2.0-dev1/release-manifest.yaml`; M2 deployment evidence | `installable: true`, `sourceState: qualified`, `imageState: qualified`. Nine immutable digests qualify `ce0ef5d`, workflow run `34594208145`; the pinned stack is healthy on dev01. Authenticated user acceptance remains open. |
 
 ## Product/implementation mismatches requiring decisions
 
@@ -87,10 +89,10 @@ source results, not an image, deployment, real-site or employee acceptance.
    Employee self-service remains a separate product journey.
 3. **A page-control shell versus the promised viewer.** Control endpoints and
    bounded DOM actions exist; they do not deliver a live shared browser view.
-4. **Source progress versus release progress.** The latest commit advances SSO,
-   custody, and click/type beyond older READMEs. It simultaneously invalidates
-   the earlier images as evidence for current source. Neither direction may be
-   inferred from old "shipped" headings.
+4. **Source progress versus release progress.** M2 images are qualified and
+   deployed by immutable digest. The later `5bdbcbd` commit changes only
+   deployment wiring and its regression test, so it does not imply a new image
+   build. Container health is still distinct from authenticated user acceptance.
 5. **Fresh-tab and useful page-state path — M2 source decision made.**
    `tab_open` creates one bounded HTTP(S) target and returns its exact opaque ID.
    A real-Chromium synthetic task covers open, type, click, page state, listing
