@@ -2,8 +2,8 @@
 
 Evidence checkpoint: **2026-09-11**. The takeover baseline was `main` at
 `430a06603e8dff9531cc14042a01e38fff2b8874`. Current M2 work is on the unmerged
-branch `feat/m2-first-browser-task`; its qualified runtime source is `face98a`
-and its release pin/deployment metadata is `34246d2`.
+branch `feat/m2-first-browser-task`; its latest qualified runtime source is
+`2e300ef` and its release pin metadata is `b6fc6e1`.
 
 ## Evidence vocabulary
 
@@ -65,6 +65,13 @@ application credentials, Vault grants and MFA remain outside this acceptance.
 
 ## Capability inventory
 
+Latest M2 follow-up: `2e300ef` / CI `34623825124` / release `b6fc6e1` passed
+1078 tests (7 explained skips), image qualification and dev01 deployment. The
+dashboard bridge reads a marked 4096-byte excerpt from `pmo.city` successfully
+and preserves `browser_unavailable` for a stale tab. The roster now labels
+missing display metadata accurately; expiry of abandoned waiting records remains
+open. This supersedes the earlier runtime references in the inventory below.
+
 | Capability | Source evidence | Remaining acceptance |
 | --- | --- | --- |
 | Immutable identity and authorization | `edge_auth.py`, `identity_link_service.py`, `identity_links.py`; identity/security tests | Current deployed edge-to-principal proof for two employees. |
@@ -99,8 +106,9 @@ application credentials, Vault grants and MFA remain outside this acceptance.
 5. **Fresh-tab and useful page-state path — M2 source decision made.**
    `tab_open` creates one bounded HTTP(S) target and returns its exact opaque ID.
    A real-Chromium synthetic task covers open, type, click, page state, listing
-   and stale-target rejection. Capture still rejects page bodies exceeding 4096
-   bytes rather than truncating them; broader observation design remains open.
+   and stale-target rejection. The page-reading follow-up now returns a bounded
+   4096-byte UTF-8 excerpt with an explicit truncation marker for larger pages;
+   pagination and broader observation design remain open.
 6. **Development environment reproducibility.** The dedicated Linux checkout
    is the authoritative full-suite environment and is reproducible without
    changing the original Hermes workspace. The Mac remains suitable for source

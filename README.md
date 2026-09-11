@@ -21,10 +21,10 @@ to the employee's ordinary browser.
 
 ## Current checkpoint
 
-Qualified runtime source checkpoint: `face98a`, 2026-09-11. M1 owner
+Qualified runtime source checkpoint: `2e300ef`, 2026-09-11. M1 owner
 continuity and M2's fresh-browser exact-tab task, Basic/Authentik synthetic
 qualification, mediated Hermes stdio MCP entrypoint and restart recovery are
-present in source. The final Linux gate is **1074 passed, 7 skipped**; the
+present in source. The latest CI gate is **1078 passed, 7 skipped**; the
 skips are four unavailable Compose-CLI checks in that isolated environment and
 three deliberately disabled production-form cases. See the
 [M2 evidence](docs/evidence/2026-09-11-m2-browser-task.md) and status register
@@ -38,10 +38,13 @@ stream/takeover and interactive Hermes OIDC renewal remain open. The independent
 broker/security verdict also remains a separate gate.
 
 The current release manifest is image-qualified and installable. Its nine
-immutable image digests qualify source commit `face98a` in CI run
-`34610008200`; release commit `34246d2` synchronizes those pins. Image
+immutable image digests qualify source commit `2e300ef` in CI run
+`34623825124`; release commit `b6fc6e1` synchronizes those pins. Image
 qualification and the bounded authenticated dev01 acceptance are recorded as
 separate evidence.
+
+Page reading returns a marked, UTF-8-safe excerpt when visible text exceeds
+4096 bytes. Known backend action errors are preserved through the router.
 
 ## Product boundaries
 

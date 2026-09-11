@@ -7,9 +7,9 @@ and automated qualification are complete; see
 [evidence](../../../docs/evidence/2026-09-11-m1-continuity.md). Independent
 security approval remains separate; M1 evidence alone does not imply a live
 multi-user acceptance.
-M2 runtime source `face98a` passed **1074 tests with 7 explained skips** and all
-six validators. Its nine images passed CI run `34610008200`, are pinned by
-`34246d2`, and run healthy on dev01. The isolated authenticated Hermes profile
+M2 runtime source `2e300ef` passed **1078 tests with 7 explained skips** and all
+six validators. Its nine images passed CI run `34623825124`, are pinned by
+`b6fc6e1`, and run healthy on dev01. The isolated authenticated Hermes profile
 passed start, tab listing, public-page open and exact-tab inspection. See
 [evidence](../../../docs/evidence/2026-09-11-m2-browser-task.md). Live
 application credentials, Vault grants and MFA are not part of this acceptance.
@@ -65,7 +65,7 @@ is M3; current consent provisioning stays operator-controlled and offline.
 
 The current manifest is image-qualified and installable. All nine image pins,
 qualification records and provenance tests are synchronized to runtime source
-`face98a`, CI run `34610008200` and release commit `34246d2`. The dev01
+`2e300ef`, CI run `34623825124` and release commit `b6fc6e1`. The dev01
 deployment and bounded authenticated Hermes acceptance are recorded separately
 from image qualification.
 

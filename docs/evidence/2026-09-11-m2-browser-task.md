@@ -1,5 +1,34 @@
 # M2 qualification and dev01 acceptance — 2026-09-11
 
+## Page-reading follow-up
+
+The user's `pmo.city` task exposed an additional observation limit: the public
+page contained 4996 bytes of visible text, while the browser rejected text over
+4096 bytes. The router also discarded the backend error code.
+
+Runtime source `2e300efc359d8b5706d8b84a30058fa99e9e01f9` now returns a UTF-8-safe
+excerpt with an explicit truncation marker within the existing 4096-byte limit.
+URL/title and input limits remain unchanged. Known action failures retain their
+error code through the router; unknown codes and failed response bodies are not
+forwarded. A real-Chromium regression covers a large page containing emoji and
+accented text; router regressions cover safe errors and unknown-error suppression.
+
+CI run `34623825124` passed all validators and **1078 tests, 7 skipped**, then
+qualified all nine images. Release commit `b6fc6e1` pins those images. The dev01
+deployment reached ten healthy containers with zero application restart counts.
+A direct authenticated check from the dashboard container confirmed `pmo.city`
+page reading returns `ok`, 4096 bytes of text and the truncation marker. A
+deliberately nonexistent tab returns `browser_unavailable` through the bridge.
+
+The roster's “anonymous” entry was a waiting record without display-email
+metadata. The label now reads “User (display name unavailable)”. The owner was
+not established or removed. Waiting records currently have no expiry; abandoned
+queue cleanup remains an explicit follow-up. Missing display metadata alone is
+not evidence of unauthenticated access.
+
+The earlier qualification records below remain historical evidence; the current
+runtime and release references are the page-reading follow-up above.
+
 ## Outcome and source
 
 M2 is source-qualified, image-qualified, deployed and accepted for its bounded
