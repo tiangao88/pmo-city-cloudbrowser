@@ -226,6 +226,76 @@ def test_agent_route_relays_page_info_to_session_slot(stack) -> None:
     assert call["request_id"] == "req-agent"
 
 
+def test_agent_route_relays_bounded_tab_listing(stack) -> None:
+    _open_active_session(stack)
+    stack["forwarder"].result = {
+        "request_id": "ignored",
+        "status": "ok",
+        "page": [
+            {
+                "tab_id": "tab-1",
+                "url": "https://example.test/start",
+                "title": "Example",
+                "untrusted_extra": "discarded",
+            }
+        ],
+    }
+    conn = _conn(stack["server"])
+    status, payload = _request_json(
+        conn,
+        method="POST",
+        path="/v1/agent/tabs_list",
+        body=json.dumps({"request_id": "req-tabs", "params": {}}).encode("utf-8"),
+        headers=_identity_headers(),
+    )
+    conn.close()
+    assert status == 200
+    assert payload == {
+        "request_id": "req-tabs",
+        "status": "ok",
+        "page": [
+            {"tab_id": "tab-1", "url": "https://example.test/start", "title": "Example"}
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        None,
+        {"tab_id": "tab-1", "url": "https://example.test", "title": "Example"},
+        [{"tab_id": "tab-1", "url": "https://example.test/?secret=1", "title": "Example"}],
+        [{"tab_id": "tab-1", "url": "https://example.test", "title": "Example\nInjected"}],
+        [
+            {"tab_id": f"tab-{index}", "url": "https://example.test", "title": "Example"}
+            for index in range(33)
+        ],
+    ],
+)
+def test_agent_route_rejects_malformed_tab_listing(stack, page: object) -> None:
+    _open_active_session(stack)
+    stack["forwarder"].result = {
+        "request_id": "ignored",
+        "status": "ok",
+        "page": page,
+    }
+    conn = _conn(stack["server"])
+    status, payload = _request_json(
+        conn,
+        method="POST",
+        path="/v1/agent/tabs_list",
+        body=json.dumps({"request_id": "req-tabs", "params": {}}).encode("utf-8"),
+        headers=_identity_headers(),
+    )
+    conn.close()
+    assert status == 200
+    assert payload == {
+        "request_id": "req-tabs",
+        "status": "failed",
+        "error_code": "agent_unavailable",
+    }
+
+
 def test_agent_route_relays_first_tab_without_caller_binding_fields(stack) -> None:
     active = _open_active_session(stack)
     conn = _conn(stack["server"])

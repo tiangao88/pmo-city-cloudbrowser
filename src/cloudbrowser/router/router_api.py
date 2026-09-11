@@ -103,6 +103,9 @@ _CREDENTIAL_ALLOWED_FIELDS = frozenset({"request_id", "site_id", "target_tab_id"
 _CREDENTIAL_REFERENCE_FIELDS = frozenset({"username_ref", "grant_ref"})
 _MAX_SITE_ID = 256
 _MAX_TARGET_TAB_ID = 256
+_MAX_AGENT_URL = 2048
+_MAX_AGENT_TITLE = 4096
+_MAX_AGENT_TABS = 32
 
 _AGENT_ALLOWED_OPERATIONS = frozenset({"tab_open", "navigate", "click", "type", "page_info", "tabs_list"})
 _AGENT_FORBIDDEN_OPERATIONS = frozenset(
@@ -124,6 +127,41 @@ def _bounded_text(value: str, *, limit: int) -> bool:
     if not isinstance(value, str) or not value or len(value.encode("utf-8")) > limit:
         return False
     return all(ord(char) >= 0x20 and ord(char) != 0x7F for char in value)
+
+
+def _safe_observed_agent_url(value: object) -> bool:
+    """Accept only the query-free HTTP(S) URLs exposed by agent-control."""
+    if not _bounded_text(value, limit=_MAX_AGENT_URL):  # type: ignore[arg-type]
+        return False
+    parsed = urlsplit(value)  # type: ignore[arg-type]
+    return (
+        parsed.scheme in {"http", "https"}
+        and bool(parsed.netloc)
+        and parsed.username is None
+        and parsed.password is None
+        and ".." not in parsed.path
+        and not parsed.query
+        and not parsed.fragment
+    )
+
+
+def _bounded_agent_tabs(value: object) -> list[dict[str, str]]:
+    """Validate and minimize a tab listing received across the slot boundary."""
+    if not isinstance(value, list) or len(value) > _MAX_AGENT_TABS:
+        raise ValueError("agent tab listing is invalid")
+    tabs: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise ValueError("agent tab listing is invalid")
+        tab_id, url, title = item.get("tab_id"), item.get("url"), item.get("title")
+        if (
+            not _bounded_text(tab_id, limit=_MAX_TARGET_TAB_ID)  # type: ignore[arg-type]
+            or not _safe_observed_agent_url(url)
+            or not _bounded_text(title, limit=_MAX_AGENT_TITLE)  # type: ignore[arg-type]
+        ):
+            raise ValueError("agent tab listing is invalid")
+        tabs.append({"tab_id": tab_id, "url": url, "title": title})  # type: ignore[dict-item]
+    return tabs
 
 
 def _request_id_from(payload: Mapping[str, object]) -> str:
@@ -448,6 +486,20 @@ class RouterApi:
             return 200, _envelope(request_id, status="failed", error_code="agent_unavailable")
         if not isinstance(result, dict) or not isinstance(result.get("status"), str):
             return 200, _envelope(request_id, status="failed", error_code="agent_unavailable")
+        page = result.get("page")
+        safe_page: dict[str, str] | list[dict[str, str]] | None = None
+        if operation == "tabs_list":
+            if result["status"] == "ok":
+                try:
+                    safe_page = _bounded_agent_tabs(page)
+                except ValueError:
+                    return 200, _envelope(request_id, status="failed", error_code="agent_unavailable")
+        elif isinstance(page, dict) and all(isinstance(key, str) for key in page):
+            safe_page = {
+                key: value
+                for key, value in page.items()
+                if isinstance(key, str) and isinstance(value, str)
+            }
         # Sliding TTL: a successfully relayed action is authenticated work,
         # so the caller's active lease slides forward. Renewal is
         # best-effort — the page action already happened, so a renewal
@@ -460,13 +512,8 @@ class RouterApi:
             "request_id": request_id,
             "status": result["status"],
         }
-        page = result.get("page")
-        if isinstance(page, dict) and all(isinstance(key, str) for key in page):
-            payload["page"] = {
-                key: value
-                for key, value in page.items()
-                if isinstance(key, str) and isinstance(value, str)
-            }
+        if safe_page is not None:
+            payload["page"] = safe_page
         return 200, payload
 
     def credential_login(
