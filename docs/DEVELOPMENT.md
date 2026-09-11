@@ -3,6 +3,10 @@
 Workflow accepted by Tigo on 2026-09-11: edit on the Mac, qualify an exact
 committed revision in a separate persistent Linux checkout on mother01.
 
+M1 is implemented on `feat/m1-owner-continuity`. Its storage/grant compatibility
+and operator recovery constraints are in [M1-MIGRATION.md](M1-MIGRATION.md).
+Do not use either development checkout to migrate live profiles or grants.
+
 ## Workspace ownership
 
 - The active Mac checkout is `pmo-city-cloudbrowser-dev` under the local PMO City

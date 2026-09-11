@@ -157,6 +157,8 @@ def test_unconfirmed_termination_keeps_exclusive_lease(tmp_path):
         with pytest.raises(BrowserProcessError):
             first.stop()
         assert first.state == "failed"
+        with pytest.raises(BrowserProcessError, match="termination is unconfirmed"):
+            first.start()
         with pytest.raises(BrowserProcessError):
             process(tmp_path, slot="slot-2").start()
     finally:

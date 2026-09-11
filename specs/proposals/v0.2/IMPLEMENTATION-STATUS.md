@@ -20,17 +20,33 @@ inspected during the initial documentation reset. Subsequent read-only
 environment verification on 2026-09-11 is recorded in
 [M0 environment evidence](../../../docs/evidence/2026-09-11-m0-environment.md).
 
+## M1 source increment — 2026-09-11
+
+Tigo authorized M1 implementation on `feat/m1-owner-continuity`. Stable
+principal/profile storage, same-volume exclusive leases, graceful Chromium
+session shutdown/native restore, and owner-specific download routing are now
+implemented. Explicit durable consent survives slot/generation/tab changes while
+each broker authorization remains bound to the current exact request. Prior
+exact grants are not widened automatically.
+
+The synthetic real-Chromium A → B → A / second-slot test proves tabs, application
+cookies, local storage and downloads without transferring Alice's state to Bob.
+Focused Linux continuity/custody tests pass. Full qualification results will be
+recorded in the dated M1 evidence; these are source results, not live acceptance.
+See [ADR-0005](../../adr/0005-m1-personal-state-and-consent.md) and the
+[migration/recovery checklist](../../../docs/M1-MIGRATION.md).
+
 ## Capability inventory
 
 | Capability | Source evidence | Remaining acceptance |
 | --- | --- | --- |
 | Immutable identity and authorization | `edge_auth.py`, `identity_link_service.py`, `identity_links.py`; identity/security tests | Current deployed edge-to-principal proof for two employees. |
 | Queue, activation, leases, roster, leave | `router/sessions.py`, `router/router_api.py`; router contract tests | Integrated multi-slot and fresh-browser journey; current deployment capacity unverified. |
-| Browser lifecycle and profile | `browser_slots/browser_process.py`, `supervisor.py`, `lifecycle.py` | Persistent owner profile across slot reuse/reassignment must be proven. |
+| Browser lifecycle and profile | `browser_slots/browser_process.py`, `supervisor.py`, `lifecycle.py`, `owner_storage.py`; M1 real-Chromium continuity test | Source ownership/clean-restart continuity proven synthetically; uncertain crash locks need operator recovery. Live migration and multi-slot deployment remain qualification work. |
 | Exact-target agent actions | `browser_slots/page_actions.py`, `agent_control.py`; exact-target tests | Navigate, click, type, page_info and tabs_list exist in source; useful real-site behavior and first-tab bootstrap require integrated proof. |
 | Viewer | `viewer/session_surface.py`, `viewer/__init__.py` | Authenticated queue/control HTML exists; live video/streaming and human takeover remain missing product work. |
 | Broker authorization | `credential_capability.py`, `router/credential_broker_forwarder.py`, broker coordinator/nonce/idempotency/deadline modules | Post-remediation review and real-browser/site acceptance of replay, races, unknown outcomes and deadlines. |
-| Grant custody | `credential_broker/grant_custody.py`, `grant_admin.py`, `runtime.py` | Wrapped two-leg custody, epochs, rotation, migration, offline CLI and runtime wiring exist; user consent capture and continuity across new tab/generation remain open. |
+| Grant custody | `credential_broker/grant_custody.py`, `grant_admin.py`, `runtime.py`; M1 consent tests | Explicit durable consent and fresh exact-target authorization implemented. Employee self-service capture remains M3; independent security review and live acceptance remain open. |
 | Basic and Authentik | Broker adapters, `browser_slots/basic_auth.py`, `authentik.py`; real-CDP and fixture tests | Current-source image and live application identity proof; Authentik detects MFA but has no production TOTP/code submission. |
 | Ordinary form and MFA | Form/TOTP/handoff components/tests exist | Production form mode is disabled; 3 historical form integration tests intentionally skipped. Production TOTP submission and human one-time-code handoff are unavailable. |
 | CloudFiles | `cloudfiles/`, `downloads/`, browser ingest, identity service, Compose wiring and E2E tests | Requalify actual browser → scan/store → public gateway → local attachment with current images, persistence and two owners. |
@@ -38,17 +54,14 @@ environment verification on 2026-09-11 is recorded in
 
 ## Product/implementation mismatches requiring decisions
 
-1. **Profile ownership versus slot ownership.** `build_browser_service` selects
-   `CB_PROFILE_DIR` (default `/data/profile`); `BrowserProcessManager.rebind`
-   changes owner/generation metadata without selecting a new profile path.
-   This observation does not itself prove a cross-user exploit, but it prevents
-   claiming per-person persistence/isolation from metadata binding alone. M1
-   must trace the complete switch and test A → B → A with a real browser.
-2. **Consent lifetime versus request lifetime.** Custody lookup includes profile,
-   principal, site, tab, browser and generation. A new tab/generation changes
-   the lookup key, while the PRD promises consent once until revoked. There is
-   no demonstrated automatic safe reauthorization journey. M1 must resolve this
-   without weakening exact-target or revocation checks.
+1. **Profile ownership versus slot ownership — M1 source decision made.**
+   Production selects stable owner directories, holds an exclusive lease, and
+   restores native tabs. Unattributed old data is preserved but never adopted
+   automatically; rollout must follow the migration checklist.
+2. **Consent lifetime versus request lifetime — M1 source decision made.**
+   Explicit stable consent resolves fresh exact-target authorizations; old
+   grants remain narrow. Offline reprovisioning requires prior scope revocation.
+   Employee self-service remains a separate product journey.
 3. **A page-control shell versus the promised viewer.** Control endpoints and
    bounded DOM actions exist; they do not deliver a live shared browser view.
 4. **Source progress versus release progress.** The latest commit advances SSO,

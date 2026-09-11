@@ -259,6 +259,8 @@ class BrowserProcess:
                 return True
             if self.state == "starting":
                 raise BrowserProcessError("browser is already starting")
+            if self._process is not None and self._poll(self._process) is None:
+                raise BrowserProcessError("previous browser termination is unconfirmed")
             self._acquire_profile()
             try:
                 self.config.profile_dir.mkdir(parents=True, exist_ok=True)
