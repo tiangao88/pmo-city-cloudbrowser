@@ -1,6 +1,8 @@
 # CloudBrowser product requirements
 
-Status: **proposed consolidation, awaiting Tigo's validation — 2026-09-11**.
+Status: **product consolidation; M2a → minimum viewer/takeover → M2b login
+sequencing approved by Tigo on 2026-09-11**. This does not approve every
+unresolved design choice or establish delivered functionality.
 Source checkpoint: `430a06603e8dff9531cc14042a01e38fff2b8874`.
 This proposal preserves the approved security baseline and the frozen CloudFiles
 requirements. It does not declare unfinished functionality delivered. Proposed
@@ -82,6 +84,13 @@ recovered through a supported login flow or explicit human intervention.
   unsupported availability or latency commitment is made here.
 
 ## 5. Proposed delivery scope
+
+M2a establishes authenticated Hermes public-page control. Minimum M3a live view
+and keyboard/mouse takeover precedes M2b application-login acceptance so the
+employee can observe and intervene. Edge SSO into CloudBrowser is distinct from
+application sign-in inside remote Chromium. Manual sign-in proves the human
+path, not broker custody or deterministic account verification. M3b completes
+self-service consent. See [viewer foundation](../../../docs/M3-VIEWER-FOUNDATION.md).
 
 The first controlled pilot includes CB-01 through CB-06 and CB-08 through
 CB-10 for specifically qualified Basic/Authentik sites. MFA-required sites are excluded until CB-07

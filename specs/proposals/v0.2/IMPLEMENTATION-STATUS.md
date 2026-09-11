@@ -7,6 +7,29 @@ branch `feat/m2-first-browser-task`; its latest qualified runtime source is
 
 ## Evidence vocabulary
 
+Sequencing update, approved 2026-09-11: the accepted bounded task is **M2a**.
+Full M2 is not complete. M3a minimum live viewer/takeover precedes M2b application
+login; M3b completes self-service consent. No live viewer is delivered by this
+planning change. See [viewer foundation](../../../docs/M3-VIEWER-FOUNDATION.md).
+
+Review target `9c11358710bc9d16f7b32d25e27c0f4434d20985` remains frozen. Scan
+`f6547962-81de-4748-bede-39f6e240eb82` is unfinished after a platform check
+stopped a worker. Candidate observations are not validated findings or a GO
+verdict. Preserve that scan; viewer work does not replace its release gate.
+
+Additional Linux qualification at `b6fc6e1`: **1082 passed, 3 intentionally
+disabled production-form skips**, all six validators passed; focused
+security/login/browser suite: **176 passed**. Runtime and tests are identical
+to the review target (intervening changes are documentation). The Mac full run
+did not pass, including unavailable Linux OpenSSL dependency; Linux remains the
+qualification target. These results supplement the historical CI evidence.
+
+Read-only deployment check: broker uses `basic-local`/Basic, with no Authentik
+entry or identity-proof configuration. Both manifests omit initial agent-control
+bindings that the running container supplies externally. Source-compose viewer
+also omits the router URL required when enabling edge auth. Clean-install parity
+and end-to-end login timeout alignment remain follow-ups, not accepted behavior.
+
 - **Source present**: implementation and referenced tests are in this commit.
 - **Locally verified**: a dated run in the current takeover environment.
 - **Image qualified**: image digest/provenance and runtime checks tied to a SHA.
@@ -40,9 +63,9 @@ See [ADR-0005](../../adr/0005-m1-personal-state-and-consent.md) and the
 
 Tigo authorized M2 on `feat/m2-first-browser-task`. `tab_open` now supplies a
 bounded first target for a fresh browser; all subsequent page actions retain an
-exact Chromium target. The browser rechecks the current principal/generation
-inside its serialized action gate, so a lease rotation cannot race between an
-agent-control precheck and the page side effect.
+exact Chromium target. The browser rechecks principal/generation inside its
+serialized action gate. This component control does not establish end-to-end
+race freedom; that claim remains subject to the unfinished independent review.
 
 The supported Hermes entrypoint is now the `cloudbrowser-hermes-mcp` local stdio
 bridge. It exposes eight bounded tools through the authenticated viewer surface

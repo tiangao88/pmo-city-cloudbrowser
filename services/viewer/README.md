@@ -5,6 +5,12 @@ It implements queue join/status/activation, roster, leave/release and a router
 relay for exact-target page actions. The HTML shell is interactive; a live
 browser video stream and user/agent takeover protocol remain roadmap work.
 
+The approved next increment is [M3a viewer foundation](../../docs/M3-VIEWER-FOUNDATION.md):
+prove same-Chromium rendering, then owner-bound live view and exclusive human
+input before M2b application-login acceptance. Neko is a candidate, not an
+installed transport. Current Chromium is headless; embedding a separate Neko
+room would not satisfy the shared-browser requirement.
+
 ## Boundary
 
 - The router or authenticated control plane must derive the

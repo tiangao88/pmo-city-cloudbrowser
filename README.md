@@ -10,8 +10,8 @@ to the employee's ordinary browser.
 
 - [Product PRD](specs/proposals/v0.2/PRODUCT-PRD.md): intended journeys,
   requirements, scope and acceptance.
-- [Development roadmap](specs/proposals/v0.2/ROADMAP.md): proposed milestones,
-  dependencies and release gates, awaiting Tigo's validation.
+- [Development roadmap](specs/proposals/v0.2/ROADMAP.md): approved next sequence,
+  remaining design decisions and release gates.
 - [Implementation status](specs/proposals/v0.2/IMPLEMENTATION-STATUS.md):
   source evidence, gaps, test results and qualification state.
 - [Service map](services/README.md): implementation responsibilities.
@@ -20,6 +20,12 @@ to the employee's ordinary browser.
   commits in the separate persistent Linux checkout on mother01.
 
 ## Current checkpoint
+
+The accepted public-page increment is **M2a**, not full M2. Tigo approved the
+sequence: outstanding review/fixes → M2a closeout → minimum live viewer/takeover
+(M3a) → application login acceptance (M2b) → self-service consent (M3b).
+See [viewer foundation](docs/M3-VIEWER-FOUNDATION.md). The security review remains
+unfinished; viewer work does not waive it. No Neko integration is delivered yet.
 
 Qualified runtime source checkpoint: `2e300ef`, 2026-09-11. M1 owner
 continuity and M2's fresh-browser exact-tab task, Basic/Authentik synthetic

@@ -1,8 +1,8 @@
 # CloudBrowser development roadmap
 
-Status: **M1 and M2 implemented and qualified; M2 deployed and accepted for
-the bounded first-browser task — 2026-09-11**. Later milestones remain the
-forward plan and are not authorized by this status. M1 source implementation
+Status: **M2a bounded task accepted; full M2 remains open. Tigo approved
+viewer-before-application-login sequencing on 2026-09-11.** Development approval
+does not establish security sign-off or deployment approval. M1 source implementation
 and automated qualification are complete; see
 [evidence](../../../docs/evidence/2026-09-11-m1-continuity.md). Independent
 security approval remains separate; M1 evidence alone does not imply a live
@@ -24,16 +24,20 @@ Previous W3/W4 and CloudFiles phase numbers remain traceability references.
 | --- | --- | --- | --- |
 | M0 | Establish a trustworthy baseline | Reproduce full tests including Compose; review the large broker change with explicit findings/disposition; verify current runtime/image provenance separately. Resolve or document release blockers. No GO claim from test counts alone. | CB-05, CB-10 |
 | M1 | Prove personal ownership and consent continuity | Decide profile storage/slot switching and grant lifetime. Prove A → B → A slot reuse, restart/tab recreation, fresh capability issuance, revocation, and no cross-owner state. Deliver safe migration if the model changes. | CB-01, CB-02, CB-06, CB-09 |
-| M2 | Deliver a real browser task with secure login | Complete/qualify the first-tab path, exact-target navigation/click/type/page state, Basic/Authentik login with application account proof, and the supported Hermes entrypoint. Demonstrate a real-browser local task from request to result; reject wrong account/origin and unknown outcomes safely. | CB-03, CB-05 |
-| M3 | Deliver employee access and takeover | Record a viewer transport decision; implement authenticated live view, target selection, user takeover/resume, reconnect, and user-facing grant/revoke flow. Prove observation cannot bypass agent secret restrictions. | CB-04, CB-05, CB-06 |
+| M2a | Authenticated Hermes browser control | First-tab creation, exact-target navigation/click/ordinary typing/page state and the supported Hermes entrypoint. Public-page acceptance recorded; review/merge gate open. No application-login claim. | CB-03 |
+| M3a | Minimum live viewer and takeover | Disposable same-Chromium transport spike, authenticated owner-bound live view, target selection, exclusive keyboard/mouse takeover, explicit resume and reconnect. Human control pauses agent observation, input and broker login. | CB-04, CB-05 |
+| M2b | Application login acceptance | After M3a, observe one approved non-production Basic/Authentik login, prove the intended account, and qualify consent, revocation, wrong-account/origin rejection and uncertain outcomes. Manual login alone does not qualify broker-driven login. | CB-05, CB-06 |
+| M3b | Employee self-service access | User-facing consent/grant/revoke and recovery; observation cannot bypass agent secret restrictions. Operator provisioning is not self-service acceptance. | CB-04, CB-05, CB-06 |
 | M4 | Qualify the integrated pilot | Demonstrate two employees and two slots, browser restart/recreate, CloudFiles download to local computer, recovery, backup/restore, and measured capacity. Build all nine images from a reviewed source SHA; verify provenance/SBOM; synchronize all pins and qualify clean install/rollback. | CB-01–CB-06, CB-08–CB-10 |
 | M5 | Controlled rollout and acceptance | With deployment authorization, inspect existing state, back up, migrate/provision, roll out qualified images, and execute the signed-off user journeys. Record exact source/image IDs, failures, rollback criteria, and user acceptance. | Pilot requirements |
 | M6 | Complete v0.2 login coverage | Add broker-only exact-target form capability, then stored TOTP and direct human code submission; qualify each supported site and full recovery path. Form remains disabled until its gate passes. | CB-07, CB-09 |
 | M7 | Expand the product | Add screen-follow refinements/native agent chat, CRMOC/service principals, additional capacity/sites, and an independently approved prior-fleet migration/retirement. | Expanded scope |
 
-M0 → M1 → M2 → M3 → M4 → M5 is the proposed pilot sequence. Viewer feasibility
-can be investigated during M1 after validation, but shared UI implementation
-depends on settled ownership and interaction contracts. M6 can move ahead of M5
+Approved next sequence: review/fixes → close M2a → M3a → M2b → M3b → M4 → M5.
+Documentation and transport feasibility may progress while review is blocked;
+live credential enablement, merge and deployment must not bypass it. M2a is a
+split of old M2, not a claim its login criteria were met. See
+[viewer foundation](../../../docs/M3-VIEWER-FOUNDATION.md). M6 can move ahead of M5
 if the selected pilot sites require MFA or ordinary forms. This is a site-driven
 scope adjustment, not permission to bypass those requirements.
 
@@ -63,7 +67,8 @@ is M3; current consent provisioning stays operator-controlled and offline.
 
 ## Release and deployment policy
 
-The current manifest is image-qualified and installable. All nine image pins,
+The current manifest declares installable and is image-qualified; clean-install
+parity still needs qualification/correction. All nine image pins,
 qualification records and provenance tests are synchronized to runtime source
 `2e300ef`, CI run `34623825124` and release commit `b6fc6e1`. The dev01
 deployment and bounded authenticated Hermes acceptance are recorded separately
