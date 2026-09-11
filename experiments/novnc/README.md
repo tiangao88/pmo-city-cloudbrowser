@@ -66,6 +66,14 @@ is not an atomic rebind guarantee. Human takeover is not enabled.
 
 ## Local feasibility result — 2026-09-11
 
+Follow-up coordinator wiring: the fixture now uses `SlotViewerAuthority` with
+fixed synthetic edge attributes and a synthetic identity resolver. It does not
+trust identity headers sent by the browser. All five WebSocket tests passed
+again on image
+`sha256:937d86504ae156667d1d04d04bdf08f078056beec200c3f6f440b7e5ae19d550`.
+Process-local transition tests are in `tests/unit/test_slot_viewer_authority.py`.
+Real SSO, distributed slot transitions and takeover are still not enabled.
+
 Tested on macOS/OrbStack (aarch64), with a headed Playwright browser viewing
 the loopback endpoint. The existing mediated API opened the synthetic tab,
 typed `From mediated agent` and clicked Apply; the noVNC display showed that

@@ -7,15 +7,16 @@ import select
 import socket
 import time
 from http.cookies import SimpleCookie
+from types import SimpleNamespace
 
 from websockify.websocketproxy import LibProxyServer, ProxyRequestHandler
 
 from cloudbrowser.viewer import AuthenticatedViewer, ViewerRequest, ViewerSessionStore
-from cloudbrowser.viewer.bridge import ViewerBrowserBridge
-from cloudbrowser.viewer.live_connection import LiveViewConnection
+from cloudbrowser.viewer.slot_authority import SlotViewerAuthority
 
 ORIGIN = "http://127.0.0.1:16080"
 COOKIE = "cb_fixture_viewer"
+FIXTURE_HEADERS = {"Remote-Sub": "fixture-sub", "Remote-Groups": "PMOC_Users"}
 
 
 class FixtureProxy(ProxyRequestHandler):
@@ -40,7 +41,7 @@ class FixtureProxy(ProxyRequestHandler):
 
     def do_GET(self):
         if self.path == "/fixture-session":
-            session = self.server.viewer.open_session(self.server.binding)
+            session = self.server.authority.issue(trusted_headers=FIXTURE_HEADERS)
             self.send_response(303)
             self.send_header("Set-Cookie", f"{COOKIE}={session.token}; HttpOnly; SameSite=Strict; Path=/")
             self.send_header("Location", "/vnc.html?autoconnect=1&resize=scale")
@@ -77,9 +78,8 @@ class FixtureProxy(ProxyRequestHandler):
             except OSError:
                 pass
 
-        connection = LiveViewConnection(
-            viewer=self.server.viewer, bridge=self.server.bridge, token=self.token(),
-            current_request=lambda: self.server.binding,
+        connection = self.server.authority.connect(
+            trusted_headers=FIXTURE_HEADERS, token=self.token(),
             send_frame=send, close_transport=close,
         )
         try:
@@ -123,5 +123,9 @@ def build_proxy(readiness):
     server.binding = ViewerRequest("fixture-view", "fixture-profile", "fixture-owner", "fixture-browser", "fixture-g1")
     server.store = ViewerSessionStore(clock=time.monotonic)
     server.viewer = AuthenticatedViewer(server.store, token_secret=b"synthetic-fixture-only", ttl_s=600)
-    server.bridge = ViewerBrowserBridge(readiness=readiness, stream_endpoint="/websockify")
+    # Explicit synthetic resolver, never trust browser-supplied identity headers.
+    identity = SimpleNamespace(resolve=lambda _: "fixture-owner")
+    server.authority = SlotViewerAuthority(viewer=server.viewer, identity_client=identity,
+        readiness=readiness, stream_endpoint="/websockify")
+    server.authority.rebind(server.binding, apply_binding=lambda: None)
     return server

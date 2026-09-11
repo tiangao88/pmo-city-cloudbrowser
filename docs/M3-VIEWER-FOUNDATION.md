@@ -18,6 +18,23 @@ must serialize slot rebind with connection revocation, bound transport callbacks
 and qualify protocol behavior and real identity admission.
 Exclusive takeover and broker/agent fencing also remain pending.
 
+`SlotViewerAuthority` is now used by the disposable adapter with an explicitly
+synthetic identity resolver. Admission uses the existing edge-identity parser
+and identity-link port, requires PMOC_Users, and compares the resolved principal
+with the server-owned binding. It accepts no caller-selected binding fields.
+A shared process-local lock serializes admission, frame writes and rebind:
+old transports close before the binding-application callback runs. Reused
+generations are denied. Failed teardown blocks further transitions; failed
+application leaves admission off. Synthetic concurrency tests cover this.
+
+This is not distributed atomicity or completed SSO integration. The deployed
+slot-supervisor and viewer are separate processes: the supervisor must await
+viewer fencing acknowledgement before changing the browser and fail closed on
+timeout/restart. Admission-time identity resolution is not continuous SSO
+revocation. Trusted gateway wiring, cookie issuance, active-session expiry
+propagation, display cleanup and cross-process transition qualification remain
+required. Never deploy the fixture resolver as the real session issuer.
+
 ## Outcome
 
 After signing in to CloudBrowser, the employee sees the same Chromium instance

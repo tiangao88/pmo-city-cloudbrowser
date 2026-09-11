@@ -31,6 +31,7 @@ class LiveViewConnection:
         current_request: Callable[[], ViewerRequest],
         send_frame: Callable[[bytes], None],
         close_transport: Callable[[], None],
+        lifecycle_lock=None,
     ) -> None:
         self._viewer = viewer
         self._bridge = bridge
@@ -38,7 +39,7 @@ class LiveViewConnection:
         self._current_request = current_request
         self._send_frame = send_frame
         self._close_transport = close_transport
-        self._lock = RLock()
+        self._lock = lifecycle_lock if lifecycle_lock is not None else RLock()
         self._closed = False
         if not self.poll():
             raise PermissionError("live viewer unavailable")
