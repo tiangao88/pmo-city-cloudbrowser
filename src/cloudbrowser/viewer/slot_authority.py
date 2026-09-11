@@ -5,6 +5,8 @@ the authenticated, header-sanitizing gateway. Only the trusted slot lifecycle
 may call rebind. This lock cannot coordinate independent service processes.
 """
 from threading import RLock
+import time
+import math
 
 from cloudbrowser.edge_auth import REQUIRED_GROUP, parse_edge_identity
 from . import ViewerRequest
@@ -13,7 +15,7 @@ from .live_connection import LiveViewConnection
 
 
 class SlotViewerAuthority:
-    def __init__(self, *, viewer, identity_client, readiness, stream_endpoint):
+    def __init__(self, *, viewer, identity_client, readiness, stream_endpoint, clock=time.monotonic):
         self._viewer = viewer
         self._identity = identity_client
         self._readiness = readiness
@@ -23,11 +25,39 @@ class SlotViewerAuthority:
         self._used_generations = set()
         self._connections = set()
         self._teardown_failed = False
+        self._clock = clock
+        self._lease_deadline = None
 
     def _current(self):
+        self._expire_lease()
         if self._binding is None:
             raise PermissionError("viewer unavailable")
         return self._binding
+
+    def _expire_lease(self):
+        if self._lease_deadline is not None and self._clock() >= self._lease_deadline:
+            self.rebind(None, apply_binding=lambda: None)
+
+    def poll_lease(self):
+        """Called by the service timer even when no viewer is connected."""
+        with self._lock:
+            self._expire_lease()
+
+    def require_lease(self, epoch):
+        with self._lock:
+            if self._current().request_id != epoch or self._lease_deadline is None:
+                raise PermissionError("viewer lease unavailable")
+
+    def renew_lease(self, epoch, *, lease_s):
+        with self._lock:
+            self.require_lease(epoch)
+            self._validate_lease(lease_s)
+            self._lease_deadline = self._clock() + lease_s
+
+    @staticmethod
+    def _validate_lease(lease_s):
+        if not isinstance(lease_s, (int, float)) or not math.isfinite(lease_s) or not 0 < lease_s <= 60:
+            raise ValueError("lease duration must be finite and bounded")
 
     def _principal(self, headers):
         identity = parse_edge_identity(headers)
@@ -83,6 +113,7 @@ class SlotViewerAuthority:
                     raise ValueError("viewer generation must be fresh")
                 self._used_generations.add(binding.generation)
             self._binding = None
+            self._lease_deadline = None
             failed = False
             for connection in self._connections:
                 try:
@@ -109,7 +140,7 @@ class SlotViewerAuthority:
                         raise PermissionError("viewer binding mismatch")
             self.rebind(None, apply_binding=lambda: None)
 
-    def publish_fenced(self, binding: ViewerRequest, *, reset_display):
+    def publish_fenced(self, binding: ViewerRequest, *, reset_display, lease_s=15):
         """Internal enable seam: fresh session epoch after confirmed teardown.
 
         A resumed browser may retain its generation, but request_id must be a
@@ -117,6 +148,7 @@ class SlotViewerAuthority:
         Caller must serialize this with fencing and never reuse an epoch.
         """
         with self._lock:
+            self._validate_lease(lease_s)
             if self._binding is not None or self._teardown_failed:
                 raise PermissionError("viewer is not fenced")
             reset_display()
@@ -126,3 +158,4 @@ class SlotViewerAuthority:
             ):
                 raise PermissionError("viewer browser not ready")
             self._binding = binding
+            self._lease_deadline = self._clock() + lease_s

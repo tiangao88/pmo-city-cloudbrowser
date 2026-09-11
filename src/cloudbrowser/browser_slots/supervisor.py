@@ -54,6 +54,7 @@ class SlotSupervisor:
         native_tab_restore: bool = False,
         viewer_fence: Callable[[BrowserBinding], None] | None = None,
         viewer_enable: Callable[[BrowserBinding], None] | None = None,
+        viewer_renew: Callable[[BrowserBinding], None] | None = None,
     ) -> None:
         self._lifecycle = lifecycle
         self._transport = transport
@@ -65,6 +66,22 @@ class SlotSupervisor:
         if viewer_enable is not None and viewer_fence is None:
             raise ValueError("viewer enable requires fencing")
         self._viewer_enable = viewer_enable
+        if viewer_renew is not None and viewer_enable is None:
+            raise ValueError("viewer renewal requires enable handshake")
+        self._viewer_renew = viewer_renew
+
+    @_serialized
+    def renew_viewer(self, binding: BrowserBinding) -> None:
+        """Heartbeat hook; runtime must schedule it, never renew blindly."""
+        if (self._viewer_renew is None or self._lifecycle.binding != binding
+                or self._lifecycle.state is not BrowserState.READY):
+            raise BrowserUnavailable("viewer lease renewal unavailable")
+        ready = self._transport.readiness()
+        if (ready.owner, ready.generation, ready.cdp_ok) != (
+            binding.principal_id, binding.generation, True
+        ):
+            raise BrowserUnavailable("viewer lease renewal unavailable")
+        self._viewer_renew(binding)
 
     def _fence_viewer(self, binding: BrowserBinding) -> None:
         if self._viewer_fence is not None:

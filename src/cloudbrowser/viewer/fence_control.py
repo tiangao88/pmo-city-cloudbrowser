@@ -18,6 +18,7 @@ from .transition import ViewerTransition
 
 PATH = "/internal/viewer/fence"
 ENABLE_PATH = "/internal/viewer/enable"
+RENEW_PATH = "/internal/viewer/renew"
 
 
 def create_fence_server(authority, *, shared_secret, address=("127.0.0.1", 0), reset_display=None):
@@ -27,7 +28,7 @@ def create_fence_server(authority, *, shared_secret, address=("127.0.0.1", 0), r
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
-            if self.path not in (PATH, ENABLE_PATH) or not hmac.compare_digest(
+            if self.path not in (PATH, ENABLE_PATH, RENEW_PATH) or not hmac.compare_digest(
                 self.headers.get("Authorization", ""), "Bearer " + shared_secret
             ):
                 self.send_error(403)
@@ -50,9 +51,12 @@ def create_fence_server(authority, *, shared_secret, address=("127.0.0.1", 0), r
                 if self.path == PATH:
                     ticket = transition.fence(binding)
                     result = {"fenced": True, "nonce": nonce, "ticket": ticket}
-                else:
+                elif self.path == ENABLE_PATH:
                     transition.enable(body.get("ticket"), binding)
                     result = {"enabled": True, "nonce": nonce}
+                else:
+                    transition.renew(body.get("ticket"), binding)
+                    result = {"renewed": True, "nonce": nonce}
             except Exception:
                 self.send_error(409, "Viewer fence unavailable")
                 return
@@ -67,7 +71,16 @@ def create_fence_server(authority, *, shared_secret, address=("127.0.0.1", 0), r
         def log_message(self, *args):
             pass
 
-    return ThreadingHTTPServer(address, Handler)
+    class LeaseServer(ThreadingHTTPServer):
+        def service_actions(self):
+            try:
+                authority.poll_lease()
+            except Exception:
+                # Authority teardown errors latch admission off. Do not expose
+                # transport details or kill the service's expiry timer.
+                pass
+
+    return LeaseServer(address, Handler)
 
 
 class ViewerFenceClient:
@@ -91,6 +104,11 @@ class ViewerFenceClient:
             raise BrowserUnavailable("viewer fence required")
         self._call(ENABLE_PATH, binding, ticket=self._ticket)
 
+    def renew(self, binding):
+        if self._ticket is None:
+            raise BrowserUnavailable("viewer fence required")
+        self._call(RENEW_PATH, binding, ticket=self._ticket)
+
     def _call(self, path, binding, *, ticket=None):
         nonce = secrets.token_hex(16)
         cls = http.client.HTTPSConnection if self._origin.scheme == "https" else http.client.HTTPConnection
@@ -113,7 +131,8 @@ class ViewerFenceClient:
                         or result != {"fenced": True, "nonce": nonce, "ticket": token}):
                     raise ValueError()
                 return token
-            if result != {"enabled": True, "nonce": nonce}:
+            key = "enabled" if path == ENABLE_PATH else "renewed"
+            if result != {key: True, "nonce": nonce}:
                 raise ValueError()
         except Exception:
             raise BrowserUnavailable("viewer fencing was not acknowledged") from None

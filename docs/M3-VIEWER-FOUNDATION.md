@@ -63,6 +63,22 @@ required. All live-view-enabled deployments must make fencing mandatory;
 the optional port only preserves existing viewer-less behavior during this
 development stage. No image/release qualification is implied.
 
+The protocol now gives enabled viewer authority a 15-second monotonic lease.
+Renewal requires the current fence ticket and exact enabled binding. Expiry
+disables admission and closes streams through admission/frame checks and a
+control-server idle timer; late renewal or enable retry cannot resurrect it.
+The optional supervisor `renew_viewer` hook checks its READY lifecycle and
+matching live browser readiness before renewing. A new client process has no
+old ticket and must perform a fresh fence/enable handshake.
+
+Runtime integration must still schedule renewal comfortably before expiry,
+wire the private service, and handle supervisor leadership. This bounded lease
+is not leader election: two processes with the same service secret are not
+proven mutually exclusive. The process-local lock, bounded transport callbacks
+and timer polling determine teardown latency; this is not a hard real-time
+cutoff. The disposable legacy issuer remains synthetic and is not proof of
+deployment-wide lease enforcement. Real SSO issuance remains unfinished.
+
 ## Outcome
 
 After signing in to CloudBrowser, the employee sees the same Chromium instance

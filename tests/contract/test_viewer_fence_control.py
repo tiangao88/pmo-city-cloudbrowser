@@ -86,6 +86,7 @@ def test_enable_over_http_requires_latest_fence_and_fresh_session(rig):
     client(BINDING)
     client.enable(BINDING)
     client.enable(BINDING)
+    client.renew(BINDING)
     assert events == ["close", "reset"]
     assert not old_live.forward_frame(b"stale")
     assert authority.issue(trusted_headers=HEADERS)
@@ -93,6 +94,8 @@ def test_enable_over_http_requires_latest_fence_and_fresh_session(rig):
     another(BINDING)
     with pytest.raises(BrowserUnavailable):
         client.enable(BINDING)
+    with pytest.raises(BrowserUnavailable):
+        client.renew(BINDING)
 
 
 def test_supervisor_enables_only_after_ready_and_tab_cleanup(rig, tmp_path):
@@ -103,8 +106,15 @@ def test_supervisor_enables_only_after_ready_and_tab_cleanup(rig, tmp_path):
         close_empty_pages=lambda: events.append("tabs-clean"),
         open_page=lambda _: None)
     client = ViewerFenceClient(base_url=url, shared_secret=SECRET)
-    supervisor = SlotSupervisor(lifecycle, browser, viewer_fence=client, viewer_enable=client.enable)
+    supervisor = SlotSupervisor(lifecycle, browser, viewer_fence=client, viewer_enable=client.enable,
+        viewer_renew=client.renew)
+    with pytest.raises(BrowserUnavailable):
+        supervisor.renew_viewer(BINDING)
     supervisor.wake(BINDING)
+    supervisor.renew_viewer(BINDING)
+    browser.readiness = lambda: BrowserReadiness("alice", "wrong-generation", True)
+    with pytest.raises(BrowserUnavailable):
+        supervisor.renew_viewer(BINDING)
     assert events == ["close", "start", "tabs-clean", "reset"]
 
 
