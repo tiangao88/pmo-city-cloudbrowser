@@ -42,7 +42,7 @@ x-common: &common
 services:
   router:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/router@sha256:5c8755fb1d21da41fab21c26c6173d35b73dba9d529c3c19f9208c26b7715f8c
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/router@sha256:f131a1bd62e25c932aad5e49ab7cbc71e058479f5f0f3a0fc5e3ad6c17ef5221
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
@@ -84,7 +84,7 @@ services:
 
   slot-supervisor:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/slot-supervisor@sha256:4e056fa813a4b20f99ce5a303e4d582c51167894cd6a48f5fa54aef1c5608ad5
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/slot-supervisor@sha256:08dd78af0d39b388ad56af253a79de4f158f615fbd908f515824dcf8020900b1
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
@@ -111,7 +111,7 @@ services:
 
   browser:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/browser@sha256:8630beed5f59d8a23c8809629a140805d87a3aba45d211e07742dc6702b9ecbf
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/browser@sha256:3ff4b48e77517d55d29cf109bbe7904cd98931b629ef836477524939771da22b
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
@@ -158,7 +158,7 @@ services:
 
   agent-control:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/agent-control@sha256:ac4fcaabdad1cc7ae733cac600c8a4a7d812620426fb3003567a8d31de8e8235
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/agent-control@sha256:4dbbd08f3219ff1e5edcc65e033c1a3c4c043c7e21fb8b7d0e4623b9ec7472c0
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
@@ -181,7 +181,7 @@ services:
 
   viewer:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/viewer@sha256:06a9cae3c742754d1d90364e364ab58e16ccb6474f1b6576d44bc0ddce7f82c1
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/viewer@sha256:4a528717031e5cc9679ea430ee95fe7000266ffe39e3c52ba96f3bfe68880b3b
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
@@ -215,7 +215,7 @@ services:
 
   downloads:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/downloads@sha256:b4f05f829c63e413c1a83eda7b40c4a56568ba4fbfe9242e7afe9250efd69eba
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/downloads@sha256:8199b392caed402f352dbfdd6f171086fba573a56ceab6c64f2f8f3846024d95
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
@@ -238,7 +238,7 @@ services:
 
   cloudfiles:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/cloudfiles@sha256:586bb77d808d3f429866f3eb33ce94c386347acf09dc1550f240dcb2bbca97f1
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/cloudfiles@sha256:d4231ad2bf4cc0c7e3c1a2e94197b4e6784ffdd0ff1cd9d1a5aafbbaa2d8092a
     labels:
       - tinyauth.apps.cloudbrowser2-cloudfiles.oauth.groups=PMOC_Users
       - tinyauth.apps.cloudbrowser2-cloudfiles.config.domain=cloudfiles2.dev01.pmo.city
@@ -296,7 +296,7 @@ services:
 
   identity-link:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/identity-link@sha256:948aba1f4ac9e88e138cbf416b3165a13e502aee6936a51a03c2c3b623030da1
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/identity-link@sha256:6751d9d89a640af966fdfee79565d637314026f367b733cf8ca7059a95b5b809
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
@@ -315,7 +315,7 @@ services:
 
   credential-broker:
     <<: *common
-    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/credential-broker@sha256:a37597c4ea125f691dc3044624a933b32d2d5a0bbbf07a0f7bda065a44be7b3a
+    image: ghcr.io/tiangao88/pmo-city-cloudbrowser/credential-broker@sha256:dfcf7b595adc6252b7337cc00512cb1a2f779eb50f8dd4ec9c7ebf4599633091
     environment:
       CB_INSTANCE_ID: ${CB_INSTANCE_ID:-cloudbrowser2-dev-v01}
       CB_RELEASE_VERSION: ${CB_RELEASE_VERSION:-0.2.0-dev1}
