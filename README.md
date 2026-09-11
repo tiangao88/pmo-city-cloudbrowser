@@ -21,22 +21,27 @@ to the employee's ordinary browser.
 
 ## Current checkpoint
 
-Tested source checkpoint: `184d4bc`, 2026-09-11. M1 owner continuity and M2's
-fresh-browser exact-tab task, Basic/Authentik synthetic qualification and
-mediated Hermes stdio MCP entrypoint are present in source. The Linux gate is
-**1065 passed, 3 intentionally disabled form cases skipped**; CloudFiles is
-**80 passed**. See the [M2 evidence](docs/evidence/2026-09-11-m2-browser-task.md)
-and status register for the precise boundary.
+Qualified runtime source checkpoint: `face98a`, 2026-09-11. M1 owner
+continuity and M2's fresh-browser exact-tab task, Basic/Authentik synthetic
+qualification, mediated Hermes stdio MCP entrypoint and restart recovery are
+present in source. The final Linux gate is **1074 passed, 7 skipped**; the
+skips are four unavailable Compose-CLI checks in that isolated environment and
+three deliberately disabled production-form cases. See the
+[M2 evidence](docs/evidence/2026-09-11-m2-browser-task.md) and status register
+for the precise boundary.
 
-Production form mode is disabled. TOTP submission, human code handoff, a live
-browser stream/takeover, interactive Hermes OIDC renewal and hosted user
-acceptance remain open. The independent M0 broker/security verdict also remains
-a release gate.
+The digest-pinned release is healthy on `cloudbrowser2.dev01.pmo.city`. An
+isolated authenticated Hermes profile passed the bounded start, list, open and
+exact-tab inspection journey. Production form mode is disabled; TOTP
+submission, human code handoff, crash-time open-tab continuity, a live browser
+stream/takeover and interactive Hermes OIDC renewal remain open. The independent
+broker/security verdict also remains a separate gate.
 
 The current release manifest is image-qualified and installable. Its nine
-immutable image digests qualify source commit `ce0ef5d` in CI run
-`34594208145`. Image qualification does not by itself establish live user
-acceptance.
+immutable image digests qualify source commit `face98a` in CI run
+`34610008200`; release commit `34246d2` synchronizes those pins. Image
+qualification and the bounded authenticated dev01 acceptance are recorded as
+separate evidence.
 
 ## Product boundaries
 

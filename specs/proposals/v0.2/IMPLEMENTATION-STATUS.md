@@ -1,10 +1,9 @@
 # CloudBrowser implementation status
 
-Evidence checkpoint: **2026-09-11**, `main` at
-`430a06603e8dff9531cc14042a01e38fff2b8874` (`feat(broker): integrate secure
-credential login flow`). Remote was fetched and matched the handoff. The last
-change touches 135 files; the handoff says it was pushed directly to main,
-without a completed final independent review.
+Evidence checkpoint: **2026-09-11**. The takeover baseline was `main` at
+`430a06603e8dff9531cc14042a01e38fff2b8874`. Current M2 work is on the unmerged
+branch `feat/m2-first-browser-task`; its qualified runtime source is `face98a`
+and its release pin/deployment metadata is `34246d2`.
 
 ## Evidence vocabulary
 
@@ -14,11 +13,10 @@ without a completed final independent review.
 - **Deployed/accepted**: named environment and dated complete-user-journey proof.
 - **Historical report**: prior documentation or handoff, not freshly verified.
 
-Never collapse these states into an unqualified "done". Current source has no
-matching qualified release in the checked-in manifest. Live systems were not
-inspected during the initial documentation reset. Subsequent read-only
-environment verification on 2026-09-11 is recorded in
-[M0 environment evidence](../../../docs/evidence/2026-09-11-m0-environment.md).
+Never collapse these states into an unqualified "done". Live systems were not
+inspected during the initial documentation reset. Subsequent environment
+verification is recorded in [M0 environment evidence](../../../docs/evidence/2026-09-11-m0-environment.md),
+and the later M2 source/image/deployment/acceptance proof is recorded below.
 
 ## M1 source increment — 2026-09-11
 
@@ -51,14 +49,19 @@ bridge. It exposes eight bounded tools through the authenticated viewer surface
 and replaces the old supported-tree helper that bypassed the router through raw
 CDP. Hermes' installed MCP SDK completed initialization/tool discovery.
 
-The publication source `ce0ef5d` passed GitHub Actions run `34594208145`; all
-nine application images were built, provenance/SBOM-qualified and pinned by
-digest. The deployed Compose hotfix `5bdbcbd` passed the complete Linux gate:
-**1067 passed, 3 intentionally disabled form cases skipped**, with all six
-validators green. The digest-pinned release is now `running:healthy` in the
-Coolify service behind `cloudbrowser2.dev01.pmo.city`. See
+Acceptance added non-root download-volume preparation, active-session bridge
+recovery, exclusive-lease-aware Chromium singleton recovery, browser-only
+restart reconciliation and bounded router forwarding of tab listings. Final
+runtime source `face98a` passed the complete Linux gate: **1074 passed, 7
+skipped**, with all six validators green. GitHub Actions run `34610008200`
+built and qualified all nine images; `34246d2` pins their immutable digests.
+
+The release is `running:healthy` behind `cloudbrowser2.dev01.pmo.city`. The
+isolated authenticated `cloudbrowser-test` Hermes profile successfully started
+the session, listed tabs, opened `https://example.com/`, and inspected the exact
+returned tab as `Example Domain`; a model-driven MCP one-shot also passed. See
 [M2 evidence](../../../docs/evidence/2026-09-11-m2-browser-task.md). Live
-employee sign-in, Hermes authentication and a real-site journey remain pending.
+application credentials, Vault grants and MFA remain outside this acceptance.
 
 ## Capability inventory
 
@@ -66,16 +69,16 @@ employee sign-in, Hermes authentication and a real-site journey remain pending.
 | --- | --- | --- |
 | Immutable identity and authorization | `edge_auth.py`, `identity_link_service.py`, `identity_links.py`; identity/security tests | Current deployed edge-to-principal proof for two employees. |
 | Queue, activation, leases, roster, leave | `router/sessions.py`, `router/router_api.py`; router contract tests | Integrated multi-slot and fresh-browser journey; current deployment capacity unverified. |
-| Browser lifecycle and profile | `browser_slots/browser_process.py`, `supervisor.py`, `lifecycle.py`, `owner_storage.py`; M1 real-Chromium continuity test | Source ownership/clean-restart continuity proven synthetically; uncertain crash locks need operator recovery. Live migration and multi-slot deployment remain qualification work. |
-| Exact-target agent actions | `browser_slots/page_actions.py`, `agent_control.py`; M2 first-tab and real-browser task tests | `tab_open`, navigate, click, type, page_info and tabs_list passed the synthetic real-Chromium task. Useful real-site acceptance and richer bounded observation remain separate. |
-| Hermes entrypoint | `hermes_mcp.py`, `integrations/hermes/cloudbrowser/`; MCP contract/security tests and Hermes SDK probe | Eight mediated stdio MCP tools are source-qualified. An isolated stopped `cloudbrowser-test` profile is installed on mother01 with no copied secrets; distinct TinyAuth-compatible auth, bridge enablement and hosted task acceptance remain open. Interactive OIDC renewal is not implemented. |
+| Browser lifecycle and profile | `browser_slots/browser_process.py`, `supervisor.py`, `lifecycle.py`, `owner_storage.py`; M1 real-Chromium continuity and M2 restart tests | Stable ownership, clean restart, stale singleton recovery and browser-only binding reconciliation are implemented and dev01-tested. Abrupt-crash tab continuity and multi-slot live qualification remain open. |
+| Exact-target agent actions | `browser_slots/page_actions.py`, `agent_control.py`, `router/router_api.py`; M2 browser/forwarding tests | The authenticated Hermes dev01 task passed `tab_open`, `tabs_list` and exact-target `page_info`. Richer bounded observation and approved application-site acceptance remain separate. |
+| Hermes entrypoint | `hermes_mcp.py`, `integrations/hermes/cloudbrowser/`; MCP contract/security tests and Hermes SDK probe | Eight mediated stdio MCP tools are source-qualified, enabled and accepted in the isolated authenticated `cloudbrowser-test` profile. Interactive OIDC acquisition/renewal is not implemented. |
 | Viewer | `viewer/session_surface.py`, `viewer/__init__.py` | Authenticated queue/control HTML exists; live video/streaming and human takeover remain missing product work. |
 | Broker authorization | `credential_capability.py`, `router/credential_broker_forwarder.py`, broker coordinator/nonce/idempotency/deadline modules | Post-remediation review and real-browser/site acceptance of replay, races, unknown outcomes and deadlines. |
 | Grant custody | `credential_broker/grant_custody.py`, `grant_admin.py`, `runtime.py`; M1 consent tests | Explicit durable consent and fresh exact-target authorization implemented. Employee self-service capture remains M3; independent security review and live acceptance remain open. |
 | Basic and Authentik | Broker adapters, `browser_slots/basic_auth.py`, `authentik.py`; real-CDP and fixture tests | Synthetic current-source exact-origin/application-account checks passed. Current-source image and approved live-site proof remain open; Authentik detects MFA but has no production TOTP/code submission. |
 | Ordinary form and MFA | Form/TOTP/handoff components/tests exist | Production form mode is disabled; 3 historical form integration tests intentionally skipped. Production TOTP submission and human one-time-code handoff are unavailable. |
 | CloudFiles | `cloudfiles/`, `downloads/`, browser ingest, identity service, Compose wiring and E2E tests | Requalify actual browser → scan/store → public gateway → local attachment with current images, persistence and two owners. |
-| Release | `deploy/coolify/releases/v0.2.0-dev1/release-manifest.yaml`; M2 deployment evidence | `installable: true`, `sourceState: qualified`, `imageState: qualified`. Nine immutable digests qualify `ce0ef5d`, workflow run `34594208145`; the pinned stack is healthy on dev01. Authenticated user acceptance remains open. |
+| Release | `deploy/coolify/releases/v0.2.0-dev1/release-manifest.yaml`; M2 deployment evidence | `installable: true`, `sourceState: qualified`, `imageState: qualified`. Nine immutable digests qualify `face98a`, workflow run `34610008200`; the pinned stack is healthy and the bounded authenticated Hermes journey passed on dev01. |
 
 ## Product/implementation mismatches requiring decisions
 
@@ -89,19 +92,19 @@ employee sign-in, Hermes authentication and a real-site journey remain pending.
    Employee self-service remains a separate product journey.
 3. **A page-control shell versus the promised viewer.** Control endpoints and
    bounded DOM actions exist; they do not deliver a live shared browser view.
-4. **Source progress versus release progress.** M2 images are qualified and
-   deployed by immutable digest. The later `5bdbcbd` commit changes only
-   deployment wiring and its regression test, so it does not imply a new image
-   build. Container health is still distinct from authenticated user acceptance.
+4. **Source progress versus release progress.** M2 runtime source `face98a` is
+   image-qualified and deployed by immutable digest; `34246d2` records those
+   pins. Container health and authenticated journey acceptance are recorded as
+   distinct checks even though both now pass for the bounded M2 task.
 5. **Fresh-tab and useful page-state path — M2 source decision made.**
    `tab_open` creates one bounded HTTP(S) target and returns its exact opaque ID.
    A real-Chromium synthetic task covers open, type, click, page state, listing
    and stale-target rejection. Capture still rejects page bodies exceeding 4096
    bytes rather than truncating them; broader observation design remains open.
-6. **Development environment reproducibility.** Native crypto expects Linux
-   library names, and the Authentik real-Chrome fixture pins a previous agent's
-   absolute executable path. M0 must make the qualified test environment
-   reproducible; installing a browser somewhere else does not satisfy that gate.
+6. **Development environment reproducibility.** The dedicated Linux checkout
+   is the authoritative full-suite environment and is reproducible without
+   changing the original Hermes workspace. The Mac remains suitable for source
+   work and focused tests but does not expose Linux's `libcrypto.so` name.
 
 ## Verification record
 
@@ -144,13 +147,13 @@ passed, CloudFiles boundary **80 passed**, compileall/diff checks passed.
 This closes the environment/test reproduction gate noted above. The original
 Hermes checkout stayed clean and unchanged.
 
-All nine deployed application image references match the manifest's older pins
-attributed to `50ce198`; none establish qualification of `430a066`. See
-[evidence](../../../docs/evidence/2026-09-11-m0-environment.md) and
-[development workflow](../../../docs/DEVELOPMENT.md).
+The statement above describes the initial M0 inspection. It is superseded for
+M2 by the `face98a` / run `34610008200` qualification and `34246d2` deployment
+record. See [M2 evidence](../../../docs/evidence/2026-09-11-m2-browser-task.md)
+and [development workflow](../../../docs/DEVELOPMENT.md).
 
-A final independent security GO verdict, current-source image qualification,
-and live acceptance are not supplied by this documentation review.
+A final independent broker/security GO verdict and live credential/MFA
+acceptance remain separate open gates.
 
 ## Documentation ownership
 

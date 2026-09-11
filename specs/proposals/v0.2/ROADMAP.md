@@ -1,17 +1,19 @@
 # CloudBrowser development roadmap
 
-Status: **M1 and M2 source development authorized by Tigo — 2026-09-11**.
-Later milestones remain the forward plan; this is not deployment authorization.
-M1 source implementation and automated qualification are complete; see
+Status: **M1 and M2 implemented and qualified; M2 deployed and accepted for
+the bounded first-browser task — 2026-09-11**. Later milestones remain the
+forward plan and are not authorized by this status. M1 source implementation
+and automated qualification are complete; see
 [evidence](../../../docs/evidence/2026-09-11-m1-continuity.md). Independent
-security approval, image qualification and live acceptance remain separate gates.
-M2 source implementation and automated qualification are complete at `184d4bc`:
-fresh-browser exact-tab work, synthetic Basic/Authentik proof and the mediated
-Hermes stdio MCP entrypoint. See
-[evidence](../../../docs/evidence/2026-09-11-m2-browser-task.md). A live Hermes
-profile/site acceptance needs a separately approved target, authentication and
-release/deployment decision.
-Based on source `430a06603e8dff9531cc14042a01e38fff2b8874`.
+security approval remains separate; M1 evidence alone does not imply a live
+multi-user acceptance.
+M2 runtime source `face98a` passed **1074 tests with 7 explained skips** and all
+six validators. Its nine images passed CI run `34610008200`, are pinned by
+`34246d2`, and run healthy on dev01. The isolated authenticated Hermes profile
+passed start, tab listing, public-page open and exact-tab inspection. See
+[evidence](../../../docs/evidence/2026-09-11-m2-browser-task.md). Live
+application credentials, Vault grants and MFA are not part of this acceptance.
+The roadmap originated from baseline `430a06603e8dff9531cc14042a01e38fff2b8874`.
 This is the proposed forward plan. [PRODUCT-PRD.md](PRODUCT-PRD.md) defines
 outcomes; [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md) records evidence.
 Previous W3/W4 and CloudFiles phase numbers remain traceability references.
@@ -62,9 +64,10 @@ is M3; current consent provisioning stays operator-controlled and offline.
 ## Release and deployment policy
 
 The current manifest is image-qualified and installable. All nine image pins,
-qualification records and provenance tests are synchronized to commit
-`ce0ef5d` and CI run `34594208145`. Live deployment and user acceptance remain
-separate outcomes from image qualification.
+qualification records and provenance tests are synchronized to runtime source
+`face98a`, CI run `34610008200` and release commit `34246d2`. The dev01
+deployment and bounded authenticated Hermes acceptance are recorded separately
+from image qualification.
 
 A user/operator or an authorized agent may trigger the build workflow. Token
 budgets from previous tasks are not an enduring operational restriction.

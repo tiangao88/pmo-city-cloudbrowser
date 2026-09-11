@@ -1,150 +1,127 @@
-# M2 qualification and dev01 deployment — 2026-09-11
+# M2 qualification and dev01 acceptance — 2026-09-11
 
-## Scope and source
+## Outcome and source
 
-Tigo authorized M2 implementation after M1. Development used the standalone
-Mac checkout on branch `feat/m2-first-browser-task`; committed Git bundles
-transferred exact revisions to the separate Linux qualification checkout.
+M2 is source-qualified, image-qualified, deployed and accepted for its bounded
+first-browser-task scope. Development used the standalone Mac checkout on
+branch `feat/m2-first-browser-task`; the branch remains unmerged.
 
-Final tested deployment source:
-`5bdbcbdc2ba62b1987b3e9af44c0aec45a4725a3`. Nine application images were
-built from `ce0ef5df54eda344692d17498cbbb297fe2161fb`, qualified and published by
-GitHub Actions run `34594208145`, then pinned in the release at `5157d60`.
-The later deployment commit adds only the missing viewer-to-router Compose
-wiring and its installation regression test; it does not rebuild image code.
+- Runtime image source: `face98a96d69443eefbf81516b75525f58b9a62b`.
+- Release pin/deployment metadata: `34246d2cfa6d6aea9b41cf038bb9c53e5dd4f092`.
+- Image qualification: GitHub Actions run `34610008200`.
+- Environment: Coolify service `nievufka0cggf82cregyihav`, behind
+  `cloudbrowser2.dev01.pmo.city`.
 
-The branch was pushed and the qualified M2 release was deployed to
-`cloudbrowser2.dev01.pmo.city` in Coolify. It has not been merged. No employee
-sign-in, live grant or real application account was used. An isolated, stopped
-Hermes profile is configured as described below; it has no CloudBrowser cookie
-and its MCP server remains disabled.
+The isolated Hermes test profile has a user-supplied TinyAuth-compatible
+session cookie in its own secret scope. No cookie value, account identifier,
+password, token or OTP is present in this evidence or in the repository.
 
 ## Qualification environment
 
-- Host: mother01; Coolify `pmo-city` / `development` context.
-- Container: `hermes-agent-gf68z1riv5f082shjcusvosw`, user `hermes`.
-- Dedicated checkout: `/opt/data/cloudbrowser-codex/repository`, detached at
-  the tested source. The original Hermes workspace remained unchanged.
-- Real Chromium:
-  `/opt/data/browsers/chromium-1228/chrome-linux64/chrome`.
-- Compose v5.5.0 was made discoverable only inside the isolated qualification
-  virtual environment. The deployed Coolify service was updated separately
-  through its API after preserving a protected pre-deployment snapshot.
-- Browser/login fixtures used localhost applications, disposable profiles and
-  synthetic credentials.
+- Linux qualification ran in the dedicated checkout
+  `/opt/data/cloudbrowser-codex/repository` inside
+  `hermes-agent-gf68z1riv5f082shjcusvosw` on mother01.
+- The original Hermes development checkout remained clean and unchanged.
+- The Mac checkout remained the development source; the Linux checkout was
+  used only to reproduce tests, build acceptance and deployment operations.
+- Coolify configuration was read through its API and saved as a protected
+  pre-deployment snapshot before every compose change.
 
-## Results
+## Final automated qualification
 
-At the final tested deployment source:
+At `face98a96d69443eefbf81516b75525f58b9a62b`:
 
-- `uv run make check`: **1067 passed, 3 skipped**, 162.66 seconds. All six
-  specification, sensitive-file, release-manifest, installation, image-input
-  and image-workflow validators passed. Real-Chromium and Compose checks ran.
-- The only skips are the three deliberately disabled ordinary-form integration
-  cases. Production form mode remains fail-closed.
-- `uv run make cloudfiles-boundary`: **80 passed**, 0.20 seconds.
-- Focused M2 browser/login/entrypoint/idempotency suite: **96 passed**, 33.71
-  seconds.
-- Hermes' installed MCP SDK initialized the exact source's stdio server and
-  discovered all eight tools: **PASS**.
-- Local and Linux MCP contract/security suite: **20 passed**. All six validators,
-  compileall and `git diff --check` also passed on the Mac candidate.
+- All six specification, sensitive-file, release-manifest, installation,
+  image-input and image-workflow validators passed.
+- Linux full suite: **1074 passed, 7 skipped** in 155.13 seconds. Four skips
+  are Compose-CLI checks unavailable in that isolated virtual environment;
+  three are the deliberately disabled production form-login cases.
+- Focused router/viewer/Hermes regression suite: **45 passed**.
+- GitHub Actions run `34610008200` repeated `make check`, then built and
+  independently qualified all nine application images. Every matrix job
+  passed the configured non-root user, runtime UID 10001, healthcheck, service
+  endpoint and provenance/SBOM checks.
+- The immutable digests and per-image records are stored in
+  `deploy/coolify/releases/v0.2.0-dev1/release-manifest.yaml` and
+  `deploy/coolify/image-qualification/`.
 
-The first GitHub Actions publication attempt, run `34593503855`, stopped in
-validation before building images because an incomplete OpenSSL `ctypes`
-signature caused a Python 3.12 RSA test segmentation fault. Commit `13c0414`
-declares the pointer-bearing RSA functions before their first call and uses the
-correct C `long` type for the DER length. The Linux qualification then passed
-the complete crypto suite, five additional RSA repetitions, all validators and
-the full gate above. No image from the failed run was published or deployed.
+The full Mac suite is not the release authority: macOS does not expose the
+Linux `libcrypto.so` name expected by the native crypto loader, and its shorter
+Unix-domain-socket path limit breaks one long-path fixture. The changed
+contract suite passes on the Mac; the complete green gate above is the Linux
+result.
 
-The corrected publication run, `34594208145`, passed validation and built,
-qualified and published all nine application images. Each image passed its
-non-root, health, endpoint and provenance/SBOM checks. The release manifest
-pins those exact digests and passed the release validators before deployment.
+## Reliability fixes discovered during acceptance
+
+Acceptance exercised recovery paths that the original first-tab implementation
+did not cover. The final source includes these fixes:
+
+- The browser-download volume is prepared for the non-root runtime owner
+  before Chromium starts (`9544af1`, qualified release `75212cf`).
+- The Hermes bridge reactivates a server-side active session whose browser is
+  temporarily unavailable (`f51dfad`).
+- Managed Chromium profiles hold an inherited exclusive lease. After an
+  abrupt exit, a compatible profile may remove only stale `SingletonLock`,
+  `SingletonCookie` and `SingletonSocket` entries after acquiring that lease;
+  legacy profiles remain fail-closed (`8e455b4`). A one-time operator cleanup
+  applied this rule to the pre-existing dev01 profile.
+- If the supervisor still records `READY` after only the browser container was
+  restarted, `wake` now reconciles the browser to the authoritative current
+  binding before restart (`4177553`).
+- The router now preserves a successful `tabs_list` array instead of silently
+  dropping it. It revalidates a maximum of 32 entries and copies only bounded
+  `tab_id`, query-free HTTP(S) `url` and `title` fields. Malformed upstream
+  responses fail closed as `agent_unavailable` (`face98a`).
 
 ## Dev01 deployment
 
-- Coolify service `nievufka0cggf82cregyihav` was updated in the `pmo-city` /
-  `development` context and reports `running:healthy`.
-- All ten containers are healthy: the nine digest-pinned application services
-  plus `clamav/clamav:1.4`. The running application image references match the
-  qualified release manifest exactly.
-- The deployment-scoped broker KEK and Vault base URL were added through
-  Coolify's protected environment configuration. Secret values were generated
-  or handled only inside the protected host workspace and were not printed or
-  copied to the development Mac.
-- The first restart exposed a missing `CB_ROUTER_BASE_URL` in the viewer
-  Compose wiring. The viewer failed closed instead of starting partially. The
-  wiring and a regression test were added in `5bdbcbd`, the stored Coolify
-  definition was verified, and the corrected restart converged healthy.
-- Unauthenticated public requests to `/` and `/health` return `401`; this
-  confirms the external TinyAuth boundary is closed, not an authenticated
-  employee journey. Container-native health checks are green.
+- Coolify accepted the exact digest-pinned compose from `34246d2` after a
+  protected snapshot was saved.
+- All ten containers are healthy: the nine application services plus
+  `clamav/clamav:1.4`.
+- Every application container's configured image reference exactly matches
+  the release manifest; every restart count was zero after convergence.
+- External unauthenticated access remains closed by TinyAuth. Authentication
+  for acceptance came only from the isolated Hermes profile secret.
 
-The first-tab contract/security tests were run before implementation and failed
-as expected. The first Linux browser candidate then found an incorrect expected
-error envelope and an incomplete test fake; correcting those exposed a deeper
-owner-rebind race. Production now rechecks principal and generation inside the
-browser's serialized action gate before every page side effect. No gate was
-disabled to pass.
+## Accepted user journey
 
-## Acceptance established
+The live bridge test against dev01 produced only bounded status/page metadata:
 
-- A fresh real Chromium profile can create one bounded HTTP(S) tab and receives
-  the exact target ID created by Chromium.
-- The same target is used to type ordinary text, click, read the completed page
-  state and list tabs. Unknown/stale targets are rejected; no first-tab
-  fallback exists.
-- URL, selector, text, tab count and page-state boundaries remain bounded.
-  Userinfo, fragments, traversal, unsupported operations and caller-supplied
-  ownership fields fail before a browser side effect.
-- Browser actions revalidate the current principal/generation at the browser
-  boundary, closing the precheck/rebind/action race.
-- Synthetic real-Chromium Basic Auth and declared Authentik paths prove exact
-  target/origin handling and their configured application-account success
-  checks. Wrong origin, target, password/account proof and unsupported stages
-  fail closed.
-- Durable idempotency tests prove an unknown login outcome is preserved and a
-  duplicate request does not automatically perform another fetch/fill.
-- Hermes has a supported local stdio MCP entrypoint with eight mediated tools.
-  It calls only the authenticated viewer routes, refuses redirects, sends no
-  identity/binding headers and contains no raw-CDP or Vaultwarden client.
-- The obsolete supported-tree Hermes helper that exposed raw CDP and arbitrary
-  page evaluation was removed.
-- A fresh `cloudbrowser-test` Hermes profile now exists on mother01. It did not
-  clone the default profile's secrets, is stopped, is not the default, and has
-  only the reviewed CloudBrowser local skill in addition to Hermes' builtin
-  core skill. The bridge is installed in a dedicated virtual environment and
-  registered with a profile-secret reference, but remains disabled because no
-  CloudBrowser authentication value has been supplied.
-- The digest-pinned M2 Compose release is running healthy at
-  `cloudbrowser2.dev01.pmo.city`.
+1. `cloudbrowser_start` returned `active` with no error.
+2. `cloudbrowser_tabs_list` returned `ok` and a real list (initially empty
+   after deployment).
+3. `cloudbrowser_tab_open` opened `https://example.com/` successfully.
+4. A second `cloudbrowser_tabs_list` returned exactly one usable tab entry.
+5. `cloudbrowser_page_info` targeted that returned opaque tab ID and reported
+   URL `https://example.com/` and title `Example Domain`.
+6. A model-driven one-shot in the isolated `cloudbrowser-test` Hermes profile
+   repeated start/recovery, listing and exact-tab inspection through the MCP
+   tools and returned `M2 HERMES ACCEPTANCE PASS`.
 
-## Not established by M2
+Browser-only restart testing also established that the session/binding can be
+recovered and a fresh exact-tab task succeeds afterward. An abrupt browser
+container restart did **not** preserve the already-open example tab. Session
+recovery is therefore accepted; crash-time tab continuity remains open and is
+not claimed by M2.
 
-- No live application, live Vaultwarden grant, employee identity or hosted
-  browser journey has been accepted. Synthetic application-account proof is
-  not evidence that a specific customer site is qualified.
-- The Hermes MCP bridge is installed/configured but not authenticated or
-  enabled. A controlled acceptance still requires one distinct
-  TinyAuth-compatible authorization value for that profile (or a time-bounded
-  session cookie), supplied through Hermes secret scope and never chat.
-- Interactive OIDC acquisition/renewal for Hermes is not implemented. Shared
-  deployment-wide agent identity is prohibited.
-- Production form login, TOTP submission and direct one-time-code handoff remain
-  unavailable. The current Authentik path detects supported MFA stages but does
-  not complete them.
-- Page state still rejects bodies beyond the existing 4096-byte bound rather
-  than truncating richer observation. Back/forward, scroll/key input,
-  screenshots, tab activation/close and download tools remain future work.
-- M3 still owns live video, human takeover/resume and employee self-service
-  consent/revocation.
-- The M0 independent broker/security GO review and authenticated deployment
-  acceptance remain separate gates. Test counts and container health do not
-  waive them.
+## M2 acceptance boundary
 
-The next user participation is a controlled M2 acceptance: sign in to the
-deployed CloudBrowser with the non-MFA test account, store that session cookie
-in the prepared Hermes profile's secret scope, enable its MCP bridge, and run
-one synthetic or approved-site task while observing the exact browser.
+M2 establishes authenticated Hermes-to-CloudBrowser control for a bounded
+public-page task: start/recover, list tabs, open one HTTP(S) tab, navigate,
+click, type ordinary text and inspect bounded page state using exact tab IDs.
+The bridge exposes eight mediated tools and provides no raw CDP, cookie,
+storage, network, filesystem, process or credential-material surface.
+
+M2 does not establish:
+
+- a live application login, Vaultwarden grant or TOTP/one-time-code journey;
+- production ordinary-form login, which remains disabled and fail-closed;
+- preservation of open tabs across an abrupt Chromium/container crash;
+- a live video viewer, human takeover/resume, screenshots, tab close/activate,
+  back/forward, scroll/key input or richer page observation;
+- employee self-service credential consent/revocation, owned by M3; or
+- the separate independent broker/security GO verdict.
+
+No user action is required to close the bounded M2 acceptance above. A manual
+viewer check is optional product feedback, not a release blocker.
