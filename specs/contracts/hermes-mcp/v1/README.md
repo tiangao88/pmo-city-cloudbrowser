@@ -33,6 +33,11 @@ Page actions use exact Chromium target IDs. Login accepts only a declared
 `site_id` and exact `target_tab_id` and returns bounded status without
 credential material.
 
+Page text is limited to 4096 UTF-8 bytes. Longer pages return an excerpt ending
+with `[Page text truncated to 4096 UTF-8 bytes]`; the agent must not claim to
+have read content beyond that excerpt. Oversized URLs/titles and malformed
+responses remain errors.
+
 The stdio transport uses newline-delimited UTF-8 JSON-RPC and caps each input
 message at 64 KiB. It supports `initialize`, `ping`, `tools/list`,
 `tools/call`, and notifications. Unknown methods and tools fail closed.

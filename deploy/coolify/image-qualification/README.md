@@ -23,8 +23,8 @@ route remains `cloudfiles2.dev01.pmo.city`; routing and live qualification are
 step 19 / Phase 6, not step 17.
 
 All nine records contain `status: passed` evidence from qualification run
-`34610008200` at commit
-`face98a96d69443eefbf81516b75525f58b9a62b`, including `cloudfiles` and
+`34623825124` at commit
+`2e300efc359d8b5706d8b84a30058fa99e9e01f9`, including `cloudfiles` and
 `identity-link`. CI published every image, verified provenance/SBOM and runtime
 health, and the release change synchronized all digests and provenance
 atomically. Step 19 / Phase 6 still covers deployment and runtime/security

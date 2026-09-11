@@ -50,7 +50,14 @@ the only operation that enumerates tabs and returns Chrome's bounded target IDs.
 The browser sidecar resolves the requested ID under a per-target lock and never
 falls back to the first page. Page-info URL, title, and text are bounded in the
 page JavaScript expression and re-validated at the browser, HTTP, agent-control,
-and router/viewer boundaries; oversized values are rejected, never truncated.
+and router/viewer boundaries. Oversized URLs and titles are rejected. Visible
+page text longer than 4096 UTF-8 bytes is returned as an excerpt, ending with
+`[Page text truncated to 4096 UTF-8 bytes]`. The marker is included in the
+4096-byte budget and Unicode code points are never split. This is partial
+observation, not a claim that the whole page was read. Input limits and
+broker-only observations are unchanged; malformed upstream results still fail
+closed. Known backend action errors survive router forwarding; unknown errors
+become `agent_unavailable` without exposing their original contents.
 
 The baseline surface may expose:
 
