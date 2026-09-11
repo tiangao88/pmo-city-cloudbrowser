@@ -134,3 +134,32 @@ def test_identity_cookies_removed_but_application_cookies_preserved(tmp_path):
             assert connection.execute("SELECT * FROM cookies").fetchall() == [("app.example", "session")]
     finally:
         p.stop()
+
+
+def test_unconfirmed_termination_keeps_exclusive_lease(tmp_path):
+    import subprocess
+
+    class Unstoppable(Child):
+        def terminate(self):
+            pass
+
+        def kill(self):
+            pass
+
+        def wait(self, timeout=None):
+            raise subprocess.TimeoutExpired("synthetic", timeout)
+
+    first = process(tmp_path)
+    child = Unstoppable()
+    first._popen = lambda *args, **kwargs: child
+    first.start()
+    try:
+        with pytest.raises(BrowserProcessError):
+            first.stop()
+        assert first.state == "failed"
+        with pytest.raises(BrowserProcessError):
+            process(tmp_path, slot="slot-2").start()
+    finally:
+        # Synthetic process only: make shutdown observable for test cleanup.
+        child.wait = lambda **kwargs: 0
+        first.stop()

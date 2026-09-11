@@ -30,6 +30,15 @@ def eventually(check):
 def test_real_owner_tabs_cookies_storage_survive_a_b_a_and_second_slot(tmp_path):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
+            if self.path == "/download":
+                body = b"synthetic-alice-download"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Content-Disposition", 'attachment; filename="alice.txt"')
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             body = b"<title>M1 synthetic fixture</title><main>ready</main>"
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
@@ -76,9 +85,14 @@ def test_real_owner_tabs_cookies_storage_survive_a_b_a_and_second_slot(tmp_path)
         tab = target(chrome, "/alice")
         eventually(lambda: evaluate(actions, tab, "document.readyState === 'complete'"))
         evaluate(actions, tab, "localStorage.setItem('owner','alice'); document.cookie='owner=alice; Max-Age=3600; Path=/'; true")
+        actions._agent_command(tab, "Page.navigate", {"url": origin + "/download"})
+        download = alice.config.download_dir / "alice.txt"
+        eventually(lambda: download.exists())
+        assert download.read_bytes() == b"synthetic-alice-download"
         alice.stop()
 
         bob, chrome, actions = launch("bob", "slot-1", "g2")
+        assert not (bob.config.download_dir / "alice.txt").exists()
         assert not any(t.get("url", "").startswith(origin) for t in chrome.json_request("/json/list"))
         chrome.json_request("/json/new?" + quote(origin + "/bob", safe=""), method="PUT")
         tab = target(chrome, "/bob")
@@ -93,6 +107,7 @@ def test_real_owner_tabs_cookies_storage_survive_a_b_a_and_second_slot(tmp_path)
         assert evaluate(actions, restored, "[localStorage.getItem('owner'),document.cookie]") == ["alice", "owner=alice"]
         assert not any(t.get("url") == origin + "/bob" for t in chrome.json_request("/json/list"))
         assert returning.config.profile_dir == alice.config.profile_dir
+        assert (returning.config.download_dir / "alice.txt").read_bytes() == b"synthetic-alice-download"
     finally:
         for process in reversed(processes):
             process.stop()

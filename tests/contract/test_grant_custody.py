@@ -96,6 +96,7 @@ def _vault_transport():
 
 
 def test_durable_consent_execution_uses_fresh_binding_and_rejects_stale_epoch(tmp_path):
+    from dataclasses import replace
     from cloudbrowser.credential_broker.contracts import AuthorizationChanged
 
     stable = GrantScope.consent(profile_id=scope().profile_id, principal_id=scope().principal_id, site_id=scope().site_id)
@@ -108,9 +109,11 @@ def test_durable_consent_execution_uses_fresh_binding_and_rejects_stale_epoch(tm
     assert fetcher.run_authorized(authorization, lambda material: seen.append(material.username) or "submitted") == "submitted"
     assert seen == ["alice@fake.invalid"]
     provision(store, stable)
-    with pytest.raises(AuthorizationChanged):
+    with pytest.raises(GrantRevoked):
         fetcher.run_authorized(authorization, lambda material: seen.append("stale"))
     current = store.resolve(binding(fresh), fresh.site_id, fresh.target_tab_id)
+    with pytest.raises(AuthorizationChanged):
+        fetcher.run_authorized(replace(current, epoch=authorization.epoch), lambda material: seen.append("stale epoch"))
     store.revoke(scope=stable, operator_id="operator")
     with pytest.raises(GrantRevoked):
         fetcher.run_authorized(current, lambda material: seen.append("revoked"))
