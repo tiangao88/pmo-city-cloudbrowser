@@ -23,6 +23,11 @@ def _router_block(filename: str) -> str:
     return compose.split("  router:", 1)[1].split("  slot-supervisor:", 1)[0]
 
 
+def _viewer_block(filename: str) -> str:
+    compose = (COMPOSE_DIR / filename).read_text(encoding="utf-8")
+    return compose.split("  viewer:", 1)[1].split("  downloads:", 1)[0]
+
+
 def test_compose_router_carries_identity_link_env_and_edge_switch() -> None:
     # The router control plane authenticates every session request through
     # the shared identity-link resolver; the edge switch and client
@@ -121,6 +126,11 @@ def test_router_edge_and_identity_vars_match_deployed_contract() -> None:
 
     local = _router_block("compose.yaml")
     assert "CB_EDGE_AUTH: ${CB_EDGE_AUTH:-}" in local
+
+
+def test_deployed_viewer_routes_session_actions_to_internal_router() -> None:
+    deployed = _viewer_block("compose.coolify.yaml")
+    assert "CB_ROUTER_BASE_URL: http://router:8080" in deployed
 
 
 def test_compose_router_is_not_a_public_host() -> None:
