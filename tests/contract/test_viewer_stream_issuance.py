@@ -59,6 +59,7 @@ def test_current_sso_owner_receives_cookie_only(rig):
     value = cookie["__Host-CBViewer"]
     assert value["secure"] and value["httponly"]
     assert value["samesite"] == "Strict" and value["path"] == "/"
+    authority.authorize_stream(trusted_headers=HEADERS, token=value.value)
     live = authority.connect(trusted_headers=HEADERS, token=value.value,
         send_frame=lambda _: None, close_transport=lambda: None)
     assert live.forward_frame(b"synthetic-frame")

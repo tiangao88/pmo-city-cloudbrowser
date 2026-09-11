@@ -5,17 +5,12 @@ owner to anyone reaching the loopback experiment, without SSO.
 """
 import select
 import socket
-import time
 from http.cookies import SimpleCookie
-from types import SimpleNamespace
 
 from websockify.websocketproxy import LibProxyServer, ProxyRequestHandler
 
-from cloudbrowser.viewer import AuthenticatedViewer, ViewerRequest, ViewerSessionStore
-from cloudbrowser.viewer.slot_authority import SlotViewerAuthority
-
-ORIGIN = "http://127.0.0.1:16080"
-COOKIE = "cb_fixture_viewer"
+ORIGIN = "https://127.0.0.1:16080"
+COOKIE = "__Host-CBViewer"
 FIXTURE_HEADERS = {"Remote-Sub": "fixture-sub", "Remote-Groups": "PMOC_Users"}
 
 
@@ -35,20 +30,11 @@ class FixtureProxy(ProxyRequestHandler):
         if self.path != "/websockify" or self.headers.get("Origin") != ORIGIN:
             raise self.CClose(1008, "Viewer unavailable")
         try:
-            self.server.viewer.authorize(self.token(), self.server.binding)
+            self.server.authority.authorize_stream(trusted_headers=FIXTURE_HEADERS, token=self.token())
         except PermissionError:
             raise self.CClose(1008, "Viewer unavailable") from None
 
     def do_GET(self):
-        if self.path == "/fixture-session":
-            session = self.server.authority.issue(trusted_headers=FIXTURE_HEADERS)
-            self.send_response(303)
-            self.send_header("Set-Cookie", f"{COOKIE}={session.token}; HttpOnly; SameSite=Strict; Path=/")
-            self.send_header("Location", "/vnc.html?autoconnect=1&resize=scale")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", "0")
-            self.end_headers()
-            return
         super().do_GET()
 
     def do_POST(self):
@@ -114,18 +100,12 @@ class FixtureProxy(ProxyRequestHandler):
             connection.revoke()
 
 
-def build_proxy(readiness):
+def build_proxy(authority, store):
     server = LibProxyServer(
-        RequestHandlerClass=FixtureProxy, listen_host="0.0.0.0", listen_port=6080,
+        RequestHandlerClass=FixtureProxy, listen_host="127.0.0.1", listen_port=6082,
         target_host="127.0.0.1", target_port=5900, web="/usr/share/novnc",
     )
     server.daemon_threads = True
-    server.binding = ViewerRequest("fixture-view", "fixture-profile", "fixture-owner", "fixture-browser", "fixture-g1")
-    server.store = ViewerSessionStore(clock=time.monotonic)
-    server.viewer = AuthenticatedViewer(server.store, token_secret=b"synthetic-fixture-only", ttl_s=600)
-    # Explicit synthetic resolver, never trust browser-supplied identity headers.
-    identity = SimpleNamespace(resolve=lambda _: "fixture-owner")
-    server.authority = SlotViewerAuthority(viewer=server.viewer, identity_client=identity,
-        readiness=readiness, stream_endpoint="/websockify")
-    server.authority.rebind(server.binding, apply_binding=lambda: None)
+    server.store = store
+    server.authority = authority
     return server

@@ -56,7 +56,7 @@ def test_failed_enable_leaves_admission_disabled(failure):
         authority.issue(trusted_headers=HEADERS)
 
 
-@pytest.mark.parametrize("operation", ["poll", "frame", "issue", "renew", "enable"])
+@pytest.mark.parametrize("operation", ["poll", "frame", "issue", "renew", "enable", "upgrade"])
 def test_expired_lease_closes_stream_and_cannot_be_resurrected(operation):
     authority, state = setup()
     transition = ViewerTransition(authority, reset_display=lambda: None, lease_s=5)
@@ -77,6 +77,8 @@ def test_expired_lease_closes_stream_and_cannot_be_resurrected(operation):
                 authority.issue(trusted_headers=HEADERS)
             elif operation == "renew":
                 transition.renew(ticket, BINDING)
+            elif operation == "upgrade":
+                authority.authorize_stream(trusted_headers=HEADERS, token=session.token)
             else:
                 transition.enable(ticket, BINDING)
     assert live.closed

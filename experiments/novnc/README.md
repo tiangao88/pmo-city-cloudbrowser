@@ -12,9 +12,12 @@ docker build -f experiments/novnc/Dockerfile -t cloudbrowser-novnc-spike:local .
 docker run --name cloudbrowser-novnc-spike --rm --init --shm-size=256m --memory=1g --cpus=2 -p 127.0.0.1:16080:6080 cloudbrowser-novnc-spike:local
 ```
 
-Open `http://127.0.0.1:16080/fixture-session`. This grants an HttpOnly synthetic
-viewer cookie for ten minutes and redirects to noVNC. It is not SSO or account
-proof. Direct WebSocket access without that cookie is rejected. This increment
+Open `https://127.0.0.1:16080/fixture-session` and click Open read-only viewer.
+The disposable gateway creates a new self-signed certificate per run; trust it
+only in a dedicated local test browser, never install it as a system CA.
+This exercises the actual issuer's Secure/HttpOnly cookie with a fixed synthetic
+identity. It is not SSO or account proof. Direct WebSocket access without that
+cookie is rejected. This increment
 is read-only: x11vnc rejects keyboard and mouse input, independently of client
 settings. The original bidirectional spike results below are historical.
 No host volumes, Docker socket, environment files or production secrets may be
@@ -36,6 +39,33 @@ active connections on rebind, and server-enforced takeover fencing. Client-side
 noVNC viewOnly is not authorization. Do not test application credentials here.
 
 ## Read-only adapter increment — 2026-09-11
+
+### Unified HTTPS experiment (latest)
+
+One authority now serves the real cookie-issuance route, private fence/enable/
+renew RPC and noVNC stream adapter. The gateway terminates local HTTPS/WSS and
+replaces caller identity headers with a fixed **synthetic** identity. Private
+listeners (6081 issuer, 6082 WebSocket, 6083 control, 5900 VNC) remain container
+loopback only. The supervisor renewal worker maintains the lease.
+
+The enable callback restarts x11vnc and checks that its listener starts. This
+clears VNC transport caches only: it does **not** qualify cross-owner X display
+cleanup, and this experiment never switches profiles or owners.
+
+Visible Playwright QA passed: the actual cookie is Secure/HttpOnly/SameSite=Strict
+and absent from document.cookie; noVNC displays the existing Chromium over WSS;
+human typing/clicking is blocked while mediated clicking works. The initial
+display took several seconds after connection to render. Console issues remain:
+missing package.json, favicon and unused-preload warnings.
+
+The integrated test image was
+`sha256:ed68627867bcb12e6f097f54213ed67ad54bc27179e5b9a71045701ee1d49802`;
+the final expanded test script was copied into the disposable container for QA.
+The last test deliberately replaces the startup controller's ticket and lets
+the lease expire, so restart the experiment before further manual viewing.
+All six integrated tests passed, including fencing, re-enable with a fresh
+cookie, rejection of the old cookie, and closure after unrenewed lease expiry.
+No production SSO, Vaultwarden, owner switching or human takeover is enabled.
 
 The disposable threaded websockify adapter now uses `LiveViewConnection` for
 each connection. It checks cookie admission and exact Origin/path before the

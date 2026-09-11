@@ -109,6 +109,15 @@ class SlotViewerAuthority:
             self._connections.add(connection)
             return connection
 
+    def authorize_stream(self, *, trusted_headers, token):
+        """Upgrade preflight; connect and every write must still reauthorize."""
+        with self._lock:
+            self._principal(trusted_headers)
+            binding = self._current()
+            self.require_lease(binding.request_id)
+            session = self._viewer.authorize(token, binding)
+            ViewerBrowserBridge(readiness=self._readiness, stream_endpoint=self._endpoint).open_stream(session, binding)
+
     def rebind(self, binding: ViewerRequest | None, *, apply_binding):
         """Close old transports before changing the browser, under one lock.
 

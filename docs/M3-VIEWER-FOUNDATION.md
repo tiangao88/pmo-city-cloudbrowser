@@ -201,7 +201,17 @@ into both issuance and WebSocket admission. The actual cookie-consuming transpor
 and public viewer UI are not wired to this route yet. This route must never be
 exposed directly as a trusted-header authentication endpoint.
 
-## Exit tests
+## Unified disposable runtime evidence
+
+The noVNC experiment now composes issuance, private control and WebSocket
+admission around one authority, behind a local HTTPS/WSS gateway with a fixed
+synthetic identity. The actual Secure cookie path was verified in a browser;
+the renewal worker maintains the lease. Its enable callback restarts x11vnc,
+but does not establish cross-owner display cleanup. See the experiment README
+for reproducible commands, evidence and limitations. Production composition,
+real proxy/SSO verification, owner-switch cleanup and takeover are still pending.
+
+## Acceptance matrix
 
 | Test | Evidence required |
 | --- | --- |

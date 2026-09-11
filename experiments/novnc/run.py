@@ -7,6 +7,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.request import Request, urlopen
 
 from cloudbrowser.agent_control_service import build_agent_control_server
@@ -20,9 +21,17 @@ from cloudbrowser.browser_slots.http_client import HttpJsonClient
 from cloudbrowser.browser_slots.http_transport import HttpBrowserTransport
 from cloudbrowser.browser_slots.page_actions import CdpPageActionAdapter
 from proxy import build_proxy
+from gateway import build_gateway
+from cloudbrowser.viewer import AuthenticatedViewer, ViewerSessionStore, create_viewer_server
+from cloudbrowser.viewer.slot_authority import SlotViewerAuthority
+from cloudbrowser.viewer.fence_control import create_fence_server, ViewerFenceClient
+from cloudbrowser.viewer.renewal import ViewerRenewalWorker
+from cloudbrowser.browser_slots.lifecycle import BrowserBinding, OwnerBoundLifecycle
+from cloudbrowser.browser_slots.supervisor import SlotSupervisor
 
 # Synthetic fixture secret only; this is not an authentication deployment.
 SECRET = "novnc-disposable-fixture-only"
+CONTROL_SECRET = "synthetic-novnc-control-secret-only-32"
 
 
 def action(operation, params):
@@ -66,6 +75,7 @@ def main():
         signal.signal(sig, lambda *_: stop.set())
     children, servers = [], []
     browser = None
+    renewal = None
     with tempfile.TemporaryDirectory(prefix="novnc-fixture-") as temporary:
         try:
             children.append(subprocess.Popen(["Xvfb", ":99", "-screen", "0", "1280x800x24", "-nolisten", "tcp"]))
@@ -106,17 +116,67 @@ def main():
             opened = action("tab_open", {"url": "http://127.0.0.1:8088/task"})
             if opened.get("status") != "ok":
                 raise RuntimeError("mediated tab creation failed")
-            children.append(subprocess.Popen(["x11vnc", "-display", ":99", "-localhost",
-                "-rfbport", "5900", "-forever", "-shared", "-nopw", "-noxdamage", "-nosel",
-                "-viewonly", "-noremote"]))
-            proxy = build_proxy(transport.readiness)
-            servers.append(proxy)
-            threading.Thread(target=proxy.serve_forever, daemon=True).start()
-            print("Synthetic read-only viewer ready; no SSO, no broker, no takeover", flush=True)
+            vnc = []
+            def restart_vnc():
+                # Clears VNC transport caches only. Cross-owner X display cleanup
+                # is NOT qualified by this fixed-owner experiment.
+                if vnc:
+                    old = vnc.pop()
+                    old.terminate()
+                    old.wait(timeout=3)
+                    children.remove(old)
+                process = subprocess.Popen(["x11vnc", "-display", ":99", "-localhost",
+                    "-rfbport", "5900", "-forever", "-shared", "-nopw", "-noxdamage", "-nosel",
+                    "-viewonly", "-noremote"])
+                vnc.append(process)
+                children.append(process)
+                import socket
+                for _ in range(30):
+                    try:
+                        with socket.create_connection(("127.0.0.1", 5900), timeout=0.1):
+                            return
+                    except OSError:
+                        time.sleep(0.1)
+                raise RuntimeError("VNC did not start")
+            store = ViewerSessionStore(clock=time.monotonic)
+            viewer = AuthenticatedViewer(store, token_secret=b"synthetic-fixture-only")
+            authority = SlotViewerAuthority(viewer=viewer,
+                identity_client=SimpleNamespace(resolve=lambda i: "fixture-owner" if i.sub == "fixture-sub" else None),
+                readiness=transport.readiness, stream_endpoint="/websockify")
+            ui = create_viewer_server(viewer, address=("127.0.0.1", 6081), allow_edge_identity=True,
+                stream_authority=authority, public_origin="https://127.0.0.1:16080")
+            control = create_fence_server(authority, shared_secret=CONTROL_SECRET,
+                address=("127.0.0.1", 6083), reset_display=restart_vnc)
+            proxy = build_proxy(authority, store)
+            for server in (ui, control, proxy):
+                servers.append(server)
+                threading.Thread(target=server.serve_forever, daemon=True).start()
+            binding = BrowserBinding("fixture-profile", "fixture-owner", "fixture-browser", "fixture-g1")
+            client = ViewerFenceClient(base_url="http://127.0.0.1:6083", shared_secret=CONTROL_SECRET)
+            client(binding)
+            client.enable(binding)
+            lifecycle = OwnerBoundLifecycle(binding, Path(temporary) / "tabs.json")
+            lifecycle.start(binding)
+            lifecycle.mark_ready(binding)
+            supervisor = SlotSupervisor(lifecycle, transport, viewer_fence=client,
+                viewer_enable=client.enable, viewer_renew=client.renew)
+            renewal = ViewerRenewalWorker(supervisor.renew_current_viewer)
+            renewal.start()
+            cert, key = Path(temporary) / "fixture.crt", Path(temporary) / "fixture.key"
+            subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+                "-keyout", str(key), "-out", str(cert), "-days", "1", "-subj", "/CN=127.0.0.1",
+                "-addext", "subjectAltName=IP:127.0.0.1"], check=True,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            gateway = build_gateway(cert, key)
+            servers.append(gateway)
+            threading.Thread(target=gateway.serve_forever, daemon=True).start()
+            print("Synthetic HTTPS read-only viewer ready; no SSO, no broker, no takeover", flush=True)
             while not stop.wait(0.5):
                 if any(child.poll() is not None for child in children):
                     raise RuntimeError("display service stopped")
         finally:
+            if renewal is not None:
+                renewal.stop()
             if browser is not None:
                 browser.stop()
             for server in reversed(servers):
