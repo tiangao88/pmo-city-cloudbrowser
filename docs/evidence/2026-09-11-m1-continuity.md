@@ -55,7 +55,7 @@ boot tests exercise the shared watcher registry. No gate was disabled to pass.
 
 - A → B → A with a fresh second-slot process: Alice's native tabs, application
   cookies, local storage and actual downloaded file return; Bob starts without
-  Alice's state and cannot acquire Alice's concurrently leased profile.
+  Alice's state. A separate lease test rejects concurrent same-profile slot use.
 - Owner paths and download attribution follow stable principal/profile identity,
   not slot or generation. Pending downloads stay with their owner.
 - Symlinked owner paths and uncertain singleton ownership fail closed. Failed
