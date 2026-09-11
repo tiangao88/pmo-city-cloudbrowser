@@ -1,14 +1,17 @@
 # Merge this entry into the intended Hermes profile's config.yaml. Install the
 # CloudBrowser wheel in that environment so `cloudbrowser-hermes-mcp` is on PATH.
 # Store exactly one authentication value in the profile's secret scope; do not
-# place its resolved value in this file or in chat.
+# place its resolved value in this file or in chat. The `_SECRET` source names
+# intentionally use Hermes' protected profile-environment path; the bridge sees
+# only the destination names below.
 mcp_servers:
   cloudbrowser:
     command: cloudbrowser-hermes-mcp
     env:
       CB_CLOUDBROWSER_URL: https://cloudbrowser2.dev01.pmo.city
-      CB_CLOUDBROWSER_AUTHORIZATION: ${CB_CLOUDBROWSER_AUTHORIZATION}
+      CB_CLOUDBROWSER_AUTHORIZATION: ${CB_CLOUDBROWSER_AUTHORIZATION_SECRET}
 
-# A controlled pilot may instead inject CB_CLOUDBROWSER_COOKIE and omit
-# CB_CLOUDBROWSER_AUTHORIZATION. The bridge refuses to start if neither or both
-# are present. Remote origins must use HTTPS.
+# A controlled pilot may instead map
+# `CB_CLOUDBROWSER_COOKIE: ${CB_CLOUDBROWSER_COOKIE_SECRET}` and omit the
+# authorization mapping. The bridge refuses to start if neither or both
+# destination variables are present. Remote origins must use HTTPS.
