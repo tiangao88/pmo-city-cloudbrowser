@@ -32,6 +32,14 @@ session to a separately mediated browser stream. It accepts only an internal
 relative endpoint and requires a matching owner/generation readiness result.
 It does not expose a CDP socket or browser credentials.
 
+The supported Hermes stdio MCP bridge calls the same `/ui/session/*`,
+`/ui/agent/*`, and `/ui/credential/login` routes through the authenticated
+public viewer origin. The bridge sends only its profile-scoped edge
+authentication and request data; this service continues to derive identity
+through TinyAuth and identity-link and drops cookies/authorization before
+relaying to the router. See the
+[Hermes MCP contract](../../specs/contracts/hermes-mcp/v1/README.md).
+
 This source does not establish a live streaming viewer or current release
 qualification. See [status](../../specs/proposals/v0.2/IMPLEMENTATION-STATUS.md)
 and the proposed [roadmap](../../specs/proposals/v0.2/ROADMAP.md).

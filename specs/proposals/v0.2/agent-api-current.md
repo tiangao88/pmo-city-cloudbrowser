@@ -1,106 +1,94 @@
-# Agent API — MCP Surface for Hermes (draft)
+# Agent API — supported Hermes surface
 
-> Historical target API draft. The implemented HTTP interfaces are documented
-> in [agent-control/v1](../../contracts/agent-control/v1/contract.md) and
-> [control-api/v1](../../contracts/control-api/v1/README.md). A proposed MCP tool
-> list below does not mean those tools are deployed. Page actions now require
-> an exact target tab; login authorization uses signed one-time capabilities.
-> See [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md).
+> Current source contract, 2026-09-11. The versioned interfaces are the
+> [Hermes MCP contract](../../contracts/hermes-mcp/v1/README.md),
+> [control API](../../contracts/control-api/v1/README.md), and
+> [agent-control API](../../contracts/agent-control/v1/contract.md).
+> Source support is not deployment or live-user qualification.
 
-> **Refactor update — 2026-09-01:** `credential.login` is now specified as a
-> broker intent, not merely a comment. Its request is profile/principal/site
-> bound by the server and its response is status-only. The normal agent/CDP
-> surface must not expose grant material, cookies, storage, network bodies,
-> password values, or unrestricted runtime evaluation. See
-> `85-credential-broker-prd.md`, `86-product-boundaries.md`, and
-> `87-broker-security-model.md`. This remains a proposed contract until the
-> refactor is agreed and implemented.
+## Supported entrypoint
 
-## Principles
+Hermes launches `cloudbrowser-hermes-mcp` as a local stdio MCP server. The
+bridge uses a profile-scoped authentication value, supplied to its subprocess
+through Hermes secret scope, to call the TinyAuth-protected viewer origin.
+TinyAuth and identity-link derive the immutable principal; the bridge cannot
+submit `Remote-*`, principal, profile, slot, browser or generation authority.
 
-- The agent drives **its owner's single browser** (FR-2/FR-11) — no
-  cross-user access (FR-8).
-- The agent sees **page state only** — credentials never enter the LLM
-  context (FR-7/FR-9).
-- The surface is served over **MCP** (Streamable HTTP), behind Tinyauth SSO
-  (FR-3), per-user token.
+The bridge rejects redirects, non-HTTPS remote origins, oversized/non-JSON
+responses, unknown tools and extra arguments. It contains no CDP client and no
+Vaultwarden integration. Authentication material never appears in tool input,
+tool output or error content.
 
-## Tool groups (full control — D1)
+The former direct fleet-CDP Hermes helper is not supported. It exposed raw CDP
+and unrestricted page evaluation, bypassed the owner-bound router, and was
+removed from `integrations/hermes`.
 
-| Group | Tools | Notes |
-|---|---|---|
-| **Navigation** | `navigate(url)`, `back()`, `forward()`, `reload()` | Chromium engine (C1) |
-| **Interaction** | `click(selector)`, `type(selector, text)`, `scroll(direction, amount)`, `press_key(key)` | selectors = CSS/XPath; text-first page state (browser-use harness) |
-| **Extraction** | `extract(selector?)`, `page_info()`, `get_url()`, `get_title()` | text-first, no raw HTML dumps (FR-4 research note) |
-| **Screenshot** | `screenshot()` | on demand, not by default |
-| **Tabs** | `tabs.list()`, `tabs.open(url)`, `tabs.activate(id)`, `tabs.close(id)` | tabs = the separation mechanism (gate Q1) |
-| **Downloads** | `downloads.list()`, `downloads.get(path)` | durable per-user area (FR-12, I1/I2/I5); agent can read/process/summarize/re-send (I4) |
-| **Browser identity** | `browser.list()`, `browser.attach(browser_id)` | single browser per user (FR-11); attach is a formality, kept for API stability |
+## Implemented tools
 
-## Intents that are NOT agent tools (deterministic broker boundary)
+| Tool | Request | Bounded result |
+| --- | --- | --- |
+| `cloudbrowser_start` | no arguments | current session state; activates an offered session |
+| `cloudbrowser_tabs_list` | no arguments | public URL/title and exact opaque target IDs |
+| `cloudbrowser_tab_open` | one HTTP(S) URL | the exact target created by Chromium |
+| `cloudbrowser_navigate` | exact tab ID and HTTP(S) URL | status and exact target metadata |
+| `cloudbrowser_click` | exact tab ID and bounded selector | status and exact target metadata |
+| `cloudbrowser_type` | exact tab ID, bounded selector and ordinary non-secret text | status and exact target metadata |
+| `cloudbrowser_page_info` | exact tab ID | bounded URL, title and text-first page state |
+| `cloudbrowser_credential_login` | declared site ID and exact tab ID | status only |
 
-`credential.login(site, username)` is an **intent-only broker operation**.
-The agent may request it, but it does not receive credentials, tokens, cookie
-values, DOM values, network bodies, or a replayable handle.
+Missing, unknown or stale tab IDs fail closed. `tab_open` is the supported
+first-tab path for a fresh profile. The tool schemas use
+`additionalProperties: false`; identity, credential reference, password and
+binding fields cannot be smuggled through an MCP request.
 
-### Proposed request contract
+## Credential login boundary
 
-```json
-{
-  "site_id": "declared-site",
-  "username_ref": "declared-account",
-  "target_tab_id": "optional-owner-tab",
-  "idempotency_key": "optional"
-}
-```
-
-`profile_id`, immutable `principal_id`, browser/slot ownership, deployment,
-site declaration, adapter version, request nonce, and expiry are derived or
-bound server-side. Caller-supplied identity, slot, browser, and origin are
-never authoritative.
-
-### Proposed response contract
+`cloudbrowser_credential_login` is an intent-only operation. The router derives
+the current principal/profile/browser/generation, resolves the declared site,
+and mints the broker's one-time exact-target capability. The broker alone
+resolves authorized grant material and returns one of:
 
 ```json
 {
   "status": "authenticated|mfa_required|failed|not_shared|unsupported",
   "error_code": null,
-  "request_id": "opaque",
-  "duration_ms": 0
+  "request_id": "opaque"
 }
 ```
 
-The response is status-only. Safe error codes are bounded and must not contain
-raw exception text, URLs with credentials, page text, selectors, or secret
-values. See `85-credential-broker-prd.md` and
-`87-broker-security-model.md`.
+No credential, token, cookie, storage value, network body, password value,
+grant reference or replayable credential handle is returned. Basic Auth and a
+declared Authentik flow have synthetic real-Chromium coverage; production form
+login, TOTP submission and direct human-code handoff remain outside M2.
 
-### Credential and MFA rules
+An unknown login outcome is not automatically retried. Durable idempotency
+records preserve that state across process restart so a duplicate request does
+not cause another credential fill. Hermes should inspect the exact tab or ask
+the employee before an explicit new attempt.
 
-- The deterministic broker fetches and fills credentials; the agent never
-  imports a vault client or reads grant material.
-- Authentik/TinyAuth is one explicit SSO adapter, not the generic broker.
-- Form login, HTTP Basic, SSO, TOTP, and one-time human-code handoff are
-  adapter classes behind the same intent contract.
-- Stored TOTP is broker-only. Without a seed, the agent asks the employee for
-  a one-time code, which is submitted to the broker and never returned to the
-  agent. Unsupported MFA fails closed.
+## Mandatory denials
 
-## Browser-control security boundary
+The normal Hermes surface has no operation for:
 
-The full-control list below is a product goal, not permission for unrestricted
-raw CDP. The normal agent surface must deny or mediate cookie/value reads,
-browser storage, network bodies/authorization headers, password input values,
-unrestricted `Runtime.evaluate`, raw CDP sockets, filesystem/process access,
-grant paths, and undeclared credential origins. The broker receives a separate
-request-scoped fill/verification capability. See
-`86-product-boundaries.md` and `87-broker-security-model.md`.
+- raw CDP or unrestricted evaluation;
+- cookies, storage values, network bodies or authorization headers;
+- credential material, password values, OTP seeds/codes or grant files;
+- filesystem, process, host/container metadata or another owner's browser;
+- caller-selected principal, profile, slot, browser or generation.
 
-## Open details (POC)
+## Authentication qualification boundary
 
-- Exact selector syntax and accessibility-tree usage (browser-use harness
-  conventions).
-- Whether `downloads.get` streams or returns a link (SSO-gated link under
-  the viewer domain is the default).
-- Concurrency: one agent drive at a time vs multiplexed viewer+agent on the
-  same CDP target (H6 — POC detail).
+For the controlled pilot, the operator provisions one distinct
+TinyAuth-compatible authorization value per Hermes profile, or a time-bounded
+session cookie, in Hermes secret scope. The bridge refuses zero or multiple
+authentication channels. Interactive OIDC acquisition and renewal are not
+implemented by this source increment; they need a separate integration decision
+before multi-user acceptance. A shared deployment-wide identity is prohibited.
+
+## Later surface work
+
+Back/forward/reload, scroll/key input, richer accessibility observation,
+screenshots, tab activation/close and downloads are product candidates, not
+deployed tools. Each needs an explicit bounded contract and secret-observation
+review before addition. The M3 viewer/takeover work must also arbitrate human
+and agent input; the MCP bridge does not imply that this is already solved.

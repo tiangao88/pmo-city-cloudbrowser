@@ -9,6 +9,9 @@ description = "Independent PMO City CloudBrowser runtime and credential-broker b
 requires-python = ">=3.12"
 dependencies = []
 
+[project.scripts]
+cloudbrowser-hermes-mcp = "cloudbrowser.hermes_mcp:main"
+
 [dependency-groups]
 dev = [
   "pytest>=8.0,<9",
