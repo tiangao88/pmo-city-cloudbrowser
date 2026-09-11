@@ -30,8 +30,9 @@ class _Response:
 
 
 class _CloudBrowserStub:
-    def __init__(self) -> None:
+    def __init__(self, *, join_status: str = "offered") -> None:
         self.calls: list[dict[str, object]] = []
+        self.join_status = join_status
 
     def open(self, request, timeout: float):  # noqa: ANN001
         path = request.full_url.removeprefix("https://cloudbrowser.example.test")
@@ -44,7 +45,7 @@ class _CloudBrowserStub:
             }
         )
         if path == "/ui/session/join":
-            payload = {"request_id": "server", "status": "offered", "slot_id": "slot-1"}
+            payload = {"request_id": "server", "status": self.join_status, "slot_id": "slot-1"}
         elif path == "/ui/session/activate":
             payload = {"request_id": "server", "status": "active", "slot_id": "slot-1"}
         elif path == "/ui/agent/tab_open":
@@ -139,6 +140,22 @@ def test_tool_calls_use_authenticated_viewer_routes_and_never_send_owner_headers
         "site_id": "declared-app",
         "target_tab_id": "tab-real",
     }
+
+
+def test_start_reconciles_durable_active_session_after_browser_restart() -> None:
+    stub = _CloudBrowserStub(join_status="active")
+    client = CloudBrowserHttpClient(
+        base_url="https://cloudbrowser.example.test",
+        authorization="Basic synthetic-profile-secret",
+        request_id_factory=lambda: "mcp-request",
+        opener=stub,
+    )
+
+    assert client.start()["status"] == "active"
+    assert [call["path"] for call in stub.calls] == [
+        "/ui/session/join",
+        "/ui/session/activate",
+    ]
 
 
 def test_notifications_do_not_produce_json_rpc_responses() -> None:

@@ -91,7 +91,12 @@ class CloudBrowserHttpClient:
 
     def start(self) -> dict[str, object]:
         joined = self._post("/ui/session/join", {})
-        if joined.get("status") == "offered":
+        # Router sessions are durable while the browser process is not. After
+        # a service restart an owner can therefore still be ACTIVE while its
+        # Chromium process is stopped. The activate route deliberately accepts
+        # both OFFERED and ACTIVE sessions and makes wake idempotent, so always
+        # reconcile either assigned state before sending page actions.
+        if joined.get("status") in {"offered", "active"}:
             return self._post("/ui/session/activate", {})
         return joined
 
