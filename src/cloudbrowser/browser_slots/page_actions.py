@@ -30,11 +30,23 @@ _INFO_EXPRESSION = """(() => {
     const encoder = new TextEncoder();
     const url = location.origin + location.pathname;
     const title = document.title;
-    const text = document.body ? document.body.innerText : '';
+    let text = document.body ? document.body.innerText : '';
     if (encoder.encode(url).byteLength > 2048 ||
-        encoder.encode(title).byteLength > 4096 ||
-        encoder.encode(text).byteLength > 4096) {
+        encoder.encode(title).byteLength > 4096) {
         return {error: 'page_state_too_large'};
+    }
+    if (encoder.encode(text).byteLength > 4096) {
+        const marker = '\\n[Page text truncated to 4096 UTF-8 bytes]';
+        const budget = 4096 - encoder.encode(marker).byteLength;
+        let excerpt = '';
+        let bytes = 0;
+        for (const character of text) {
+            const size = encoder.encode(character).byteLength;
+            if (bytes + size > budget) break;
+            excerpt += character;
+            bytes += size;
+        }
+        text = excerpt + marker;
     }
     return {url, title, text};
 })()"""

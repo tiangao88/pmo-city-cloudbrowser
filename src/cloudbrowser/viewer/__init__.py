@@ -188,7 +188,7 @@ function refreshRoster(){fetch("/ui/roster").then(function(r){return r.json()}).
  roster.innerHTML="";
  entries.forEach(function(e){
   var li=document.createElement("li");
-  var label=e.email?e.email:"(anonymous)";
+  var label=e.email?e.email:"User (display name unavailable)";
   li.textContent=(e.status==="active"?"\\u25cf ":"\\u25cb ")+label+" \\u2014 "+e.status;
   roster.appendChild(li);
  });

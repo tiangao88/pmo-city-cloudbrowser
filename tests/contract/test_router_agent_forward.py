@@ -500,6 +500,24 @@ def test_agent_route_malformed_body_is_invalid_request(stack) -> None:
     assert stack["forwarder"].calls == []
 
 
+@pytest.mark.parametrize("code,expected", [
+    ("browser_unavailable", "browser_unavailable"),
+    ("response_too_large", "response_too_large"),
+    ("private exception containing credentials", "agent_unavailable"),
+    (None, "agent_unavailable"),
+])
+def test_agent_route_preserves_only_known_failure_codes(stack, code, expected):
+    _open_active_session(stack)
+    stack["forwarder"].result = {"status": "failed", "error_code": code, "page": {"text": "must not leak"}}
+    status, payload = _request_json(
+        _conn(stack["server"]), method="POST", path="/v1/agent/page_info",
+        body=json.dumps({"request_id": "req-failure", "params": {"target_tab_id": "tab-1"}}).encode(),
+        headers=_identity_headers(),
+    )
+    assert status == 200
+    assert payload == {"request_id": "req-failure", "status": "failed", "error_code": expected}
+
+
 def test_agent_route_maps_forwarder_unavailability_to_bounded_error(stack) -> None:
     _open_active_session(stack)
     stack["forwarder"].result = {}  # forwarder returns unusable payload

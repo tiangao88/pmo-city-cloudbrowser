@@ -486,6 +486,17 @@ class RouterApi:
             return 200, _envelope(request_id, status="failed", error_code="agent_unavailable")
         if not isinstance(result, dict) or not isinstance(result.get("status"), str):
             return 200, _envelope(request_id, status="failed", error_code="agent_unavailable")
+        if result["status"] != "ok":
+            code = result.get("error_code")
+            known_errors = {
+                "invalid_request", "owner_mismatch", "browser_unavailable",
+                "response_too_large", "operation_failed", "capability_denied",
+                "operation_not_supported",
+            }
+            return 200, _envelope(
+                request_id, status="failed",
+                error_code=code if isinstance(code, str) and code in known_errors else "agent_unavailable",
+            )
         page = result.get("page")
         safe_page: dict[str, str] | list[dict[str, str]] | None = None
         if operation == "tabs_list":

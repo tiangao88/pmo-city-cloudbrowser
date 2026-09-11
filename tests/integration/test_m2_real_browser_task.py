@@ -53,6 +53,8 @@ def test_fresh_browser_opens_exact_tab_types_clicks_and_reads_result(tmp_path):
             <main><label>Task <input id=task></label>
             <button id=complete onclick=\"document.querySelector('output').textContent='Completed '+document.querySelector('#task').value\">Complete</button>
             <output>Pending</output></main>"""
+            if self.path == "/large":
+                body = ("<!doctype html><meta charset=utf-8><title>Large page</title><main>" + "🌍 café " * 1500 + "</main>").encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
             self.send_header("Content-Length", str(len(body)))
@@ -131,6 +133,20 @@ def test_fresh_browser_opens_exact_tab_types_clicks_and_reads_result(tmp_path):
         assert any(page["tab_id"] == tab_id and page["url"] == task_url for page in tabs["page"])
         stale = _post(origin, "page_info", "req-stale", {"target_tab_id": "stale-tab"})
         assert stale == {"request_id": "req-stale", "status": "failed", "error_code": "browser_unavailable"}
+        large = _post(origin, "tab_open", "req-large", {"url": task_url.replace('/task', '/large')})
+        assert large["status"] == "ok"
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            result = _post(origin, "page_info", "req-large-read", {"target_tab_id": large["page"]["tab_id"]})
+            if result.get("status") == "ok" and result["page"]["title"] == "Large page":
+                break
+            time.sleep(0.1)
+        assert result["status"] == "ok"
+        excerpt = result["page"]["text"]
+        assert excerpt.startswith("🌍 café ")
+        assert excerpt.endswith("[Page text truncated to 4096 UTF-8 bytes]")
+        assert len(excerpt.encode()) <= 4096
+        assert "\ufffd" not in excerpt
     finally:
         if agent_server is not None:
             agent_server.shutdown()
