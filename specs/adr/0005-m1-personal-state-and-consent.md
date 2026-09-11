@@ -15,11 +15,15 @@ starting Chromium. Hold it until the process stops; a second slot using the same
 shared volume fails closed. All slots in one installation must mount the same
 profile root for cross-slot continuity; separate installations must not share it.
 This single-host design relies on filesystem flock semantics, not NFS locking.
-An existing Chromium singleton marker blocks all pre-start mutation and is not
-automatically erased: a service crash can leave a live orphan browser. Recovery
-requires stopping the owner/slots and proving the marker stale before any
-separately authorized cleanup. Profile isolation is logical between trusted
-services, not a sandbox against a compromised same-UID container process.
+Chromium inherits the same profile lease held by its supervisor, so an orphan
+browser continues to exclude a replacement supervisor. Once a profile records
+that it uses this lease-aware runtime, a replacement may remove Chromium
+singleton links only after acquiring the exclusive lease. Profiles created by
+older runtimes have no compatibility marker and still fail closed: recovery
+requires stopping the owner/slots and proving the singleton stale before a
+separately authorized one-time cleanup. Profile isolation is logical between
+trusted services, not a sandbox against a compromised same-UID container
+process.
 
 Reject owner-path symlinks. Existing unpartitioned profile data stays in place
 and is never automatically attributed to a user. Prior ambiguous data requires

@@ -21,6 +21,9 @@ from .transport import BrowserUnavailable
 from cloudbrowser.owner_storage import owner_directory, prepare_owner_directory
 
 
+_SINGLETON_LEASE_MARKER = ".cloudbrowser-singleton-lease-v1"
+
+
 class BrowserProcessError(BrowserUnavailable):
     """Raised when the browser process cannot be safely operated."""
 
@@ -274,12 +277,16 @@ class BrowserProcess:
             self._start_epoch += 1
             start_epoch = self._start_epoch
             try:
+                pass_fds = (
+                    (self._profile_lease,) if self._profile_lease is not None else ()
+                )
                 process = self._popen(
                     self.config.command(),
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     close_fds=True,
+                    pass_fds=pass_fds,
                     start_new_session=True,
                 )
             except (OSError, TypeError) as exc:
@@ -439,13 +446,34 @@ class BrowserProcess:
     def _clear_stale_profile_locks(self) -> None:
         """Remove Chromium singleton links left by an unclean container exit."""
         if self.config.profile_root is not None:
-            # An orphan Chromium can outlive this service's advisory lease.
-            # Fail closed before touching Preferences/Cookies. An operator
-            # must prove stale ownership before removing an abandoned marker.
-            marker = self.config.profile_dir / "SingletonLock"
-            if marker.exists() or marker.is_symlink():
+            # Managed Chromium inherits the profile lease. Therefore acquiring
+            # the lease proves that no compatible browser still owns the
+            # profile, including an orphan whose parent service exited. Older
+            # profiles have no compatibility marker and continue to fail closed
+            # until an operator proves their singleton stale once.
+            lease_marker = self.config.profile_dir / _SINGLETON_LEASE_MARKER
+            compatible = lease_marker.is_file() and not lease_marker.is_symlink()
+            singleton = self.config.profile_dir / "SingletonLock"
+            if (singleton.exists() or singleton.is_symlink()) and not compatible:
                 raise BrowserProcessError("owner profile needs singleton recovery")
+            if compatible:
+                self._unlink_singleton_markers()
+                return
+            try:
+                descriptor = os.open(
+                    lease_marker,
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
+                    0o600,
+                )
+                os.close(descriptor)
+            except FileExistsError as exc:
+                raise BrowserProcessError("owner profile lease marker is invalid") from exc
+            except OSError as exc:
+                raise BrowserProcessError("owner profile lease marker is unavailable") from exc
             return
+        self._unlink_singleton_markers()
+
+    def _unlink_singleton_markers(self) -> None:
         for name in ("SingletonCookie", "SingletonLock", "SingletonSocket"):
             marker = self.config.profile_dir / name
             try:
