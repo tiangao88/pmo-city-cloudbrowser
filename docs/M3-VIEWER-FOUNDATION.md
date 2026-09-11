@@ -3,7 +3,17 @@
 Status: delivery sequence approved by Tigo on 2026-09-11; implementation and
 transport qualification pending. Tigo subsequently selected noVNC for M3a.
 Work branch: `feat/m3-viewer-foundation`,
-based on frozen M2 review target `9c113587`. No runtime or deployment change.
+based on frozen M2 review target `9c113587`. No deployed runtime change.
+
+Development progress: the disposable noVNC shared-browser spike passed display,
+input and reconnect checks (see its README for evidence and limitations).
+`viewer/live_connection.py` now supplies a transport-independent lifecycle
+component with synthetic tests for authority checks before frame forwarding,
+expiry, revocation and owner/generation changes. It is not wired into the
+service or WebSocket transport. The adapter must schedule idle polling, serialize
+slot rebind with connection revocation, bound transport callbacks, and enforce
+read-only RFB behavior server-side; these obligations are not yet implemented.
+Exclusive takeover and broker/agent fencing also remain pending.
 
 ## Outcome
 
@@ -65,7 +75,7 @@ or profile volumes into this implementation.
    connections on owner/generation change, not just new page loads. No public
    room, reusable shared password or browser/backend endpoint in MCP results.
 4. **Exclusive takeover.** Add server-enforced control state and fencing, then
-   keyboard/mouse input. Do not rely on Neko's visual control indicator to stop
+   keyboard/mouse input. Do not rely on the viewer's visual control indicator to stop
    Hermes: the mediated action path must obey the same control owner.
 5. **Qualification and staged rollout.** Pass the matrix below, resolve review
    gates, qualify immutable images and clean installation/rollback, then deploy
