@@ -21,11 +21,17 @@ to the employee's ordinary browser.
 
 ## Current checkpoint
 
-Source checkpoint: `430a066`, 2026-09-11. Broker capabilities, durable grant
-custody, Basic/Authentik paths and exact-target page actions are present in
-source. Production form mode is disabled. TOTP submission, human code handoff,
-a live browser stream, and complete personal-workspace recovery remain open
-acceptance work. See the status register for precise evidence.
+Tested source checkpoint: `184d4bc`, 2026-09-11. M1 owner continuity and M2's
+fresh-browser exact-tab task, Basic/Authentik synthetic qualification and
+mediated Hermes stdio MCP entrypoint are present in source. The Linux gate is
+**1065 passed, 3 intentionally disabled form cases skipped**; CloudFiles is
+**80 passed**. See the [M2 evidence](docs/evidence/2026-09-11-m2-browser-task.md)
+and status register for the precise boundary.
+
+Production form mode is disabled. TOTP submission, human code handoff, a live
+browser stream/takeover, interactive Hermes OIDC renewal and hosted user
+acceptance remain open. The independent M0 broker/security verdict also remains
+a release gate.
 
 The current release manifest is pre-build and not installable. Retained image
 digests qualify earlier source; they must be rebuilt/qualified and synchronized

@@ -1,14 +1,16 @@
 # CloudBrowser development roadmap
 
-Status: **M1 development authorized by Tigo — 2026-09-11**.
+Status: **M1 and M2 source development authorized by Tigo — 2026-09-11**.
 Later milestones remain the forward plan; this is not deployment authorization.
 M1 source implementation and automated qualification are complete; see
 [evidence](../../../docs/evidence/2026-09-11-m1-continuity.md). Independent
 security approval, image qualification and live acceptance remain separate gates.
-M2 source development is now authorized and in progress. Its first increment is
-the fresh-browser exact-tab path plus a real-Chromium ordinary task; secure-login
-qualification reuses only synthetic/local declared-site fixtures until a live
-test account and environment are separately approved.
+M2 source implementation and automated qualification are complete at `184d4bc`:
+fresh-browser exact-tab work, synthetic Basic/Authentik proof and the mediated
+Hermes stdio MCP entrypoint. See
+[evidence](../../../docs/evidence/2026-09-11-m2-browser-task.md). A live Hermes
+profile/site acceptance needs a separately approved target, authentication and
+release/deployment decision.
 Based on source `430a06603e8dff9531cc14042a01e38fff2b8874`.
 This is the proposed forward plan. [PRODUCT-PRD.md](PRODUCT-PRD.md) defines
 outcomes; [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md) records evidence.
@@ -35,11 +37,11 @@ scope adjustment, not permission to bypass those requirements.
 
 ## Development decisions and sequencing
 
-M1 is proceeding with stable owner storage and explicit durable consent under
+M1 uses stable owner storage and explicit durable consent under
 [ADR-0005](../../adr/0005-m1-personal-state-and-consent.md). The M0 Linux baseline
 is reproduced; its independent broker security review remains a release gate.
-M1 authorization does not waive that review. Employee self-service consent is
-M3; current M1 consent provisioning stays operator-controlled and offline.
+M1/M2 authorization does not waive that review. Employee self-service consent
+is M3; current consent provisioning stays operator-controlled and offline.
 
 1. Reproduce and record the source gates; resolve machine-dependent test
    requirements without weakening assertions or hiding skips.

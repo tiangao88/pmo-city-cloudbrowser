@@ -38,6 +38,26 @@ These are source results, not live acceptance.
 See [ADR-0005](../../adr/0005-m1-personal-state-and-consent.md) and the
 [migration/recovery checklist](../../../docs/M1-MIGRATION.md).
 
+## M2 source increment — 2026-09-11
+
+Tigo authorized M2 on `feat/m2-first-browser-task`. `tab_open` now supplies a
+bounded first target for a fresh browser; all subsequent page actions retain an
+exact Chromium target. The browser rechecks the current principal/generation
+inside its serialized action gate, so a lease rotation cannot race between an
+agent-control precheck and the page side effect.
+
+The supported Hermes entrypoint is now the `cloudbrowser-hermes-mcp` local stdio
+bridge. It exposes eight bounded tools through the authenticated viewer surface
+and replaces the old supported-tree helper that bypassed the router through raw
+CDP. Hermes' installed MCP SDK completed initialization/tool discovery.
+
+Final Linux qualification at `184d4bc`: **1065 passed, 3 intentionally disabled
+form cases skipped**; all six validators and **80 CloudFiles boundary cases**
+passed. The focused real-browser, Basic/Authentik, wrong-origin/account,
+idempotency and MCP suite passed **96 cases**. See
+[M2 evidence](../../../docs/evidence/2026-09-11-m2-browser-task.md). These are
+source results, not an image, deployment, real-site or employee acceptance.
+
 ## Capability inventory
 
 | Capability | Source evidence | Remaining acceptance |
@@ -45,11 +65,12 @@ See [ADR-0005](../../adr/0005-m1-personal-state-and-consent.md) and the
 | Immutable identity and authorization | `edge_auth.py`, `identity_link_service.py`, `identity_links.py`; identity/security tests | Current deployed edge-to-principal proof for two employees. |
 | Queue, activation, leases, roster, leave | `router/sessions.py`, `router/router_api.py`; router contract tests | Integrated multi-slot and fresh-browser journey; current deployment capacity unverified. |
 | Browser lifecycle and profile | `browser_slots/browser_process.py`, `supervisor.py`, `lifecycle.py`, `owner_storage.py`; M1 real-Chromium continuity test | Source ownership/clean-restart continuity proven synthetically; uncertain crash locks need operator recovery. Live migration and multi-slot deployment remain qualification work. |
-| Exact-target agent actions | `browser_slots/page_actions.py`, `agent_control.py`; M2 first-tab and real-browser task tests | `tab_open` supplies a bounded first target; navigate, click, type, page_info and tabs_list remain exact-target. Real-Chromium synthetic qualification is pending the final M2 candidate run; useful real-site acceptance remains separate. |
+| Exact-target agent actions | `browser_slots/page_actions.py`, `agent_control.py`; M2 first-tab and real-browser task tests | `tab_open`, navigate, click, type, page_info and tabs_list passed the synthetic real-Chromium task. Useful real-site acceptance and richer bounded observation remain separate. |
+| Hermes entrypoint | `hermes_mcp.py`, `integrations/hermes/cloudbrowser/`; MCP contract/security tests and Hermes SDK probe | Eight mediated stdio MCP tools are source-qualified. Live profile installation, distinct TinyAuth-compatible auth and hosted task acceptance remain open; interactive OIDC renewal is not implemented. |
 | Viewer | `viewer/session_surface.py`, `viewer/__init__.py` | Authenticated queue/control HTML exists; live video/streaming and human takeover remain missing product work. |
 | Broker authorization | `credential_capability.py`, `router/credential_broker_forwarder.py`, broker coordinator/nonce/idempotency/deadline modules | Post-remediation review and real-browser/site acceptance of replay, races, unknown outcomes and deadlines. |
 | Grant custody | `credential_broker/grant_custody.py`, `grant_admin.py`, `runtime.py`; M1 consent tests | Explicit durable consent and fresh exact-target authorization implemented. Employee self-service capture remains M3; independent security review and live acceptance remain open. |
-| Basic and Authentik | Broker adapters, `browser_slots/basic_auth.py`, `authentik.py`; real-CDP and fixture tests | Current-source image and live application identity proof; Authentik detects MFA but has no production TOTP/code submission. |
+| Basic and Authentik | Broker adapters, `browser_slots/basic_auth.py`, `authentik.py`; real-CDP and fixture tests | Synthetic current-source exact-origin/application-account checks passed. Current-source image and approved live-site proof remain open; Authentik detects MFA but has no production TOTP/code submission. |
 | Ordinary form and MFA | Form/TOTP/handoff components/tests exist | Production form mode is disabled; 3 historical form integration tests intentionally skipped. Production TOTP submission and human one-time-code handoff are unavailable. |
 | CloudFiles | `cloudfiles/`, `downloads/`, browser ingest, identity service, Compose wiring and E2E tests | Requalify actual browser → scan/store → public gateway → local attachment with current images, persistence and two owners. |
 | Release | `deploy/coolify/releases/v0.2.0-dev1/release-manifest.yaml` | `installable: false`, `sourceState: pending-build`, `imageState: stale-pre-change`. Nine retained digests qualify `50ce198`, workflow run `34402569940`, not this source. |
