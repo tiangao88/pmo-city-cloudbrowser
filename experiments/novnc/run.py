@@ -19,6 +19,7 @@ from cloudbrowser.browser_slots.chrome_adapter import ChromeBrowserAdapter, Chro
 from cloudbrowser.browser_slots.http_client import HttpJsonClient
 from cloudbrowser.browser_slots.http_transport import HttpBrowserTransport
 from cloudbrowser.browser_slots.page_actions import CdpPageActionAdapter
+from proxy import build_proxy
 
 # Synthetic fixture secret only; this is not an authentication deployment.
 SECRET = "novnc-disposable-fixture-only"
@@ -106,10 +107,12 @@ def main():
             if opened.get("status") != "ok":
                 raise RuntimeError("mediated tab creation failed")
             children.append(subprocess.Popen(["x11vnc", "-display", ":99", "-localhost",
-                "-rfbport", "5900", "-forever", "-shared", "-nopw", "-noxdamage", "-nosel"]))
-            children.append(subprocess.Popen(["websockify", "--web=/usr/share/novnc",
-                "0.0.0.0:6080", "127.0.0.1:5900"]))
-            print("Synthetic viewer ready; no SSO, no broker, no takeover enforcement", flush=True)
+                "-rfbport", "5900", "-forever", "-shared", "-nopw", "-noxdamage", "-nosel",
+                "-viewonly", "-noremote"]))
+            proxy = build_proxy(transport.readiness)
+            servers.append(proxy)
+            threading.Thread(target=proxy.serve_forever, daemon=True).start()
+            print("Synthetic read-only viewer ready; no SSO, no broker, no takeover", flush=True)
             while not stop.wait(0.5):
                 if any(child.poll() is not None for child in children):
                     raise RuntimeError("display service stopped")

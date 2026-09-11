@@ -2,7 +2,7 @@
 
 Not a release component. No SSO, broker, Vaultwarden, production profile mounts,
 exclusive takeover, owner-switch qualification or public access. The local
-WebSocket endpoint is intentionally unauthenticated: use synthetic data only.
+session issuer intentionally requires no authentication: use synthetic data only.
 Never expose it beyond loopback or forward it to another host.
 
 Build from repository root:
@@ -12,7 +12,11 @@ docker build -f experiments/novnc/Dockerfile -t cloudbrowser-novnc-spike:local .
 docker run --name cloudbrowser-novnc-spike --rm --init --shm-size=256m --memory=1g --cpus=2 -p 127.0.0.1:16080:6080 cloudbrowser-novnc-spike:local
 ```
 
-Open `http://127.0.0.1:16080/vnc.html?autoconnect=1&resize=scale`.
+Open `http://127.0.0.1:16080/fixture-session`. This grants an HttpOnly synthetic
+viewer cookie for ten minutes and redirects to noVNC. It is not SSO or account
+proof. Direct WebSocket access without that cookie is rejected. This increment
+is read-only: x11vnc rejects keyboard and mouse input, independently of client
+settings. The original bidirectional spike results below are historical.
 No host volumes, Docker socket, environment files or production secrets may be
 mounted. Backend/agent/CDP ports remain container-loopback only. All profiles
 are disposable. Stop with `docker stop cloudbrowser-novnc-spike`.
@@ -30,6 +34,35 @@ container no-sandbox pattern, not a newly established security boundary.
 Production work must add authenticated, owner-bound stream admission, revoke
 active connections on rebind, and server-enforced takeover fencing. Client-side
 noVNC viewOnly is not authorization. Do not test application credentials here.
+
+## Read-only adapter increment — 2026-09-11
+
+The disposable threaded websockify adapter now uses `LiveViewConnection` for
+each connection. It checks cookie admission and exact Origin/path before the
+upgrade, polls authority while idle, rechecks outgoing writes (including pending
+WebSocket writes), and discards pending data on closure. x11vnc starts with
+`-viewonly -nosel -noremote`. No second browser is launched.
+
+Five loopback integration tests passed for missing cookie, revoked cookie,
+incorrect Origin/path and revocation of an already-open idle stream:
+
+```sh
+docker exec cloudbrowser-novnc-spike python3 /app/experiment/test_proxy.py
+```
+
+Headed Playwright/noVNC QA also passed: attempted typing and clicking did not
+change the synthetic page; a mediated click still worked and confirmed the
+input remained empty. Revoking the fixture cookie disconnected the visible
+viewer without reload. The same package.json/preload console issues recorded
+below remain. Test image before the final test EOF-guard edit:
+`sha256:b9317d8db115d80f9980010200f829853d7c3a7fbdbd3ddd8a03f76ea1f7fac8`.
+
+This is **not production integration**: the issuer admits any local caller as
+the fixture owner; cookies use HTTP for the loopback test; no owner switch is
+performed. Production must replace the issuer with trusted SSO/router identity,
+serialize slot rebind with stream revocation, bound all protocol/transport
+operations, and qualify TLS, clipboard handling and teardown. A polling interval
+is not an atomic rebind guarantee. Human takeover is not enabled.
 
 ## Local feasibility result — 2026-09-11
 

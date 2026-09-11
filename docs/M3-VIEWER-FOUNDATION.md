@@ -9,10 +9,13 @@ Development progress: the disposable noVNC shared-browser spike passed display,
 input and reconnect checks (see its README for evidence and limitations).
 `viewer/live_connection.py` now supplies a transport-independent lifecycle
 component with synthetic tests for authority checks before frame forwarding,
-expiry, revocation and owner/generation changes. It is not wired into the
-service or WebSocket transport. The adapter must schedule idle polling, serialize
-slot rebind with connection revocation, bound transport callbacks, and enforce
-read-only RFB behavior server-side; these obligations are not yet implemented.
+expiry, revocation and owner/generation changes. The disposable websockify
+adapter now wires it into cookie admission, outgoing writes and idle polling;
+its private x11vnc backend enforces read-only keyboard/mouse behavior. Five
+loopback WebSocket tests and visible browser checks passed. The adapter is not
+wired into the deployed service and its synthetic issuer is not SSO. Production
+must serialize slot rebind with connection revocation, bound transport callbacks,
+and qualify protocol behavior and real identity admission.
 Exclusive takeover and broker/agent fencing also remain pending.
 
 ## Outcome
