@@ -56,6 +56,6 @@ def test_qualification_index_names_the_current_source_and_run() -> None:
     normalized = " ".join(index.split())
 
     assert "remain `status: pending`" not in normalized
-    assert "qualification run `34603628801`" in normalized
-    assert "commit `8e455b4efbbde723c26c47879da1b339ca3835b5`" in normalized
+    assert "qualification run `34607253841`" in normalized
+    assert "commit `79b739eeae4b44dc28444a7ce05c97c0770e4df0`" in normalized
     assert "synchronized all digests and provenance atomically" in normalized

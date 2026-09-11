@@ -1,7 +1,7 @@
 # Image qualification — credential-broker
 
-- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/credential-broker@sha256:dfcf7b595adc6252b7337cc00512cb1a2f779eb50f8dd4ec9c7ebf4599633091`
-- digest: `sha256:dfcf7b595adc6252b7337cc00512cb1a2f779eb50f8dd4ec9c7ebf4599633091`
+- image: `ghcr.io/tiangao88/pmo-city-cloudbrowser/credential-broker@sha256:b28cb2a21c52fba013769b009b2c7501af99a3bcd7c64d875a28b1d40e92edd5`
+- digest: `sha256:b28cb2a21c52fba013769b009b2c7501af99a3bcd7c64d875a28b1d40e92edd5`
 - status: passed
 - build workflow: `.github/workflows/build-images.yml`
 - Dockerfile: `services/credential-broker/Dockerfile`
@@ -11,14 +11,14 @@
 - healthcheck: passed (container status: healthy)
 - runtime endpoint: passed (`/health`)
 - provenance/SBOM metadata: present in registry manifest
-- source commit `8e455b4efbbde723c26c47879da1b339ca3835b5`
-- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/34603628801`
+- source commit `79b739eeae4b44dc28444a7ce05c97c0770e4df0`
+- CI run: `https://github.com/tiangao88/pmo-city-cloudbrowser/actions/runs/34607253841`
 
 ## Qualification evidence
 
 The immutable digest was resolved from the GHCR manifest for the image built
-from source commit `8e455b4efbbde723c26c47879da1b339ca3835b5` in CI run
-`34603628801`, after every matrix job completed successfully. The CI job
+from source commit `79b739eeae4b44dc28444a7ce05c97c0770e4df0` in CI run
+`34607253841`, after every matrix job completed successfully. The CI job
 verified the non-root user, image healthcheck, provenance/SBOM metadata,
 container health, runtime UID, and the service health endpoint. No credentials,
 cookies, tokens, passwords, or OTPs are included in this record.
