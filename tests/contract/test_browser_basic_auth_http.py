@@ -17,15 +17,34 @@ class _DeadlineClient:
     def __init__(self) -> None:
         self.timeouts: list[float | None] = []
         self.headers: list[dict[str, str]] = []
+        self.paths: list[str] = []
 
     def request(self, method, path, *, body=None, headers=None, timeout_s=None):
+        self.paths.append(path)
         self.timeouts.append(timeout_s)
         self.headers.append(dict(headers or {}))
+        if path == "/browser/readiness":
+            return {
+                "profile_id": "profile-alice", "owner": "alice",
+                "browser_id": "slot-1", "generation": "g1", "cdp_ok": True,
+            }
         return {
             "url": "https://basic.example.test/protected",
             "challenge_origin": "https://basic.example.test",
             "application_authenticated": False,
         }
+
+
+def test_http_basic_live_binding_uses_lifecycle_readiness_route() -> None:
+    from cloudbrowser.basic_auth_http import HttpBasicAuthBrowser
+
+    client = _DeadlineClient()
+    browser = HttpBasicAuthBrowser(client, "broker-secret-0123456789abcdef")
+    binding = browser.live_binding()
+    assert (binding.profile_id, binding.principal_id, binding.browser_id, binding.generation) == (
+        "profile-alice", "alice", "slot-1", "g1",
+    )
+    assert client.paths == ["/browser/readiness"]
 
 
 def test_http_basic_uses_remaining_deadline_for_each_request() -> None:

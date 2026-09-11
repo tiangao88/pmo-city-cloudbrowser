@@ -50,7 +50,7 @@ class FakeBrowserHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self) -> None:  # noqa: N802
-        if self.path == "/browser/readiness":
+        if self.path in ("/browser/readiness", "/agent/readiness"):
             self._json(
                 {
                     "profile_id": "profile-a",

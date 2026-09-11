@@ -44,7 +44,7 @@ def test_browser_sidecar_refuses_stale_agent_action_before_side_effect():
             urlopen(request, timeout=2)
         except HTTPError as response:
             assert response.code == 503
-            assert json.load(response) == {"ok": False, "error_code": "browser_unavailable"}
+            assert json.load(response) == {"ok": False, "error_code": "browser_operation_failed"}
         else:
             raise AssertionError("stale agent binding was accepted")
         assert adapter.calls == []

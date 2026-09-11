@@ -120,9 +120,9 @@ class _Adapter:
         self._enter("agent_pages")
         return [{"tab_id": "tab-1", "url": "https://example.test", "title": "Example"}]
 
-    def open_page(self, url: str) -> None:
-        del url
+    def open_page(self, url: str) -> dict[str, str]:
         self._enter("open_page")
+        return {"tab_id": "tab-new", "url": url, "title": "untitled"}
 
     def close_empty_pages(self) -> None:
         self._enter("close_empty_pages")
@@ -298,6 +298,7 @@ def test_browser_deadline_is_not_renewed_after_lifecycle_queue_wait() -> None:
         ("GET", "/browser/readiness", None, "readiness"),
         ("GET", "/browser/pages", None, "list_page_urls"),
         ("POST", "/browser/pages/open", "https://example.test/new", "open_page"),
+        ("POST", "/agent/pages/open", json.dumps({"url": "https://example.test/new"}), "open_page"),
         ("POST", "/browser/pages/close-empty", None, "close_empty_pages"),
         ("GET", "/agent/pages", None, "agent_pages"),
         ("GET", "/agent/pages/info?target_tab_id=tab-1", None, "page_info"),
