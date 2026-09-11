@@ -1,0 +1,21 @@
+FROM python:3.12-slim-bookworm
+RUN pip install --no-cache-dir 'pytest>=8,<9' \
+    && useradd --create-home --uid 10001 cloudbrowser
+WORKDIR /app
+ENV PYTHONPATH=/app/src PYTHONUNBUFFERED=1
+COPY src/ /app/src/
+COPY tests/ /app/tests/
+COPY specs/ /app/specs/
+COPY docs/ /app/docs/
+COPY services/ /app/services/
+COPY deploy/ /app/deploy/
+COPY tools/ /app/tools/
+COPY configs/ /app/configs/
+COPY integrations/ /app/integrations/
+COPY .github/ /app/.github/
+COPY legacy/ /app/legacy/
+COPY README.md VERSION THIRD-PARTY-NOTICES.md /app/
+COPY pyproject.toml /app/pyproject.toml
+RUN chown -R cloudbrowser:cloudbrowser /app
+USER 10001
+ENTRYPOINT ["python3", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--basetemp=/tmp/cb-tests"]

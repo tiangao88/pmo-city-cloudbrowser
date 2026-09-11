@@ -233,6 +233,7 @@ def create_viewer_server(
     session_surface: ViewerSessionSurface | None = None,
     stream_authority=None,
     public_origin: str | None = None,
+    credential_login_enabled: bool = True,
 ) -> ThreadingHTTPServer:
     """Create the authenticated viewer shell; no CDP or profile routes exist.
 
@@ -462,6 +463,24 @@ def create_viewer_server(
             self._json(status, payload)
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib HTTP handler contract
+            if self.path in ("/ui/viewer/takeover", "/ui/viewer/resume", "/ui/viewer/status") and stream_authority is not None:
+                from http.cookies import SimpleCookie
+                try:
+                    names = [name.lower() for name in self.headers.keys()]
+                    if (len(names) != len(set(names)) or self.headers.get("Origin") != public_origin
+                            or self.headers.get("Content-Length", "0") != "0"
+                            or self.headers.get("Transfer-Encoding") is not None):
+                        raise PermissionError()
+                    cookie = SimpleCookie()
+                    cookie.load(self.headers.get("Cookie", ""))
+                    mode = stream_authority.control(self.path.rsplit("/", 1)[1],
+                        trusted_headers=dict(self.headers.items()), token=cookie["__Host-CBViewer"].value)
+                except Exception:
+                    self.close_connection = True
+                    self._json(403, {"ok": False, "error_code": "viewer_unavailable"})
+                    return
+                self._json(200, {"ok": True, "mode": mode})
+                return
             if self.path == "/ui/viewer/session" and stream_authority is not None:
                 # This route never accepts bearer fallback, identity/binding JSON
                 # or cookies as proof of SSO. Only sanitized trusted-edge headers.
@@ -491,6 +510,10 @@ def create_viewer_server(
                 self._surface_call("activate")
                 return
             if session_surface is not None and self.path == "/ui/credential/login":
+                if not credential_login_enabled:
+                    self.close_connection = True
+                    self._json(503, {"status": "failed", "error_code": "credential_login_disabled"})
+                    return
                 self._credential_login_call()
                 return
             if session_surface is not None and self.path == "/ui/session/leave":

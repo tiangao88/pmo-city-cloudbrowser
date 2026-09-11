@@ -144,6 +144,7 @@ def create_browser_server(
     authentik: BrokerAuthentikCapability | None = None,
     broker_submit_secret: str = "",
     monotonic_clock: Callable[[], float] = time.monotonic,
+    interaction_gate=None,
 ) -> ThreadingHTTPServer:
     """Create the restricted browser API consumed by supervisor and agent control.
 
@@ -156,7 +157,7 @@ def create_browser_server(
         raise ValueError("instance_id and release_version are required")
     if not callable(monotonic_clock):
         raise ValueError("monotonic_clock must be callable")
-    lifecycle_gate = threading.RLock()
+    lifecycle_gate = interaction_gate.lock if interaction_gate is not None else threading.RLock()
 
     def require_agent_binding(handler: BaseHTTPRequestHandler) -> None:
         binding = getattr(adapter, "binding", None)
@@ -176,6 +177,10 @@ def create_browser_server(
                 raise ValueError("invalid browser monotonic clock")
             handler._request_received_monotonic = receipt
             with lifecycle_gate:
+                if interaction_gate is not None and not interaction_gate.permits_browser(urlsplit(handler.path).path, receipt):
+                    handler.close_connection = True
+                    handler._send_json(503, {"ok": False, "error_code": "browser_control_paused"})
+                    return
                 return operation(handler, *args, **kwargs)
 
         return guarded

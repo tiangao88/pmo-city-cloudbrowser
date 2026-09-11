@@ -23,7 +23,7 @@ from cloudbrowser.browser_slots.chrome_adapter import ChromeBrowserAdapter, Chro
 from cloudbrowser.security.policy import parse_authentik_policy, validate_deadline_policy
 
 
-def build_browser_service() -> tuple[
+def build_browser_service(*, process_wrapper=None, interaction_gate=None) -> tuple[
     BrowserProcess, object, threading.Event, "DownloadWatcherRegistry"
 ]:
     """Construct the browser process, adapter server, and shutdown signal."""
@@ -63,6 +63,8 @@ def build_browser_service() -> tuple[
         graceful_shutdown=lambda: request_chromium_shutdown(chrome),
     )
     from cloudbrowser.browser_slots.page_actions import CdpPageActionAdapter, _WebSocket
+    if process_wrapper is not None:
+        process = process_wrapper(process)
 
     # Real page actions (navigate, page_info) via the local DevTools endpoint.
     # click/type stay fail-closed inside the adapter until an approved
@@ -130,6 +132,7 @@ def build_browser_service() -> tuple[
         basic_auth=basic_auth,
         authentik=authentik,
         broker_submit_secret=os.environ.get("CB_BROKER_SUBMIT_SECRET", ""),
+        interaction_gate=interaction_gate,
     )
     return process, server, threading.Event(), registry
 

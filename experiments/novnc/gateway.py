@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 FIXTURE_HEADERS = {"Remote-Sub": "fixture-sub", "Remote-Groups": "PMOC_Users"}
 
 
-def build_gateway(cert, key):
+def build_gateway(cert, key, *, backend_port=6082, fixture_headers=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
@@ -32,15 +32,15 @@ def build_gateway(cert, key):
             elif self.headers.get("Upgrade", "").lower() == "websocket":
                 self.tunnel()
             else:
-                self.forward(6082)
+                self.forward(backend_port)
 
         def do_POST(self):
-            self.forward(6081 if self.path == "/ui/viewer/session" else 6082)
+            self.forward(6081 if backend_port == 6082 and self.path == "/ui/viewer/session" else backend_port)
 
         def forwarded_headers(self):
             # Strip all caller identity attributes; replace with fixture identity.
             headers = {k: v for k, v in self.headers.items() if not k.lower().startswith("remote-")}
-            headers.update(FIXTURE_HEADERS)
+            headers.update(fixture_headers() if fixture_headers else FIXTURE_HEADERS)
             return headers
 
         def forward(self, port):
@@ -49,7 +49,7 @@ def build_gateway(cert, key):
                 self.send_error(400)
                 self.close_connection = True
                 return
-            client = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+            client = http.client.HTTPConnection("127.0.0.1", port, timeout=15)
             try:
                 client.request(self.command, self.path, headers=self.forwarded_headers())
                 response = client.getresponse()
@@ -66,7 +66,7 @@ def build_gateway(cert, key):
 
         def tunnel(self):
             self.close_connection = True
-            with socket.create_connection(("127.0.0.1", 6082), timeout=2) as target:
+            with socket.create_connection(("127.0.0.1", backend_port), timeout=2) as target:
                 headers = self.forwarded_headers()
                 request = f"GET {self.path} HTTP/1.1\r\n" + "".join(f"{k}: {v}\r\n" for k, v in headers.items()) + "\r\n"
                 target.sendall(request.encode("latin-1"))

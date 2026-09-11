@@ -1,5 +1,35 @@
 # M3a: live viewer and human takeover
 
+## Current delivery gates — 2026-09-11
+
+User approved autonomous work on gates 1–4. **Candidate progress, not release
+completion. Dev01 is unchanged.** Historical notes below describe earlier seams;
+this table is the current status.
+
+| Gate | Evidence delivered | Still required for closure |
+|---|---|---|
+| 1. Integrated runtime | Separate desktop image, existing browser API, real identity-link client, cookie issuer, noVNC, private fence/enable and shared control lock. Non-root stopped startup checked. | Sanitizing edge + router + supervisor installation wiring and qualification; supported Python alignment. |
+| 2. Owner/restart isolation | Actual candidate A/B/A HTTPS/WSS smoke; old cookie rejection; per-owner synthetic application-cookie continuity; full runtime restart rejects previous controller ticket. Fresh X lifetime is coupled to browser lifecycle. | Integrated first-frame pixel leakage tests, crash/failure matrix and supervisor recovery when its already-ready state outlives viewer restart. |
+| 3. Human takeover | Real noVNC keyboard input; browser HTTP reads/actions and broker page endpoints paused; queued-request fencing; disconnect stays paused; held Shift/button cleanup; explicit resume. | Whole-job upstream broker admission/custody fencing. Credential UI disabled and broker configuration refused in candidate; upstream broker must remain disabled too. |
+| 4. Qualification/release | Linux Python 3.12 regression runner: 1,153 passed / 13 skipped. Final new/control/issuer tests: 35 passed. Candidate image builds; localhost desktop and mobile-sized visual checks performed. | Blocked security review, all skipped deployment/real-browser cases, dependency/image qualification, installation and rollback rehearsal. **NO-GO.** |
+
+The candidate's reproducible checks, private port boundaries and rollback
+prerequisites are in [services/desktop/README.md](../services/desktop/README.md).
+`experiments/novnc/candidate_smoke.py` uses only synthetic identities/cookies.
+It does not demonstrate real SSO or Vaultwarden access. Visual QA showed the
+new controls and live remote text input; its session panel is intentionally
+offline because the fixture does not provide a router/SSO stack. Desktop and
+390px-wide controls render; the scaled remote desktop is tiny on mobile and is
+not a mobile-usability sign-off.
+
+The outstanding scan `f6547962-81de-4748-bede-39f6e240eb82` against frozen M2
+target `9c11358710bc9d16f7b32d25e27c0f4434d20985` remains incomplete after a platform
+block. It was not restarted or substituted with another scan. Existing
+regressions and synthetic functional QA are not a replacement for that review.
+No real credential test, release merge or deployment is authorized by these results.
+
+## Earlier implementation notes
+
 Status: delivery sequence approved by Tigo on 2026-09-11; implementation and
 transport qualification pending. Tigo subsequently selected noVNC for M3a.
 Work branch: `feat/m3-viewer-foundation`,

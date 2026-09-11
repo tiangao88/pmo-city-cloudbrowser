@@ -15,12 +15,17 @@ from .live_connection import LiveViewConnection
 
 
 class SlotViewerAuthority:
-    def __init__(self, *, viewer, identity_client, readiness, stream_endpoint, clock=time.monotonic):
+    def __init__(self, *, viewer, identity_client, readiness, stream_endpoint, clock=time.monotonic,
+                 interaction_gate=None, set_input=None):
         self._viewer = viewer
         self._identity = identity_client
         self._readiness = readiness
         self._endpoint = stream_endpoint
-        self._lock = RLock()
+        self._interaction = interaction_gate
+        self._set_input = set_input
+        if interaction_gate is not None and set_input is None:
+            raise ValueError("interaction requires a server-side input controller")
+        self._lock = interaction_gate.lock if interaction_gate is not None else RLock()
         self._binding = None
         self._used_generations = set()
         self._connections = set()
@@ -93,9 +98,18 @@ class SlotViewerAuthority:
         with self._lock:
             self._principal(trusted_headers)
             self._connections = {c for c in self._connections if not c.closed}
+            if self._interaction is not None and (
+                not self._interaction.permits_viewer(token)
+                or (self._interaction.mode == "human" and self._connections)
+            ):
+                raise PermissionError("viewer control unavailable")
             def close():
                 try:
                     close_transport()
+                    if (self._interaction is not None and self._interaction.mode == "human"
+                            and self._interaction.controller == token):
+                        self._interaction.change("paused")
+                        self._set_input(False)
                 except Exception:
                     self._teardown_failed = True
                     self._binding = None
@@ -113,10 +127,35 @@ class SlotViewerAuthority:
         """Upgrade preflight; connect and every write must still reauthorize."""
         with self._lock:
             self._principal(trusted_headers)
+            if self._interaction is not None and not self._interaction.permits_viewer(token):
+                raise PermissionError("viewer control unavailable")
             binding = self._current()
             self.require_lease(binding.request_id)
             session = self._viewer.authorize(token, binding)
             ViewerBrowserBridge(readiness=self._readiness, stream_endpoint=self._endpoint).open_stream(session, binding)
+
+    def control(self, action, *, trusted_headers, token):
+        with self._lock:
+            if self._interaction is None:
+                raise PermissionError("viewer control unavailable")
+            self.authorize_stream(trusted_headers=trusted_headers, token=token)
+            if action == "status":
+                return self._interaction.mode
+            if action not in ("takeover", "resume"):
+                raise ValueError("unknown viewer control action")
+            self._interaction.change("paused")
+            try:
+                for connection in self._connections:
+                    connection.revoke()
+                self._connections.clear()
+                self._set_input(action == "takeover")
+                self._interaction.change("human" if action == "takeover" else "agent",
+                    token if action == "takeover" else None)
+            except Exception:
+                self._teardown_failed = True
+                self._binding = None
+                raise
+            return self._interaction.mode
 
     def rebind(self, binding: ViewerRequest | None, *, apply_binding):
         """Close old transports before changing the browser, under one lock.
@@ -136,6 +175,8 @@ class SlotViewerAuthority:
                 self._used_generations.add(binding.generation)
             self._binding = None
             self._lease_deadline = None
+            if self._interaction is not None:
+                self._interaction.change("paused")
             failed = False
             for connection in self._connections:
                 try:
@@ -146,6 +187,12 @@ class SlotViewerAuthority:
             if failed:
                 self._teardown_failed = True
                 raise RuntimeError("viewer transport teardown failed")
+            if self._interaction is not None:
+                try:
+                    self._set_input(False)
+                except Exception:
+                    self._teardown_failed = True
+                    raise
             apply_binding()
             self._binding = binding
 
@@ -181,3 +228,5 @@ class SlotViewerAuthority:
                 raise PermissionError("viewer browser not ready")
             self._binding = binding
             self._lease_deadline = self._clock() + lease_s
+            if self._interaction is not None:
+                self._interaction.change("agent")
