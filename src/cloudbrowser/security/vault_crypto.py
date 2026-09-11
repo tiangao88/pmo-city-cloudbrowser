@@ -33,6 +33,7 @@ from ctypes import (
     byref,
     c_char_p,
     c_int,
+    c_long,
     c_size_t,
     c_ubyte,
     c_void_p,
@@ -91,10 +92,30 @@ def _lib():
     lib.EVP_CIPHER_CTX_ctrl.argtypes = [c_void_p, c_int, c_int, c_void_p]
     lib.EVP_PKEY_free.argtypes = [c_void_p]
     lib.d2i_AutoPrivateKey.restype = c_void_p
-    lib.d2i_AutoPrivateKey.argtypes = [POINTER(c_void_p), POINTER(POINTER(c_ubyte)), c_int]
+    lib.d2i_AutoPrivateKey.argtypes = [
+        POINTER(c_void_p),
+        POINTER(POINTER(c_ubyte)),
+        c_long,
+    ]
     lib.EVP_PKEY_CTX_new.restype = c_void_p
     lib.EVP_PKEY_CTX_new.argtypes = [c_void_p, c_void_p]
     lib.EVP_PKEY_CTX_free.argtypes = [c_void_p]
+    lib.EVP_PKEY_decrypt_init.restype = c_int
+    lib.EVP_PKEY_decrypt_init.argtypes = [c_void_p]
+    lib.EVP_PKEY_CTX_set_rsa_padding.restype = c_int
+    lib.EVP_PKEY_CTX_set_rsa_padding.argtypes = [c_void_p, c_int]
+    lib.EVP_PKEY_CTX_set_rsa_oaep_md.restype = c_int
+    lib.EVP_PKEY_CTX_set_rsa_oaep_md.argtypes = [c_void_p, c_void_p]
+    lib.EVP_PKEY_CTX_set_rsa_mgf1_md.restype = c_int
+    lib.EVP_PKEY_CTX_set_rsa_mgf1_md.argtypes = [c_void_p, c_void_p]
+    lib.EVP_PKEY_decrypt.restype = c_int
+    lib.EVP_PKEY_decrypt.argtypes = [
+        c_void_p,
+        c_void_p,
+        POINTER(c_size_t),
+        c_void_p,
+        c_size_t,
+    ]
     return _LIB
 
 
@@ -272,22 +293,16 @@ def rsa_oaep_decrypt(der_private_key: bytes, ciphertext: bytes, *, sha256: bool 
         try:
             if lib.EVP_PKEY_decrypt_init(ctx) != 1:
                 raise VaultCryptoError("decrypt init failed")
-            lib.EVP_PKEY_CTX_set_rsa_padding.argtypes = [c_void_p, c_int]
             if lib.EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_OAEP_PADDING) != 1:
                 raise VaultCryptoError("set OAEP padding failed")
             md = lib.EVP_sha256() if sha256 else lib.EVP_sha1()
             set_oaep_md = getattr(lib, "EVP_PKEY_CTX_set_rsa_oaep_md", None)
             if set_oaep_md is None:  # pragma: no cover - ancient OpenSSL
                 raise VaultCryptoError("OpenSSL lacks EVP_PKEY_CTX_set_rsa_oaep_md")
-            set_oaep_md.argtypes = [c_void_p, c_void_p]
             if set_oaep_md(ctx, md) != 1:
                 raise VaultCryptoError("set OAEP md failed")
-            lib.EVP_PKEY_CTX_set_rsa_mgf1_md.argtypes = [c_void_p, c_void_p]
             if lib.EVP_PKEY_CTX_set_rsa_mgf1_md(ctx, md) != 1:
                 raise VaultCryptoError("set MGF1 md failed")
-            lib.EVP_PKEY_decrypt.argtypes = [
-                c_void_p, c_void_p, POINTER(c_size_t), c_void_p, c_size_t
-            ]
             outlen = c_size_t()
             if lib.EVP_PKEY_decrypt(ctx, None, byref(outlen), ciphertext, len(ciphertext)) != 1:
                 raise VaultCryptoError("decrypt size query failed")
