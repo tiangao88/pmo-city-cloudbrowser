@@ -44,6 +44,14 @@ def test_exactly_one_bounded_authentication_channel_is_required(
         )
 
 
+def test_unresolved_profile_secret_placeholder_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        CloudBrowserHttpClient(
+            base_url="https://cloudbrowser.example.test",
+            authorization="${CB_CLOUDBROWSER_AUTHORIZATION}",
+        )
+
+
 def test_redirect_is_not_followed_and_authentication_is_not_sent_to_redirect_target() -> None:
     calls = []
 

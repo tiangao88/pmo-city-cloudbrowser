@@ -36,6 +36,7 @@ def _bounded_auth(value: str) -> bool:
     return (
         isinstance(value, str)
         and bool(value)
+        and not (value.startswith("${") and value.endswith("}"))
         and len(value.encode("utf-8")) <= _MAX_AUTH_BYTES
         and all(ord(char) >= 0x20 and ord(char) != 0x7F for char in value)
     )
