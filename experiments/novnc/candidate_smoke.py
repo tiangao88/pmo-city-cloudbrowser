@@ -26,6 +26,7 @@ from test_proxy import connect
 from held_input import held_input
 from owner_switch import framebuffer, COLOURS
 from wss_rfb import RfbWebSocket
+from cold_restore import cold_copy, manifest
 
 ORIGIN = "https://127.0.0.1:16080"
 SECRET = "synthetic-candidate-control-only-32"
@@ -130,6 +131,24 @@ def main():
                 if index == 3:
                     child.terminate()
                     child.wait(timeout=15)
+                    assert child.returncode == 0, "desktop did not stop cleanly for backup"
+                    # This root belongs only to this TemporaryDirectory. Never
+                    # overlay the failed candidate tree or copy a live profile.
+                    profile_root = Path(env["CB_PROFILE_DIR"])
+                    canary = profile_root / "synthetic-rollback-version"
+                    canary.write_text("before-upgrade")
+                    backup = Path(temporary) / "cold-backup"
+                    restored = Path(temporary) / "cold-restored"
+                    before = cold_copy(profile_root, backup)
+                    canary.write_text("failed-upgrade")
+                    (profile_root / "synthetic-candidate-only").write_text("must not survive restore")
+                    assert cold_copy(backup, restored) == before
+                    assert manifest(backup) == before
+                    assert (restored / canary.name).read_text() == "before-upgrade"
+                    assert not (restored / "synthetic-candidate-only").exists()
+                    assert canary.read_text() == "failed-upgrade", "original tree was overwritten"
+                    env["CB_PROFILE_DIR"] = str(restored)
+                    print("PASS stopped profile backup and fresh-directory restore; original preserved", flush=True)
                     child = subprocess.Popen([sys.executable, "-m", "cloudbrowser.viewer.desktop_runtime"], env=env)
                     for _ in range(100):
                         assert child.poll() is None
@@ -292,7 +311,7 @@ def main():
                 assert request(6080, "/ui/viewer/session", data=b"", headers={"Origin": ORIGIN}, tls=True)[0] == 204
                 print("PASS explicit already-ready wake repairs expired viewer authority", flush=True)
             client(previous)
-            print("PASS profile-cookie A/B/A, first WSS framebuffer and runtime restart; synthetic qualification only", flush=True)
+            print("PASS profile-cookie A/B/A, cold restore, first WSS framebuffer and runtime restart; synthetic qualification only", flush=True)
         finally:
             for stream in streams:
                 stream.close()

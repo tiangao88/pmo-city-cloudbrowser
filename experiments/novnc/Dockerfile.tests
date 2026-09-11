@@ -5,6 +5,7 @@ WORKDIR /app
 ENV PYTHONPATH=/app/src PYTHONUNBUFFERED=1
 COPY src/ /app/src/
 COPY tests/ /app/tests/
+COPY experiments/novnc/cold_restore.py /app/experiments/novnc/cold_restore.py
 COPY specs/ /app/specs/
 COPY docs/ /app/docs/
 COPY services/ /app/services/

@@ -55,3 +55,10 @@ to localhost; exposing it requires a separate reviewed deployment change.
 The successful synthetic run validates service wiring, not real SSO, ongoing
 SSO revocation, credential custody, a leader-election protocol or release
 readiness. The blocked security review and release gates still apply.
+
+## Cold-restore evidence
+
+The disposable desktop smoke now backs up a stopped synthetic Chromium profile,
+restores it into a fresh directory and verifies session continuity after restart.
+See [the rehearsal and remaining release gates](ROLLBACK-REHEARSAL.md).
+This is same-image profile recovery, not whole-stack/image rollback.
