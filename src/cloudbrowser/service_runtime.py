@@ -73,18 +73,33 @@ def run_service(component: str) -> None:
         lifecycle = OwnerBoundLifecycle(
             binding, Path(os.environ.get("CB_SNAPSHOT_PATH", "/data/state/tabs.json"))
         )
+        from cloudbrowser.viewer.renewal import ViewerRenewalWorker, configured_viewer_client
+
+        try:
+            viewer_client = configured_viewer_client(os.environ)
+        except ValueError:
+            raise SystemExit("invalid experimental viewer control configuration") from None
+        supervisor = SlotSupervisor(lifecycle, transport, native_tab_restore=True,
+            viewer_fence=viewer_client,
+            viewer_enable=viewer_client.enable if viewer_client else None,
+            viewer_renew=viewer_client.renew if viewer_client else None)
+        renewal = ViewerRenewalWorker(supervisor.renew_current_viewer) if viewer_client else None
         server = create_control_server(
             ControlApi(
-                SlotSupervisor(lifecycle, transport, native_tab_restore=True),
+                supervisor,
                 binding,
                 trusted_secret=trusted_secret,
             ),
             address=("0.0.0.0", port),
         )
         try:
+            if renewal is not None:
+                renewal.start()
             server.serve_forever()
         finally:
             server.server_close()
+            if renewal is not None:
+                renewal.stop()
         return
     if component == "viewer":
         from cloudbrowser.viewer import (

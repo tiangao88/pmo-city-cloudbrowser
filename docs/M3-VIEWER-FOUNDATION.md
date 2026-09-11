@@ -44,7 +44,8 @@ the authority lock, then acknowledges. Repeated fencing while disabled is
 safe; a stale request against a new binding is rejected. Loopback HTTP tests
 verify close → stop → push ordering and failure paths.
 
-This RPC is deliberately not wired into `service_runtime` or Compose yet.
+The viewer endpoint is not wired into `service_runtime` or Compose yet;
+supervisor-side experimental wiring is described below.
 The follow-up enable endpoint now requires the latest process-local fence ticket,
 an explicit display-reset callback and matching browser readiness. A new fence
 or viewer-process restart invalidates earlier tickets. Exact enable retries are
@@ -161,6 +162,24 @@ This is a proposed contract, not an implemented security guarantee. Clipboard,
 file upload, recording, microphone/camera and remote desktop administration stay
 out of the minimum increment. CloudFiles remains the download path. Login pages
 and user secrets must not become agent-visible merely because the viewer exists.
+
+## Experimental supervisor runtime wiring
+
+The slot-supervisor now has an explicit, default-off integration switch:
+`CB_EXPERIMENTAL_VIEWER_CONTROL=1` requires `CB_VIEWER_CONTROL_URL` and a
+dedicated `CB_VIEWER_CONTROL_SECRET` (at least 32 characters). Partial settings
+or settings without opt-in refuse startup. No release Compose settings or
+deployed environments were changed; do not enable this against the current
+viewer image, which does not yet start the private control endpoint.
+
+When opted in, the runtime supplies fence/enable/renew callbacks and owns one
+renewal worker, ticking every three seconds for the 15-second viewer lease.
+Ticks skip a busy lifecycle gate rather than queue stale heartbeats. Failures
+record only a bounded status; the worker never fences or enables automatically.
+Normal shutdown joins the worker. Process loss stops renewal and leaves expiry
+to the viewer. Scheduling cannot compensate for unbounded transport callbacks.
+Viewer-side SSO issuance, private endpoint startup, display cleanup, leadership
+and deployment qualification are still pending.
 
 ## Exit tests
 

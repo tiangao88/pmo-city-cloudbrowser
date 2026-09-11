@@ -83,6 +83,16 @@ class SlotSupervisor:
             raise BrowserUnavailable("viewer lease renewal unavailable")
         self._viewer_renew(binding)
 
+    def renew_current_viewer(self) -> bool:
+        """Timer entry point: never queue a heartbeat behind a slot change."""
+        if not self._lifecycle_gate.acquire(blocking=False):
+            return False
+        try:
+            self.renew_viewer(self._lifecycle.binding)
+            return True
+        finally:
+            self._lifecycle_gate.release()
+
     def _fence_viewer(self, binding: BrowserBinding) -> None:
         if self._viewer_fence is not None:
             self._viewer_fence(binding)
